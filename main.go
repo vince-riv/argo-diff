@@ -8,12 +8,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os/exec"
 
 	"github.com/google/go-github/v41/github" // Ensure to get the latest version
 	"golang.org/x/oauth2"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const secret = "YOUR_GITHUB_WEBHOOK_SECRET"
@@ -21,6 +23,7 @@ const token = "YOUR_GITHUB_API_TOKEN"
 const commandToRun = "YOUR_COMMAND_HERE"
 
 func verifySignature(payload []byte, signature string) bool {
+	log.Debug().Msg(fmt.Sprintf("verifySignature(): payload %s; signature %s", payload, signature))
 	mac := hmac.New(sha1.New, []byte(secret))
 	mac.Write(payload)
 	expectedMAC := mac.Sum(nil)
@@ -95,19 +98,27 @@ func printWebHook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signature := r.Header.Get("X-Hub-Signature")
-	if !verifySignature(payload, signature) {
-		http.Error(w, "Invalid signature", http.StatusUnauthorized)
-		return
-	}
+	//signature := r.Header.Get("X-Hub-Signature")
+	//if !verifySignature(payload, signature) {
+	//	http.Error(w, "Invalid signature", http.StatusUnauthorized)
+	//	return
+	//}
 
 	event := r.Header.Get("X-GitHub-Event")
-	fmt.Sprintln("EVENT [%s]: %s", event, payload)
-	return
+	//fmt.Sprintln("EVENT [%s]: %s", event, payload)
+	log.Info().Str("method", r.Method).Str("url", r.URL.String()).Str("event", event).Msg(string(payload))
 }
 
 func main() {
+	debug := true // TODO: switch to env var
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	if debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+	log.Logger = log.With().Str("service", "argo-diff").Caller().Logger()
+
+	log.Info().Msg("Setting up listener on port 8080")
 	//http.HandleFunc("/webhook", handleWebhook)
 	http.HandleFunc("/webhook", printWebHook)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Error().Err(http.ListenAndServe(":8080", nil)).Msg("")
 }
