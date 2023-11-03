@@ -91,6 +91,12 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func healthZ(w http.ResponseWriter, r *http.Request) {
+	//fmt.Sprintln("EVENT [%s]: %s", event, payload)
+	log.Debug().Str("method", r.Method).Str("url", r.URL.String()).Msg("healthz endpoint")
+	io.WriteString(w, "healthy\n")
+}
+
 func printWebHook(w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -120,5 +126,6 @@ func main() {
 	log.Info().Msg("Setting up listener on port 8080")
 	//http.HandleFunc("/webhook", handleWebhook)
 	http.HandleFunc("/webhook", printWebHook)
+	http.HandleFunc("/healthz", healthZ)
 	log.Error().Err(http.ListenAndServe(":8080", nil)).Msg("")
 }
