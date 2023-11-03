@@ -3,7 +3,7 @@ FROM golang:1.21 AS build
 
 WORKDIR /src
 
-COPY . .
+COPY argo-diff .
 
 RUN go mod download
 
