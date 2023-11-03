@@ -2,17 +2,15 @@ package main
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
+
+	"argo-diff/webhook"
 
 	"github.com/google/go-github/v41/github" // Ensure to get the latest version
 	"golang.org/x/oauth2"
@@ -32,38 +30,6 @@ const gitRevTxt = "git-rev.txt"
 
 const sigHeaderName = "X-Hub-Signature-256"
 
-// verifySignature checks if the provided signature is valid for the given payload.
-func verifySignature(payload []byte, headerSignature string) bool {
-	const signaturePrefix = "sha256="
-	const signatureLength = 44 // Length of the hex representation of the sha256 hash
-	sigLength := len(signaturePrefix) + signatureLength
-
-	if githubWebhookSecret == "" {
-		log.Fatal().Msg("Empty webhook secret")
-		return false
-	}
-
-	if len(headerSignature) != sigLength {
-		log.Error().Msg(fmt.Sprintf("%s header is not %d chars long: %s", sigHeaderName, sigLength, headerSignature))
-		return false
-	}
-
-	if !strings.HasPrefix(headerSignature, signaturePrefix) {
-		log.Error().Msg(fmt.Sprintf("%s header has invalid format: %s", sigHeaderName, headerSignature))
-		return false
-	}
-
-	signature := headerSignature[len(signaturePrefix):]
-	mac := hmac.New(sha256.New, []byte(githubWebhookSecret))
-	mac.Write(payload)
-	expectedMAC := mac.Sum(nil)
-	expectedSignature := hex.EncodeToString(expectedMAC)
-
-	sigIsValid := hmac.Equal([]byte(signature), []byte(expectedSignature))
-	log.Debug().Msg(fmt.Sprintf("%s header [%s] verification result: %s", sigHeaderName, headerSignature, strconv.FormatBool(sigIsValid)))
-	return sigIsValid
-}
-
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -72,7 +38,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	signature := r.Header.Get(sigHeaderName)
-	if !verifySignature(payload, signature) {
+	if !webhook.VerifySignature(payload, signature, githubWebhookSecret) {
 		http.Error(w, "Invalid signature", http.StatusUnauthorized)
 		return
 	}
@@ -149,7 +115,7 @@ func printWebHook(w http.ResponseWriter, r *http.Request) {
 	log.Info().Str("method", r.Method).Str("url", r.URL.String()).Str("event", event).Msg(string(payload))
 
 	signature := r.Header.Get(sigHeaderName)
-	if !verifySignature(payload, signature) {
+	if !webhook.VerifySignature(payload, signature, githubWebhookSecret) {
 		log.Warn().Msg("Invalid signature")
 		http.Error(w, "Invalid signature", http.StatusUnauthorized)
 		return
