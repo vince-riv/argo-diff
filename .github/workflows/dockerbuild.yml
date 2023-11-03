@@ -5,12 +5,12 @@ on:
   push:
     tags: ['*.*.*', '*.*.*-*']
     branches: [main]
-    paths:
-      - argo-diff/*
+    paths-ignore:
+      - 'k8s/**'
   pull_request:
     branches: [main]
-    paths:
-      - argo-diff/*
+    paths-ignore:
+      - 'k8s/**'
   workflow_dispatch: {}
 
 env:
