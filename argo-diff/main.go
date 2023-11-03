@@ -3,13 +3,16 @@ package main
 import (
 	"bytes"
 	"crypto/hmac"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/google/go-github/v41/github" // Ensure to get the latest version
 	"golang.org/x/oauth2"
@@ -18,17 +21,45 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const secret = "YOUR_GITHUB_WEBHOOK_SECRET"
-const token = "YOUR_GITHUB_API_TOKEN"
+var (
+	githubWebhookSecret string
+	githubApiToken      string
+)
+
 const commandToRun = "YOUR_COMMAND_HERE"
 
-func verifySignature(payload []byte, signature string) bool {
-	log.Debug().Msg(fmt.Sprintf("verifySignature(): payload %s; signature %s", payload, signature))
-	mac := hmac.New(sha1.New, []byte(secret))
+const sigHeaderName = "X-Hub-Signature-256"
+
+// verifySignature checks if the provided signature is valid for the given payload.
+func verifySignature(payload []byte, headerSignature string) bool {
+	const signaturePrefix = "sha256="
+	const signatureLength = 44 // Length of the hex representation of the sha256 hash
+	sigLength := len(signaturePrefix) + signatureLength
+
+	if githubWebhookSecret == "" {
+		log.Fatal().Msg("Empty webhook secret")
+		return false
+	}
+
+	if len(headerSignature) != sigLength {
+		log.Error().Msg(fmt.Sprintf("%s header is not %d chars long: %s", sigHeaderName, sigLength, headerSignature))
+		return false
+	}
+
+	if !strings.HasPrefix(headerSignature, signaturePrefix) {
+		log.Error().Msg(fmt.Sprintf("%s header has invalid format: %s", sigHeaderName, headerSignature))
+		return false
+	}
+
+	signature := headerSignature[len(signaturePrefix):]
+	mac := hmac.New(sha256.New, []byte(githubWebhookSecret))
 	mac.Write(payload)
 	expectedMAC := mac.Sum(nil)
-	expectedSignature := "sha1=" + hex.EncodeToString(expectedMAC)
-	return hmac.Equal([]byte(signature), []byte(expectedSignature))
+	expectedSignature := hex.EncodeToString(expectedMAC)
+
+	sigIsValid := hmac.Equal([]byte(signature), []byte(expectedSignature))
+	log.Debug().Msg(fmt.Sprintf("%s header [%s] verification result: %s", sigHeaderName, headerSignature, strconv.FormatBool(sigIsValid)))
+	return sigIsValid
 }
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -38,13 +69,16 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signature := r.Header.Get("X-Hub-Signature")
+	signature := r.Header.Get(sigHeaderName)
 	if !verifySignature(payload, signature) {
 		http.Error(w, "Invalid signature", http.StatusUnauthorized)
 		return
 	}
 
 	event := r.Header.Get("X-GitHub-Event")
+	if event == "ping" {
+		log.Info().Str("method", r.Method).Str("url", r.URL.String()).Msg("ping event received")
+	}
 	if event == "pull_request" {
 		var prEvent github.PullRequestEvent
 		if err := json.Unmarshal(payload, &prEvent); err != nil {
@@ -59,7 +93,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 			err := cmd.Run()
 
 			// Setting up GitHub client
-			ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+			ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: githubApiToken})
 			tc := oauth2.NewClient(r.Context(), ts)
 			client := github.NewClient(tc)
 
@@ -94,28 +128,34 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 func healthZ(w http.ResponseWriter, r *http.Request) {
 	//fmt.Sprintln("EVENT [%s]: %s", event, payload)
 	log.Debug().Str("method", r.Method).Str("url", r.URL.String()).Msg("healthz endpoint")
-	io.WriteString(w, "healthy\n")
+	_, err := io.WriteString(w, "healthy\n")
+	if err != nil {
+		http.Error(w, "io.WriteString() failed", http.StatusInternalServerError)
+		return
+	}
 }
 
 func printWebHook(w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
+		log.Error().Msg("Failed to read request body")
 		http.Error(w, "Error reading request body", http.StatusInternalServerError)
 		return
 	}
 
-	//signature := r.Header.Get("X-Hub-Signature")
-	//if !verifySignature(payload, signature) {
-	//	http.Error(w, "Invalid signature", http.StatusUnauthorized)
-	//	return
-	//}
-
 	event := r.Header.Get("X-GitHub-Event")
-	//fmt.Sprintln("EVENT [%s]: %s", event, payload)
 	log.Info().Str("method", r.Method).Str("url", r.URL.String()).Str("event", event).Msg(string(payload))
+
+	signature := r.Header.Get(sigHeaderName)
+	if !verifySignature(payload, signature) {
+		log.Warn().Msg("Invalid signature")
+		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		return
+	}
 }
 
-func main() {
+func init() {
+	// Load GitHub secrets from env and setup logger
 	debug := true // TODO: switch to env var
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if debug {
@@ -123,6 +163,18 @@ func main() {
 	}
 	log.Logger = log.With().Str("service", "argo-diff").Caller().Logger()
 
+	githubWebhookSecret = os.Getenv("GITHUB_WEBHOOK_SECRET")
+	if githubWebhookSecret == "" {
+		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
+	}
+
+	githubApiToken = os.Getenv("GITHUB_API_TOKEN")
+	if githubApiToken == "" {
+		log.Fatal().Msg("GITHUB_API_TOKEN environment variable not set")
+	}
+}
+
+func main() {
 	log.Info().Msg("Setting up listener on port 8080")
 	//http.HandleFunc("/webhook", handleWebhook)
 	http.HandleFunc("/webhook", printWebHook)
