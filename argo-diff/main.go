@@ -28,6 +28,8 @@ var (
 
 const commandToRun = "YOUR_COMMAND_HERE"
 
+const gitRevTxt = "git-rev.txt"
+
 const sigHeaderName = "X-Hub-Signature-256"
 
 // verifySignature checks if the provided signature is valid for the given payload.
@@ -157,11 +159,25 @@ func printWebHook(w http.ResponseWriter, r *http.Request) {
 func init() {
 	// Load GitHub secrets from env and setup logger
 	debug := true // TODO: switch to env var
+	gitRev := "UNKNOWN"
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
-	log.Logger = log.With().Str("service", "argo-diff").Caller().Logger()
+
+	data, err := os.ReadFile(gitRevTxt)
+	if err != nil {
+		log.Info().Msg(fmt.Sprintf("Cannot open %s; assuming we're in local development", gitRevTxt))
+	} else {
+		lines := strings.Split(string(data), "\n")
+		gitRev = strings.TrimSpace(lines[0])
+		if gitRev == "" {
+			log.Warn().Msg(fmt.Sprintf("%s must be empty?", gitRevTxt))
+			gitRev = "EMPTY"
+		}
+	}
+
+	log.Logger = log.With().Str("service", "argo-diff").Str("version", gitRev).Caller().Logger()
 
 	githubWebhookSecret = os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if githubWebhookSecret == "" {

@@ -13,6 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build
 FROM alpine:latest
 
 COPY --from=build /src/argo-diff /app/argo-diff
+COPY --from=build /src/git-rev.txt /app/git-rev.txt
 
 WORKDIR /app
 
