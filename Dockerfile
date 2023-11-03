@@ -7,6 +7,7 @@ COPY argo-diff .
 
 RUN go mod download
 
+RUN CGO_ENABLED=0 GOOS=linux go test -v ./...
 RUN CGO_ENABLED=0 GOOS=linux go build
 
 ## Final image
