@@ -3,6 +3,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: argo-diff
+  labels:
+    app: argo-diff
+    app.kubernetes.io/name: argo-diff
+    app.kubernetes.io/instance: argo-diff
+    app.kubernetes.io/component: webhook-processor
 spec:
   replicas: 1
   selector:
@@ -12,6 +17,9 @@ spec:
     metadata:
       labels:
         app: argo-diff
+        app.kubernetes.io/name: argo-diff
+        app.kubernetes.io/instance: argo-diff
+        app.kubernetes.io/component: webhook-processor
     spec:
       imagePullSecrets:
         - name: ecr-login
@@ -20,6 +28,31 @@ spec:
           image: argo-diff:CHANGEME
           imagePullPolicy: Always
           #imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: argo-diff-env
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 10
+            periodSeconds: 2
           resources: {}
           #  limits:
           #    cpu: 250m

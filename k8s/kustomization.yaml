@@ -5,6 +5,9 @@ namespace: argocd
 
 resources:
   - deployment.yaml
+  - env-secret.yaml
+  - ingressroute.yaml
+  - service.yaml
 
 images:
   - name: argo-diff
