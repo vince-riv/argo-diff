@@ -5,12 +5,12 @@ on:
   push:
     tags: ['*.*.*', '*.*.*-*']
     branches: [main]
-    paths:
-      - argo-diff/*
+    paths-ignore:
+      - 'k8s/**'
   pull_request:
     branches: [main]
-    paths:
-      - argo-diff/*
+    paths-ignore:
+      - 'k8s/**'
   workflow_dispatch: {}
 
 env:
@@ -27,6 +27,14 @@ jobs:
       -
         name: Checkout
         uses: actions/checkout@v4
+      - name: Prepare git-rev.txt
+        run: |
+          set -x
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo ${GITHUB_REF#refs/tags/} > argo-diff/git-rev.txt
+          else
+            echo ${GITHUB_SHA::8} > argo-diff/git-rev.txt
+          fi
       -
         name: Set up Docker Context for Buildx
         run: docker context create builders
@@ -45,6 +53,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.login-ecr.outputs.registry }}/argo-diff
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=sha,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=sha,event=pr
       -
         name: Build and push
         uses: docker/build-push-action@v5
