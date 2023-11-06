@@ -12,7 +12,7 @@ import (
 
 	"argo-diff/webhook"
 
-	"github.com/google/go-github/v41/github" // Ensure to get the latest version
+	"github.com/google/go-github/v56/github" // Ensure to get the latest version
 	"golang.org/x/oauth2"
 
 	"github.com/rs/zerolog"
