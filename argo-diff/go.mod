@@ -4,6 +4,7 @@ go 1.21.3
 
 require (
 	github.com/google/go-github/v41 v41.0.0
+	github.com/google/go-github/v56 v56.0.0
 	github.com/rs/zerolog v1.31.0
 	golang.org/x/oauth2 v0.13.0
 )

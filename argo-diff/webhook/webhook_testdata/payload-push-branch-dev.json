@@ -110,7 +110,7 @@
   },
   "pusher": {
     "name": "vrivellino",
-    "email": "github@vince-riv.io"
+    "email": "github@dummy.domain"
   },
   "organization": {
     "login": "vince-riv",
@@ -161,12 +161,12 @@
       "url": "https://github.com/vince-riv/argo-diff/commit/00cc6ebfca35d38ecf39f9d6ccc1ce1ce8a8b072",
       "author": {
         "name": "Vincent Rivellino",
-        "email": "github@vince-riv.io",
+        "email": "github@dummy.domain",
         "username": "vrivellino"
       },
       "committer": {
         "name": "Vincent Rivellino",
-        "email": "github@vince-riv.io",
+        "email": "github@dummy.domain",
         "username": "vrivellino"
       },
       "added": [
@@ -185,12 +185,12 @@
     "url": "https://github.com/vince-riv/argo-diff/commit/00cc6ebfca35d38ecf39f9d6ccc1ce1ce8a8b072",
     "author": {
       "name": "Vincent Rivellino",
-      "email": "github@vince-riv.io",
+      "email": "github@dummy.domain",
       "username": "vrivellino"
     },
     "committer": {
       "name": "Vincent Rivellino",
-      "email": "github@vince-riv.io",
+      "email": "github@dummy.domain",
       "username": "vrivellino"
     },
     "added": [
