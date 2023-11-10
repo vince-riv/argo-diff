@@ -1,19 +1,16 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 
+	"argo-diff/argocd"
 	"argo-diff/webhook"
 
-	"github.com/google/go-github/v56/github" // Ensure to get the latest version
-	"golang.org/x/oauth2"
+	// Ensure to get the latest version
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -24,8 +21,6 @@ var (
 	githubApiToken      string
 )
 
-const commandToRun = "YOUR_COMMAND_HERE"
-
 const gitRevTxt = "git-rev.txt"
 
 const sigHeaderName = "X-Hub-Signature-256"
@@ -33,6 +28,7 @@ const sigHeaderName = "X-Hub-Signature-256"
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
+		log.Error().Err(err).Msg("Error reading request body")
 		http.Error(w, "Error reading request body", http.StatusInternalServerError)
 		return
 	}
@@ -44,53 +40,79 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	event := r.Header.Get("X-GitHub-Event")
-	if event == "ping" {
+	eventInfo := webhook.NewEventInfo()
+	switch event {
+	case "ping":
 		log.Info().Str("method", r.Method).Str("url", r.URL.String()).Msg("ping event received")
-	}
-	if event == "pull_request" {
-		var prEvent github.PullRequestEvent
-		if err := json.Unmarshal(payload, &prEvent); err != nil {
-			http.Error(w, "Error unmarshalling JSON", http.StatusInternalServerError)
+		_, err := io.WriteString(w, "ping event processed\n")
+		if err != nil {
+			log.Error().Err(err).Msg("io.WriteString() failed")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+		return // we're done with a ping event
+	case "pull_request":
+		eventInfo, err = webhook.ProcessPullRequest(payload)
+		if err != nil {
+			http.Error(w, "Could not process pull request event data", http.StatusInternalServerError)
 			return
 		}
-
-		if *prEvent.Action == "opened" || *prEvent.Action == "synchronize" {
-			cmd := exec.Command("/bin/sh", "-c", commandToRun)
-			var out bytes.Buffer
-			cmd.Stdout = &out
-			err := cmd.Run()
-
-			// Setting up GitHub client
-			ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: githubApiToken})
-			tc := oauth2.NewClient(r.Context(), ts)
-			client := github.NewClient(tc)
-
-			// Determine command status and post commit status to GitHub
-			var status string
-			var description string
-			if err != nil {
-				status = "failure"
-				description = "Command execution failed."
-			} else {
-				status = "success"
-				description = "Command executed successfully."
-			}
-
-			repoStatus := &github.RepoStatus{State: &status, Description: &description, Context: github.String("continuous-integration/my-ci")}
-			_, _, err = client.Repositories.CreateStatus(r.Context(), *prEvent.Repo.Owner.Login, *prEvent.Repo.Name, *prEvent.PullRequest.Head.SHA, repoStatus)
-			if err != nil {
-				http.Error(w, "Error setting commit status on GitHub", http.StatusInternalServerError)
-				return
-			}
-
-			comment := &github.IssueComment{Body: github.String(out.String())}
-			_, _, err = client.Issues.CreateComment(r.Context(), *prEvent.Repo.Owner.Login, *prEvent.Repo.Name, *prEvent.PullRequest.Number, comment)
-			if err != nil {
-				http.Error(w, "Error creating comment on GitHub", http.StatusInternalServerError)
-				return
-			}
+	case "push":
+		eventInfo, err = webhook.ProcessPush(payload)
+		if err != nil {
+			http.Error(w, "Could not process push event data", http.StatusInternalServerError)
+			return
 		}
+	default:
+		log.Info().Str("method", r.Method).Str("url", r.URL.String()).Msgf("Ignoring X-GitHub-Event %s", event)
+		_, err := io.WriteString(w, "event ignored\n")
+		if err != nil {
+			log.Error().Err(err).Msg("io.WriteString() failed")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+		return // we're done with an event we don't know about
 	}
+	if eventInfo.Ignore {
+		log.Info().Msgf("Ignoring %s event. Event Info: %v", event, eventInfo)
+		_, err := io.WriteString(w, fmt.Sprintf("%s event ignored\n%v\n", event, eventInfo))
+		if err != nil {
+			log.Error().Err(err).Msg("io.WriteString() failed")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+		return // we're done with a PR/PUSH event we don't care about
+	}
+	appManifests, err := argocd.GetApplicationManifests(eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef)
+	if err != nil {
+		log.Error().Err(err).Msg("argocd.GetApplicationManifests() failed")
+		_, err := io.WriteString(w, "event accepted; processing failed\n")
+		if err != nil {
+			log.Error().Err(err).Msg("io.WriteString() failed")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+		return // we're done due to a processing error
+
+	}
+	log.Trace().Msgf("Received app manifests: %v", appManifests)
+
+	// check for differences
+	// produce diffs
+	// update commit status
+	// comment on PR (if necessary)
+
+	//		repoStatus := &github.RepoStatus{State: &status, Description: &description, Context: github.String("continuous-integration/my-ci")}
+	//		_, _, err = client.Repositories.CreateStatus(r.Context(), *prEvent.Repo.Owner.Login, *prEvent.Repo.Name, *prEvent.PullRequest.Head.SHA, repoStatus)
+	//		if err != nil {
+	//			http.Error(w, "Error setting commit status on GitHub", http.StatusInternalServerError)
+	//			return
+	//		}
+
+	//		comment := &github.IssueComment{Body: github.String(out.String())}
+	//		_, _, err = client.Issues.CreateComment(r.Context(), *prEvent.Repo.Owner.Login, *prEvent.Repo.Name, *prEvent.PullRequest.Number, comment)
+	//		if err != nil {
+	//			http.Error(w, "Error creating comment on GitHub", http.StatusInternalServerError)
+	//			return
+	//		}
+	//	}
+	//}
 }
 
 func healthZ(w http.ResponseWriter, r *http.Request) {

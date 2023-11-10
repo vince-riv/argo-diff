@@ -31,6 +31,25 @@ func NewEventInfo() EventInfo {
 	}
 }
 
+func validateEventInfo(e EventInfo) error {
+	if e.RepoOwner == "" {
+		return errors.New("missing repo owner in event info object")
+	}
+	if e.RepoName == "" {
+		return errors.New("missing repo name in event info object")
+	}
+	if e.RepoDefaultRef == "" {
+		return errors.New("missing default ref in event info object")
+	}
+	if e.Sha == "" {
+		return errors.New("missing SHA in event info object")
+	}
+	if e.ChangeRef == "" {
+		return errors.New("missing change ref in event info object")
+	}
+	return nil
+}
+
 func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	prInfo := NewEventInfo()
 	var prEvent github.PullRequestEvent
@@ -48,14 +67,14 @@ func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	prInfo.PrNum = *prEvent.Number
 	if *prEvent.Action != "opened" && *prEvent.Action != "synchronize" {
 		log.Info().Msg(fmt.Sprintf("Ignoring %s action for PR %s#%d", *prEvent.Action, *prEvent.Repo, *prEvent.Number))
-		return prInfo, nil
+		return prInfo, validateEventInfo(prInfo)
 	}
 	prInfo.Ignore = false
 	prInfo.Sha = *prEvent.PullRequest.Head.SHA
 	prInfo.RepoDefaultRef = *prEvent.Repo.DefaultBranch
 	prInfo.ChangeRef = *prEvent.PullRequest.Base.Ref
 	log.Debug().Msgf("Returning EventInfo: %+v", prInfo)
-	return prInfo, nil
+	return prInfo, validateEventInfo(prInfo)
 }
 
 func ProcessPush(payload []byte) (EventInfo, error) {
@@ -74,12 +93,12 @@ func ProcessPush(payload []byte) (EventInfo, error) {
 	pushInfo.RepoName = *pushEvent.Repo.Name
 	if pushEvent.HeadCommit == nil {
 		log.Info().Msgf("Ignoring push event ref %s; before %s, after %s", *pushEvent.Ref, *pushEvent.Before, *pushEvent.After)
-		return pushInfo, nil
+		return pushInfo, validateEventInfo(pushInfo)
 	}
 	pushInfo.Ignore = false
 	pushInfo.Sha = *pushEvent.HeadCommit.ID
 	pushInfo.RepoDefaultRef = *pushEvent.Repo.DefaultBranch
 	pushInfo.ChangeRef = *pushEvent.Ref
 	log.Debug().Msgf("Returning EventInfo: %+v", pushInfo)
-	return pushInfo, nil
+	return pushInfo, validateEventInfo(pushInfo)
 }
