@@ -18,7 +18,7 @@ func VerifySignature(payload []byte, headerSignature string, secret string) bool
 	sigLength := len(signaturePrefix) + signatureLength
 
 	if secret == "" {
-		log.Fatal().Msg("Empty webhook secret")
+		log.Error().Msg("Empty webhook secret")
 		return false
 	}
 
