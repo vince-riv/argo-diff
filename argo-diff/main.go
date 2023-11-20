@@ -18,7 +18,6 @@ import (
 
 var (
 	githubWebhookSecret string
-	githubApiToken      string
 )
 
 const gitRevTxt = "git-rev.txt"
@@ -203,9 +202,8 @@ func init() {
 		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
 	}
 
-	githubApiToken = os.Getenv("GITHUB_API_TOKEN")
-	if githubApiToken == "" {
-		log.Fatal().Msg("GITHUB_API_TOKEN environment variable not set")
+	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" {
+		log.Fatal().Msg("GITHUB_PERSONAL_ACCESS_TOKEN environment variable not set")
 	}
 }
 
