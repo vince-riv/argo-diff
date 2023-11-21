@@ -32,7 +32,7 @@ func init() {
 	}
 }
 
-func Status(ctx context.Context, status, description, repoOwner, repoName, commitSha string) error {
+func Status(ctx context.Context, status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
 	if status != StatusPending && status != StatusSuccess && status != StatusFailure && status != StatusError {
 		log.Fatal().Msgf("Cannot create github status with status string '%s'", status)
 		return fmt.Errorf("unknown status string '%s'", status)
@@ -43,6 +43,11 @@ func Status(ctx context.Context, status, description, repoOwner, repoName, commi
 		State:       &status,
 		Description: &description,
 		Context:     github.String(statusContextStr),
+	}
+
+	if dryRun {
+		log.Info().Msgf("DRY RUN: statusClient.Repositories.CreateStatus(_, %s, %s, %s, %v)", repoOwner, repoName, commitSha, repoStatus)
+		return nil
 	}
 	_, resp, err := statusClient.Repositories.CreateStatus(ctx, repoOwner, repoName, commitSha, repoStatus)
 	if err != nil {
