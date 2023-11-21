@@ -17,6 +17,7 @@ type EventInfo struct {
 	Sha            string
 	PrNum          int
 	ChangeRef      string
+	BaseRef        string
 }
 
 func NewEventInfo() EventInfo {
@@ -28,6 +29,7 @@ func NewEventInfo() EventInfo {
 		Sha:            "",
 		PrNum:          -1,
 		ChangeRef:      "",
+		BaseRef:        "",
 	}
 }
 
@@ -72,7 +74,8 @@ func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	prInfo.Ignore = false
 	prInfo.Sha = *prEvent.PullRequest.Head.SHA
 	prInfo.RepoDefaultRef = *prEvent.Repo.DefaultBranch
-	prInfo.ChangeRef = *prEvent.PullRequest.Base.Ref
+	prInfo.BaseRef = *prEvent.PullRequest.Base.Ref // FUTURE USE
+	prInfo.ChangeRef = *prEvent.PullRequest.Head.Ref
 	log.Debug().Msgf("Returning EventInfo: %+v", prInfo)
 	return prInfo, validateEventInfo(prInfo)
 }

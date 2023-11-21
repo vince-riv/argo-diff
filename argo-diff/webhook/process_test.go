@@ -53,8 +53,11 @@ func TestLoadPullRequestEvents(t *testing.T) {
 			if result.Ignore {
 				t.Errorf("ProcessPullRequest() Expected to NOT ignroe this event. Payload %s", filePath)
 			}
-			if result.RepoOwner == "" || result.RepoName == "" || result.RepoDefaultRef == "" || result.Sha == "" || result.PrNum < 1 || result.ChangeRef == "" {
+			if result.RepoOwner == "" || result.RepoName == "" || result.RepoDefaultRef == "" || result.Sha == "" || result.PrNum < 1 || result.ChangeRef == "" || result.BaseRef == "" {
 				t.Errorf("ProcessPullRequest() Result has at least one empty value: %+v; Payload %s", result, filePath)
+			}
+			if result.RepoDefaultRef == result.ChangeRef {
+				t.Errorf("ProcessPullRequest() ChangeRef is the same as DefaultRef")
 			}
 		}
 	}
