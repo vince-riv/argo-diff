@@ -18,6 +18,7 @@ import (
 
 var (
 	githubWebhookSecret string
+	devMode             bool
 )
 
 const gitRevTxt = "git-rev.txt"
@@ -32,10 +33,14 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signature := r.Header.Get(sigHeaderName)
-	if !webhook.VerifySignature(payload, signature, githubWebhookSecret) {
-		http.Error(w, "Invalid signature", http.StatusUnauthorized)
-		return
+	if devMode {
+		log.Info().Msg("Running in dev mode - skipping signature validation")
+	} else {
+		signature := r.Header.Get(sigHeaderName)
+		if !webhook.VerifySignature(payload, signature, githubWebhookSecret) {
+			http.Error(w, "Invalid signature", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	event := r.Header.Get("X-GitHub-Event")
@@ -79,10 +84,10 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		return // we're done with a PR/PUSH event we don't care about
 	}
-	github.Status(r.Context(), github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
+	github.Status(r.Context(), github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 	appManifests, err := argocd.GetApplicationManifests(eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef)
 	if err != nil {
-		github.Status(r.Context(), github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
+		github.Status(r.Context(), github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 		log.Error().Err(err).Msg("argocd.GetApplicationManifests() failed")
 		_, err := io.WriteString(w, "event accepted; processing failed\n")
 		if err != nil {
@@ -133,7 +138,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		newStatus = github.StatusSuccess
 		statusDescription = fmt.Sprintf("%d of %d apps with changes - no errors", changeCount, len(appManifests))
 	}
-	github.Status(r.Context(), newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
+	github.Status(r.Context(), newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
 	//		comment := &github.IssueComment{Body: github.String(out.String())}
 	//		_, _, err = client.Issues.CreateComment(r.Context(), *prEvent.Repo.Owner.Login, *prEvent.Repo.Name, *prEvent.PullRequest.Number, comment)
@@ -178,8 +183,15 @@ func init() {
 	// Load GitHub secrets from env and setup logger
 	debug := true // TODO: switch to env var
 	gitRev := "UNKNOWN"
+	devMode = false
+	if os.Getenv("APP_ENV") == "dev" {
+		devMode = true
+	}
+
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	if debug {
+	if devMode {
+		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	} else if debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 

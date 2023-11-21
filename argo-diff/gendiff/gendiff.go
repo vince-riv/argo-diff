@@ -10,6 +10,7 @@ import (
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
+	"github.com/rs/zerolog/log"
 
 	"gopkg.in/yaml.v2"
 )
@@ -24,7 +25,8 @@ func K8sAppDiff(from, to []string) (string, error) {
 	toM := make(map[string]string)
 	var files, diffs []string
 
-	for _, m := range from {
+	for idx, m := range from {
+		log.Trace().Msgf("K8sAppDif() - from[%d]: %s", idx, m)
 		k, err := k8sJsonToYaml(m)
 		if err != nil {
 			return "", err
@@ -33,7 +35,8 @@ func K8sAppDiff(from, to []string) (string, error) {
 		files = append(files, k.Filename)
 	}
 
-	for _, m := range to {
+	for idx, m := range to {
+		log.Trace().Msgf("K8sAppDif() - to[%d]: %s", idx, m)
 		k, err := k8sJsonToYaml(m)
 		if err != nil {
 			return "", err
@@ -118,5 +121,6 @@ func k8sJsonToYaml(JsonString string) (K8sYaml, error) {
 func unifiedDiff(srcFile, destFile, from, to string) string {
 	edits := myers.ComputeEdits(span.URIFromPath(srcFile), from, to)
 	diff := fmt.Sprint(gotextdiff.ToUnified(srcFile, destFile, from, edits))
+	log.Trace().Msgf("unifiedDiff(%s, %s): %s", srcFile, destFile, diff)
 	return diff
 }
