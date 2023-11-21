@@ -28,6 +28,9 @@ spec:
           image: argo-diff:CHANGEME
           imagePullPolicy: Always
           #imagePullPolicy: IfNotPresent
+          env:
+            - name: ARGOCD_BASE_URL
+              value: http://argocd-server.argocd.svc.cluster.local
           envFrom:
             - secretRef:
                 name: argo-diff-env
