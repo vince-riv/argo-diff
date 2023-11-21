@@ -67,7 +67,7 @@ func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	prInfo.PrNum = *prEvent.Number
 	if *prEvent.Action != "opened" && *prEvent.Action != "synchronize" {
 		log.Info().Msg(fmt.Sprintf("Ignoring %s action for PR %s#%d", *prEvent.Action, *prEvent.Repo, *prEvent.Number))
-		return prInfo, validateEventInfo(prInfo)
+		return prInfo, nil
 	}
 	prInfo.Ignore = false
 	prInfo.Sha = *prEvent.PullRequest.Head.SHA
@@ -93,7 +93,7 @@ func ProcessPush(payload []byte) (EventInfo, error) {
 	pushInfo.RepoName = *pushEvent.Repo.Name
 	if pushEvent.HeadCommit == nil {
 		log.Info().Msgf("Ignoring push event ref %s; before %s, after %s", *pushEvent.Ref, *pushEvent.Before, *pushEvent.After)
-		return pushInfo, validateEventInfo(pushInfo)
+		return pushInfo, nil
 	}
 	pushInfo.Ignore = false
 	pushInfo.Sha = *pushEvent.HeadCommit.ID
