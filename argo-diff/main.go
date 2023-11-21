@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"argo-diff/argocd"
+	"argo-diff/gendiff"
+	"argo-diff/github"
 	"argo-diff/webhook"
-
-	// Ensure to get the latest version
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -80,8 +80,10 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		return // we're done with a PR/PUSH event we don't care about
 	}
+	github.Status(r.Context(), github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
 	appManifests, err := argocd.GetApplicationManifests(eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef)
 	if err != nil {
+		github.Status(r.Context(), github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
 		log.Error().Err(err).Msg("argocd.GetApplicationManifests() failed")
 		_, err := io.WriteString(w, "event accepted; processing failed\n")
 		if err != nil {
@@ -93,17 +95,46 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Trace().Msgf("Received app manifests: %v", appManifests)
 
-	// check for differences
-	// produce diffs
-	// update commit status
-	// comment on PR (if necessary)
+	errorCount := 0
+	changeCount := 0
+	firstError := ""
+	for _, am := range appManifests {
+		if am.Error != nil {
+			errorCount++
+			if firstError == "" {
+				firstError = am.Error.Message
+			}
+			// if PR, gen error markdown: am.Error.Message
+		} else {
+			diffStr, err := gendiff.K8sAppDiff(am.CurrentManifests.Manifests, am.NewManifests.Manifests)
+			if err != nil {
+				log.Error().Err(err).Msgf("gendiff.K8sAppDiff() failed for %s; SHA %s" + am.ArgoApp.Metadata.Name)
+				if firstError == "" {
+					firstError = "gendiff.K8sAppDiff() failed"
+				}
+			}
+			if diffStr != "" {
+				changeCount++
+			}
+			// generate diff'ed manifests
+			log.Debug().Msg("TODO: Generate markdown for PR comment")
+			// if PR, gen diff markdown
+		}
+	}
 
-	//		repoStatus := &github.RepoStatus{State: &status, Description: &description, Context: github.String("continuous-integration/my-ci")}
-	//		_, _, err = client.Repositories.CreateStatus(r.Context(), *prEvent.Repo.Owner.Login, *prEvent.Repo.Name, *prEvent.PullRequest.Head.SHA, repoStatus)
-	//		if err != nil {
-	//			http.Error(w, "Error setting commit status on GitHub", http.StatusInternalServerError)
-	//			return
-	//		}
+	newStatus := github.StatusError
+	statusDescription := "Unknown"
+	if errorCount > 0 {
+		newStatus = github.StatusFailure
+		statusDescription = fmt.Sprintf("%d of %d apps with changes; %d had an error; first error: %s", changeCount, len(appManifests), errorCount, firstError)
+	} else if firstError != "" {
+		newStatus = github.StatusSuccess
+		statusDescription = fmt.Sprintf("%d of %d apps with changes; diff generator had failure; first error: %s", changeCount, len(appManifests), firstError)
+	} else {
+		newStatus = github.StatusSuccess
+		statusDescription = fmt.Sprintf("%d of %d apps with changes - no errors", changeCount, len(appManifests))
+	}
+	github.Status(r.Context(), newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
 
 	//		comment := &github.IssueComment{Body: github.String(out.String())}
 	//		_, _, err = client.Issues.CreateComment(r.Context(), *prEvent.Repo.Owner.Login, *prEvent.Repo.Name, *prEvent.PullRequest.Number, comment)
@@ -180,8 +211,8 @@ func init() {
 
 func main() {
 	log.Info().Msg("Setting up listener on port 8080")
-	//http.HandleFunc("/webhook", handleWebhook)
-	http.HandleFunc("/webhook", printWebHook)
+	http.HandleFunc("/webhook", handleWebhook)
+	http.HandleFunc("/webhook_log", printWebHook)
 	http.HandleFunc("/healthz", healthZ)
 	log.Error().Err(http.ListenAndServe(":8080", nil)).Msg("")
 }
