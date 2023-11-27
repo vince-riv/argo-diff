@@ -7,6 +7,13 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const ErrAppRefresh = 10000
+const ErrAppRefreshDecode = 10001
+const ErrCurAppManifestFetch = 10002
+const ErrCurAppManifestDecode = 10003
+const ErrNewAppManifestFetch = 10004
+const ErrNewAppManifestDecode = 10005
+
 func errorPayloadHelper(payload []byte, message string, code int) ErrorPayload {
 	if payload != nil {
 		return decodeErrorPayload(payload)
@@ -38,13 +45,13 @@ func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, chan
 		// Application Refresh [TODO: perform hard refresh?]
 		payload, err = fetchAppRefresh(appName)
 		if err != nil {
-			errPayload := errorPayloadHelper(payload, "App Refresh Failed - see logs for more details", 10000)
+			errPayload := errorPayloadHelper(payload, "App Refresh Failed - see logs for more details", ErrAppRefresh)
 			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
 			continue
 		}
 		refreshApp, err := decodeApplicationRefreshPayload(payload)
 		if err != nil {
-			errPayload := errorPayloadHelper(payload, "App Refresh Failed to decode - see logs for more details", 10001)
+			errPayload := errorPayloadHelper(payload, "App Refresh Failed to decode - see logs for more details", ErrAppRefreshDecode)
 			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
 			continue
 		}
@@ -52,26 +59,26 @@ func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, chan
 		// Fetch Current App Manifests
 		payload, err = fetchManifests(appName, "")
 		if err != nil {
-			errPayload := errorPayloadHelper(payload, "Failed to Fetch App Manifests - see logs for more details", 10002)
+			errPayload := errorPayloadHelper(payload, "Failed to Fetch App Manifests - see logs for more details", ErrCurAppManifestFetch)
 			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
 			continue
 		}
 		curManifests, err := decodeManifestsPayload(payload)
 		if err != nil {
-			errPayload := errorPayloadHelper(payload, "App Manifests Failed to decode - see logs for more details", 10003)
+			errPayload := errorPayloadHelper(payload, "App Manifests Failed to decode - see logs for more details", ErrCurAppManifestDecode)
 			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
 			continue
 		}
 		// Fetch Predicted App Manifests
 		payload, err = fetchManifests(appName, revision)
 		if err != nil {
-			errPayload := errorPayloadHelper(payload, "Failed to Fetch New App Manifests - see logs for more details", 10004)
+			errPayload := errorPayloadHelper(payload, "Failed to Fetch New App Manifests - see logs for more details", ErrNewAppManifestFetch)
 			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, CurrentManifests: &curManifests, Error: &errPayload})
 			continue
 		}
 		newManifests, err := decodeManifestsPayload(payload)
 		if err != nil {
-			errPayload := errorPayloadHelper(payload, "New App Manifests Failed to decode - see logs for more details", 10005)
+			errPayload := errorPayloadHelper(payload, "New App Manifests Failed to decode - see logs for more details", ErrNewAppManifestDecode)
 			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, CurrentManifests: &curManifests, Error: &errPayload})
 			continue
 		}

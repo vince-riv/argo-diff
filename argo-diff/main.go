@@ -101,14 +101,22 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	errorCount := 0
 	changeCount := 0
+	unknownCount := 0
 	firstError := ""
+	markdown := ""
 	for _, am := range appManifests {
 		if am.Error != nil {
-			errorCount++
+			if am.Error.Code == argocd.ErrCurAppManifestFetch || am.Error.Code == argocd.ErrCurAppManifestDecode {
+				// don't fail the check if just current manifests are busted
+				unknownCount++
+				markdown += github.AppendDiffComment(am.ArgoApp.Metadata.Name, "", "Warning: Unable to fetch base ref manifests to generate diff")
+			} else {
+				errorCount++
+				markdown += github.AppendDiffComment(am.ArgoApp.Metadata.Name, "", "Error: "+am.Error.Message)
+			}
 			if firstError == "" {
 				firstError = am.Error.Message
 			}
-			// if PR, gen error markdown: am.Error.Message
 		} else {
 			diffStr, err := gendiff.K8sAppDiff(am.CurrentManifests.Manifests, am.NewManifests.Manifests)
 			if err != nil {
@@ -116,38 +124,44 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 				if firstError == "" {
 					firstError = "gendiff.K8sAppDiff() failed"
 				}
+				markdown += github.AppendDiffComment(am.ArgoApp.Metadata.Name, "", "Warning: Unable to generate diff, but manifests were succesfully fetched")
 			}
 			if diffStr != "" {
 				changeCount++
+				markdown += github.AppendDiffComment(am.ArgoApp.Metadata.Name, diffStr, "")
 			}
-			// generate diff'ed manifests
-			log.Debug().Msg("TODO: Generate markdown for PR comment")
-			// if PR, gen diff markdown
 		}
 	}
 
 	newStatus := github.StatusError
 	statusDescription := "Unknown"
+	changeCountStr := fmt.Sprintf("%d of %d apps with changes", changeCount, len(appManifests))
+	if unknownCount > 0 {
+		changeCountStr += fmt.Sprintf(" [%d apps unknown]", unknownCount)
+	}
 	if errorCount > 0 {
 		newStatus = github.StatusFailure
-		statusDescription = fmt.Sprintf("%d of %d apps with changes; %d had an error; first error: %s", changeCount, len(appManifests), errorCount, firstError)
+		statusDescription = fmt.Sprintf("%s; %d had an error; first error: %s", changeCountStr, errorCount, firstError)
 	} else if firstError != "" {
 		newStatus = github.StatusSuccess
-		statusDescription = fmt.Sprintf("%d of %d apps with changes; diff generator had failure; first error: %s", changeCount, len(appManifests), firstError)
+		statusDescription = fmt.Sprintf("%s; diff generator failed; first error: %s", changeCountStr, firstError)
 	} else {
 		newStatus = github.StatusSuccess
-		statusDescription = fmt.Sprintf("%d of %d apps with changes - no errors", changeCount, len(appManifests))
+		statusDescription = fmt.Sprintf("%s - no errors", changeCountStr)
 	}
 	github.Status(r.Context(), newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
-	//		comment := &github.IssueComment{Body: github.String(out.String())}
-	//		_, _, err = client.Issues.CreateComment(r.Context(), *prEvent.Repo.Owner.Login, *prEvent.Repo.Name, *prEvent.PullRequest.Number, comment)
-	//		if err != nil {
-	//			http.Error(w, "Error creating comment on GitHub", http.StatusInternalServerError)
-	//			return
-	//		}
-	//	}
-	//}
+	if eventInfo.PrNum > 0 {
+		_, err = github.Comment(r.Context(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, changeCountStr+"\n\n"+markdown)
+		if err != nil {
+			_, _ = io.WriteString(w, "event accepted; github comment failed\n")
+		}
+	}
+}
+
+func devHandler(w http.ResponseWriter, r *http.Request) {
+	log.Debug().Str("method", r.Method).Str("url", r.URL.String()).Msg("dev endpoint")
+	_, _ = github.Comment(r.Context(), "vince-riv", "argo-diff", 3, "Testing\n")
 }
 
 func healthZ(w http.ResponseWriter, r *http.Request) {
@@ -224,5 +238,6 @@ func main() {
 	http.HandleFunc("/webhook", handleWebhook)
 	http.HandleFunc("/webhook_log", printWebHook)
 	http.HandleFunc("/healthz", healthZ)
+	http.HandleFunc("/dev", devHandler)
 	log.Error().Err(http.ListenAndServe(":8080", nil)).Msg("")
 }
