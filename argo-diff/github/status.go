@@ -22,7 +22,7 @@ const StatusError = "error"
 func init() {
 	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
 	if githubPAT == "" {
-		log.Fatal().Msg("Cannot create github client - GITHUB_PERSONAL_ACCESS_TOKEN is empty")
+		log.Error().Msg("Cannot create github client - GITHUB_PERSONAL_ACCESS_TOKEN is empty")
 	} else {
 		statusClient = github.NewClient(nil).WithAuthToken(githubPAT)
 	}
@@ -48,6 +48,10 @@ func Status(ctx context.Context, status, description, repoOwner, repoName, commi
 	if dryRun {
 		log.Info().Msgf("DRY RUN: statusClient.Repositories.CreateStatus(_, %s, %s, %s, %v)", repoOwner, repoName, commitSha, repoStatus)
 		return nil
+	}
+	if statusClient == nil {
+		log.Error().Msg("Cannot call github API - I don't have a client set")
+		return fmt.Errorf("no github status client")
 	}
 	_, resp, err := statusClient.Repositories.CreateStatus(ctx, repoOwner, repoName, commitSha, repoStatus)
 	if err != nil {
