@@ -3,7 +3,9 @@ package argocd
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/rs/zerolog/log"
 )
 
@@ -13,6 +15,31 @@ const ErrCurAppManifestFetch = 10002
 const ErrCurAppManifestDecode = 10003
 const ErrNewAppManifestFetch = 10004
 const ErrNewAppManifestDecode = 10005
+
+var argoAppsCache *ttlcache.Cache[int, []Application]
+
+func init() {
+	argoAppsLoader := ttlcache.LoaderFunc[int, []Application](
+		func(c *ttlcache.Cache[int, []Application], key int) *ttlcache.Item[int, []Application] {
+			log.Trace().Msg("ArgoApps cache loader called")
+			payload, err := fetchApplications()
+			if err != nil {
+				return nil
+			}
+			apps, err := decodeApplicationListPayload(payload)
+			if err != nil {
+				return nil
+			}
+			item := c.Set(key, apps, ttlcache.DefaultTTL)
+			return item
+		},
+	)
+	argoAppsCache = ttlcache.New[int, []Application](
+		ttlcache.WithTTL[int, []Application](15*time.Minute),
+		ttlcache.WithLoader[int, []Application](argoAppsLoader),
+	)
+	go argoAppsCache.Start()
+}
 
 func errorPayloadHelper(payload []byte, message string, code int) ErrorPayload {
 	if payload != nil {
@@ -27,15 +54,16 @@ func errorPayloadHelper(payload []byte, message string, code int) ErrorPayload {
 
 func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, changeRef string) ([]ApplicationManifests, error) {
 	var appManList []ApplicationManifests
-	payload, err := fetchApplications()
-	if err != nil {
-		return appManList, err
+	//payload, err := fetchApplications()
+	//if err != nil {
+	//	return appManList, err
+	//}
+	//apps, err := decodeApplicationListPayload(payload)
+	argoApps := argoAppsCache.Get(0)
+	if argoApps == nil {
+		return appManList, fmt.Errorf("empty ArgoCD app list")
 	}
-	apps, err := decodeApplicationListPayload(payload)
-	if err != nil {
-		return appManList, err
-	}
-	apps, err = filterApplications(apps, repoOwner, repoName, repoDefaultRef, changeRef)
+	apps, err := filterApplications(argoApps.Value(), repoOwner, repoName, repoDefaultRef, changeRef)
 	if err != nil {
 		return appManList, err
 	}
@@ -43,7 +71,7 @@ func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, chan
 	for _, app := range apps {
 		appName := app.Metadata.Name
 		// Application Refresh [TODO: perform hard refresh?]
-		payload, err = fetchAppRefresh(appName)
+		payload, err := fetchAppRefresh(appName)
 		if err != nil {
 			errPayload := errorPayloadHelper(payload, "App Refresh Failed - see logs for more details", ErrAppRefresh)
 			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})

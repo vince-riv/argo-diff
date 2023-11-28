@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/google/go-github/v56/github"
 	"github.com/rs/zerolog/log"
@@ -13,6 +14,7 @@ import (
 var (
 	commentClient *github.Client
 	commentUser   *github.User
+	mux           *sync.RWMutex
 )
 
 const commentIdentifier = "<!-- comment produced by argo-diff -->"
@@ -24,6 +26,7 @@ func init() {
 	} else {
 		commentClient = github.NewClient(nil).WithAuthToken(githubPAT)
 	}
+	mux = &sync.RWMutex{}
 }
 
 func getCommentUser(ctx context.Context) error {
@@ -31,9 +34,12 @@ func getCommentUser(ctx context.Context) error {
 		log.Error().Msg("Cannot call github API - I don't have a client set")
 		return fmt.Errorf("no github commenter client")
 	}
+	mux.RLock()
 	if commentUser != nil {
+		mux.RUnlock()
 		return nil
 	}
+	mux.RUnlock()
 	user, resp, err := commentClient.Users.Get(ctx, "")
 	if resp != nil {
 		log.Info().Msgf("%s received when calling client.Users.Get() via go-github", resp.Status)
@@ -46,7 +52,9 @@ func getCommentUser(ctx context.Context) error {
 		log.Error().Msg("Empty user returned - not sure how I got here")
 		return nil
 	}
+	mux.Lock()
 	commentUser = user
+	mux.Unlock()
 	return nil
 }
 
