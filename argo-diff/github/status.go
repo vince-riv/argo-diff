@@ -32,17 +32,21 @@ func init() {
 	}
 }
 
-func Status(ctx context.Context, status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
+func Status(ctx context.Context, isPr bool, status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
 	if status != StatusPending && status != StatusSuccess && status != StatusFailure && status != StatusError {
 		log.Fatal().Msgf("Cannot create github status with status string '%s'", status)
 		return fmt.Errorf("unknown status string '%s'", status)
+	}
+	contextStr := statusContextStr + " (push)"
+	if isPr {
+		contextStr = statusContextStr + " (pull_request)"
 	}
 	// TODO add support for AvatarURL ?
 	// TODO add support for TargetURL ?
 	repoStatus := &github.RepoStatus{
 		State:       &status,
 		Description: &description,
-		Context:     github.String(statusContextStr),
+		Context:     github.String(contextStr),
 	}
 
 	if dryRun {
@@ -55,9 +59,9 @@ func Status(ctx context.Context, status, description, repoOwner, repoName, commi
 	}
 	_, resp, err := statusClient.Repositories.CreateStatus(ctx, repoOwner, repoName, commitSha, repoStatus)
 	if err != nil {
-		log.Error().Err(err).Msgf("Failed to create repo status %s/%s@%s: %s %s '%s'", repoOwner, repoName, commitSha, statusContextStr, status, description)
+		log.Error().Err(err).Msgf("Failed to create repo status %s/%s@%s: %s %s '%s'", repoOwner, repoName, commitSha, contextStr, status, description)
 		return err
 	}
-	log.Info().Msgf("%s - repo status %s/%s@%s: %s %s '%s'", resp.Status, repoOwner, repoName, commitSha, statusContextStr, status, description)
+	log.Info().Msgf("%s - repo status %s/%s@%s: %s %s '%s'", resp.Status, repoOwner, repoName, commitSha, contextStr, status, description)
 	return nil
 }

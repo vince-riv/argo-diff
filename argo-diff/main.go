@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"argo-diff/argocd"
 	"argo-diff/gendiff"
@@ -84,10 +85,11 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		return // we're done with a PR/PUSH event we don't care about
 	}
-	github.Status(r.Context(), github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	isPr := eventInfo.PrNum > 0
+	github.Status(r.Context(), isPr, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 	appManifests, err := argocd.GetApplicationManifests(eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef)
 	if err != nil {
-		github.Status(r.Context(), github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+		github.Status(r.Context(), isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 		log.Error().Err(err).Msg("argocd.GetApplicationManifests() failed")
 		_, err := io.WriteString(w, "event accepted; processing failed\n")
 		if err != nil {
@@ -139,6 +141,12 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if unknownCount > 0 {
 		changeCountStr += fmt.Sprintf(" [%d apps unknown]", unknownCount)
 	}
+	markdownStart := changeCountStr
+	if isPr {
+		t := time.Now()
+		tStr := t.Format("2006-01-02 15:04:05Z07:00")
+		markdownStart += fmt.Sprintf(" as compared to manifests in [%s](https://github.com/%s/%s/tree/%s) as of _%s_", eventInfo.BaseRef, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.BaseRef, tStr)
+	}
 	if errorCount > 0 {
 		newStatus = github.StatusFailure
 		statusDescription = fmt.Sprintf("%s; %d had an error; first error: %s", changeCountStr, errorCount, firstError)
@@ -149,10 +157,10 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		newStatus = github.StatusSuccess
 		statusDescription = fmt.Sprintf("%s - no errors", changeCountStr)
 	}
-	github.Status(r.Context(), newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	github.Status(r.Context(), isPr, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
 	if eventInfo.PrNum > 0 {
-		_, err = github.Comment(r.Context(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, changeCountStr+"\n\n"+markdown)
+		_, err = github.Comment(r.Context(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, markdownStart+"\n\n"+markdown)
 		if err != nil {
 			_, _ = io.WriteString(w, "event accepted; github comment failed\n")
 		}
