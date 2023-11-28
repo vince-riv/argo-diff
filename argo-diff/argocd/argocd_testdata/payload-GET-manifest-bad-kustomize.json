@@ -1,0 +1,5 @@
+{
+  "error": "`kustomize build <path to cached source>/k8s` failed exit status 1: Error: accumulating resources: accumulation err='accumulating resources from 'serviceX.yaml': evalsymlink failure on '<path to cached source>/k8s/serviceX.yaml' : lstat <path to cached source>/k8s/serviceX.yaml: no such file or directory': must build at directory: not a valid directory: evalsymlink failure on '<path to cached source>/k8s/serviceX.yaml' : lstat <path to cached source>/k8s/serviceX.yaml: no such file or directory",
+  "code": 2,
+  "message": "`kustomize build <path to cached source>/k8s` failed exit status 1: Error: accumulating resources: accumulation err='accumulating resources from 'serviceX.yaml': evalsymlink failure on '<path to cached source>/k8s/serviceX.yaml' : lstat <path to cached source>/k8s/serviceX.yaml: no such file or directory': must build at directory: not a valid directory: evalsymlink failure on '<path to cached source>/k8s/serviceX.yaml' : lstat <path to cached source>/k8s/serviceX.yaml: no such file or directory"
+}

@@ -1,2 +1,3 @@
 git-rev.txt
 /argo-diff
+/.env.sh

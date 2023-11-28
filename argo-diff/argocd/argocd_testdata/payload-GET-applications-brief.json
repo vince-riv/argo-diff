@@ -1,0 +1,289 @@
+{
+  "metadata": {
+    "resourceVersion": "479656800"
+  },
+  "items": [
+    {
+      "metadata": {
+        "name": "argo-apps",
+        "namespace": "argocd",
+        "uid": "e586a71b-eeb8-47ba-95f0-5832bd46514f",
+        "resourceVersion": "479656800",
+        "generation": 78397,
+        "creationTimestamp": "2023-06-07T18:31:38Z",
+        "annotations": {
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"argoproj.io/v1alpha1\",\"kind\":\"Application\",\"metadata\":{\"annotations\":{},\"name\":\"argo-apps\",\"namespace\":\"argocd\"},\"spec\":{\"destination\":{\"namespace\":\"argocd\",\"server\":\"https://kubernetes.default.svc\"},\"project\":\"argo-config\",\"source\":{\"path\":\"apps\",\"repoURL\":\"ssh://git@github.com/vince-riv/argo-config.git\",\"targetRevision\":\"HEAD\"},\"syncPolicy\":{\"automated\":{\"prune\":true,\"selfHeal\":true}}}}\n"
+        },
+        "managedFields": [
+          {
+            "manager": "kubectl-client-side-apply",
+            "operation": "Update",
+            "apiVersion": "argoproj.io/v1alpha1",
+            "time": "2023-11-10T17:43:54Z",
+            "fieldsType": "FieldsV1",
+            "fieldsV1": {}
+          },
+          {
+            "manager": "argocd-application-controller",
+            "operation": "Update",
+            "apiVersion": "argoproj.io/v1alpha1",
+            "time": "2023-11-10T17:49:35Z",
+            "fieldsType": "FieldsV1",
+            "fieldsV1": {}
+          }
+        ]
+      },
+      "spec": {
+        "source": {
+          "repoURL": "ssh://git@github.com/vince-riv/argo-config.git",
+          "path": "apps",
+          "targetRevision": "HEAD"
+        },
+        "destination": {
+          "server": "https://kubernetes.default.svc",
+          "namespace": "argocd"
+        },
+        "project": "argo-config",
+        "syncPolicy": {
+          "automated": {
+            "prune": true,
+            "selfHeal": true
+          }
+        }
+      },
+      "status": {
+        "resources": [
+          {
+            "group": "argoproj.io",
+            "version": "v1alpha1",
+            "kind": "AppProject",
+            "namespace": "argocd",
+            "name": "argocd-extras",
+            "status": "Synced"
+          },
+          {
+            "group": "argoproj.io",
+            "version": "v1alpha1",
+            "kind": "Application",
+            "namespace": "argocd",
+            "name": "argo-diff",
+            "status": "Synced"
+          }
+        ],
+        "sync": {
+          "status": "Synced",
+          "comparedTo": {
+            "source": {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-config.git",
+              "path": "apps",
+              "targetRevision": "HEAD"
+            },
+            "destination": {
+              "server": "https://kubernetes.default.svc",
+              "namespace": "argocd"
+            }
+          },
+          "revision": "95fb6322794d10f963242484f64a483350d50ac4"
+        },
+        "health": {
+          "status": "Healthy"
+        },
+        "history": [
+          {
+            "revision": "95fb6322794d10f963242484f64a483350d50ac4",
+            "deployedAt": "2023-11-10T17:49:21Z",
+            "id": 30,
+            "source": {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-config.git",
+              "path": "apps",
+              "targetRevision": "HEAD"
+            },
+            "deployStartedAt": "2023-11-10T17:49:20Z"
+          },
+          {
+            "revision": "95fb6322794d10f963242484f64a483350d50ac4",
+            "deployedAt": "2023-11-10T17:49:34Z",
+            "id": 31,
+            "source": {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-config.git",
+              "path": "apps",
+              "targetRevision": "HEAD"
+            },
+            "deployStartedAt": "2023-11-10T17:49:34Z"
+          }
+        ],
+        "reconciledAt": "2023-11-10T17:49:34Z",
+        "operationState": {
+          "operation": {
+            "sync": {
+              "revision": "95fb6322794d10f963242484f64a483350d50ac4",
+              "syncStrategy": {
+                "hook": {}
+              }
+            },
+            "initiatedBy": {
+              "username": "github@vince-riv.io"
+            },
+            "retry": {}
+          },
+          "phase": "Succeeded",
+          "message": "successfully synced (all tasks run)",
+          "syncResult": {
+            "resources": [
+              {
+                "group": "argoproj.io",
+                "version": "v1alpha1",
+                "kind": "Application",
+                "namespace": "argocd",
+                "name": "argo-diff",
+                "status": "Synced",
+                "message": "application.argoproj.io/argo-diff unchanged",
+                "hookPhase": "Running",
+                "syncPhase": "Sync"
+              },
+              {
+                "group": "argoproj.io",
+                "version": "v1alpha1",
+                "kind": "AppProject",
+                "namespace": "argocd",
+                "name": "argocd-extras",
+                "status": "Synced",
+                "message": "appproject.argoproj.io/argocd-extras unchanged",
+                "hookPhase": "Running",
+                "syncPhase": "Sync"
+              }
+            ],
+            "revision": "95fb6322794d10f963242484f64a483350d50ac4",
+            "source": {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-config.git",
+              "path": "apps",
+              "targetRevision": "HEAD"
+            }
+          },
+          "startedAt": "2023-11-10T17:49:34Z",
+          "finishedAt": "2023-11-10T17:49:34Z"
+        },
+        "sourceType": "Kustomize",
+        "summary": {},
+        "controllerNamespace": "argocd"
+      }
+    },
+    {
+      "metadata": {
+        "name": "argo-diff",
+        "namespace": "argocd",
+        "uid": "85aac7bc-08ff-4a2f-8d4a-5ada28979187",
+        "resourceVersion": "479656711",
+        "generation": 7,
+        "creationTimestamp": "2023-11-10T17:47:14Z",
+        "labels": {
+          "argocd.argoproj.io/instance": "argo-apps"
+        },
+        "annotations": {
+          "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"argoproj.io/v1alpha1\",\"kind\":\"Application\",\"metadata\":{\"annotations\":{},\"labels\":{\"argocd.argoproj.io/instance\":\"argo-apps\"},\"name\":\"argo-diff\",\"namespace\":\"argocd\"},\"spec\":{\"destination\":{\"namespace\":\"argocd\",\"server\":\"https://kubernetes.default.svc\"},\"project\":\"argocd-extras\",\"source\":{\"path\":\"k8s\",\"repoURL\":\"ssh://git@github.com/vince-riv/argo-diff.git\",\"targetRevision\":\"HEAD\"},\"syncPolicy\":{}}}\n"
+        },
+        "managedFields": [
+          {
+            "manager": "argocd-controller",
+            "operation": "Update",
+            "apiVersion": "argoproj.io/v1alpha1",
+            "time": "2023-11-10T17:49:21Z",
+            "fieldsType": "FieldsV1",
+            "fieldsV1": {}
+          },
+          {
+            "manager": "argocd-application-controller",
+            "operation": "Update",
+            "apiVersion": "argoproj.io/v1alpha1",
+            "time": "2023-11-10T17:49:22Z",
+            "fieldsType": "FieldsV1",
+            "fieldsV1": {}
+          }
+        ]
+      },
+      "spec": {
+        "source": {
+          "repoURL": "ssh://git@github.com/vince-riv/argo-diff.git",
+          "path": "k8s",
+          "targetRevision": "HEAD"
+        },
+        "destination": {
+          "server": "https://kubernetes.default.svc",
+          "namespace": "argocd"
+        },
+        "project": "argocd-extras",
+        "syncPolicy": {}
+      },
+      "status": {
+        "resources": [
+          {
+            "version": "v1",
+            "kind": "Service",
+            "namespace": "argocd",
+            "name": "argo-diff",
+            "status": "OutOfSync",
+            "health": {
+              "status": "Healthy"
+            }
+          },
+          {
+            "group": "apps",
+            "version": "v1",
+            "kind": "Deployment",
+            "namespace": "argocd",
+            "name": "argo-diff",
+            "status": "OutOfSync",
+            "health": {
+              "status": "Healthy"
+            }
+          },
+          {
+            "group": "bitnami.com",
+            "version": "v1alpha1",
+            "kind": "SealedSecret",
+            "namespace": "argocd",
+            "name": "argo-diff-env",
+            "status": "OutOfSync",
+            "health": {
+              "status": "Healthy"
+            }
+          },
+          {
+            "group": "traefik.containo.us",
+            "version": "v1alpha1",
+            "kind": "IngressRoute",
+            "namespace": "argocd",
+            "name": "argocd-diff",
+            "status": "OutOfSync"
+          }
+        ],
+        "sync": {
+          "status": "OutOfSync",
+          "comparedTo": {
+            "source": {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-diff.git",
+              "path": "k8s",
+              "targetRevision": "HEAD"
+            },
+            "destination": {
+              "server": "https://kubernetes.default.svc",
+              "namespace": "argocd"
+            }
+          },
+          "revision": "0341d95b8c70dc5f555fc8fe337e14b5496ff092"
+        },
+        "health": {
+          "status": "Healthy"
+        },
+        "reconciledAt": "2023-11-10T17:49:21Z",
+        "sourceType": "Kustomize",
+        "summary": {
+          "images": [
+            "123456478901.dkr.ecr.us-east-1.amazonaws.com/argo-diff:pr-1"
+          ]
+        },
+        "controllerNamespace": "argocd"
+      }
+    }
+  ]
+}
