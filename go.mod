@@ -1,4 +1,4 @@
-module argo-diff
+module github.com/vince-riv/argo-diff
 
 go 1.21.3
 
