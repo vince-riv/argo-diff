@@ -1,17 +1,19 @@
 package github
 
-func AppendDiffComment(appName, diffStr, warnStr string) string {
-	md := ""
-	if warnStr != "" {
-		md += "<details open>\n"
-	} else {
-		md += "<details>\n"
-	}
-	// TODO link to argo app?
-	md += "  <summary>" + appName + "</summary>\n\n"
+import "fmt"
+
+func AppMarkdown(appName, warnStr string) string {
+	md := fmt.Sprintf("### %s\n\n", appName)
 	if warnStr != "" {
 		md += warnStr + "\n\n"
 	}
+	return md
+}
+
+func ResourceDiffMarkdown(apiVersion, kind, name, ns, diffStr string) string {
+	md := "<details open>\n"
+	// TODO link to argo app?
+	md += fmt.Sprintf("  <summary>%s %s %s.%s</summary>\n\n", apiVersion, kind, ns, name)
 	if diffStr != "" {
 		md += "```diff\n"
 		md += diffStr

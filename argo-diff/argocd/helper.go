@@ -83,34 +83,33 @@ func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, chan
 			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
 			continue
 		}
-		app = refreshApp
 		// Fetch Current App Manifests
 		payload, err = fetchManifests(appName, "")
 		if err != nil {
 			errPayload := errorPayloadHelper(payload, "Failed to Fetch App Manifests - see logs for more details", ErrCurAppManifestFetch)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
+			appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, Error: &errPayload})
 			continue
 		}
 		curManifests, err := decodeManifestsPayload(payload)
 		if err != nil {
 			errPayload := errorPayloadHelper(payload, "App Manifests Failed to decode - see logs for more details", ErrCurAppManifestDecode)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
+			appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, Error: &errPayload})
 			continue
 		}
 		// Fetch Predicted App Manifests
 		payload, err = fetchManifests(appName, revision)
 		if err != nil {
 			errPayload := errorPayloadHelper(payload, "Failed to Fetch New App Manifests - see logs for more details", ErrNewAppManifestFetch)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, CurrentManifests: &curManifests, Error: &errPayload})
+			appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, CurrentManifests: &curManifests, Error: &errPayload})
 			continue
 		}
 		newManifests, err := decodeManifestsPayload(payload)
 		if err != nil {
 			errPayload := errorPayloadHelper(payload, "New App Manifests Failed to decode - see logs for more details", ErrNewAppManifestDecode)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, CurrentManifests: &curManifests, Error: &errPayload})
+			appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, CurrentManifests: &curManifests, Error: &errPayload})
 			continue
 		}
-		appManList = append(appManList, ApplicationManifests{ArgoApp: &app, CurrentManifests: &curManifests, NewManifests: &newManifests})
+		appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, CurrentManifests: &curManifests, NewManifests: &newManifests})
 	}
 	return appManList, nil
 }
