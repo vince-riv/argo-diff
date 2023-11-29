@@ -56,10 +56,12 @@ func processEvent(eventInfo webhook.EventInfo) {
 			if am.Error.Code == argocd.ErrCurAppManifestFetch || am.Error.Code == argocd.ErrCurAppManifestDecode {
 				// don't fail the check if just current manifests are busted
 				unknownCount++
-				markdown += github.AppMarkdown(am.ArgoApp.Metadata.Name, "Warning: Unable to fetch base ref manifests to generate diff")
+				markdown += github.AppMarkdownStart(am.ArgoApp.Metadata.Name, "Warning: Unable to fetch base ref manifests to generate diff")
+				markdown += github.AppMarkdownEnd()
 			} else {
 				errorCount++
-				markdown += github.AppMarkdown(am.ArgoApp.Metadata.Name, "Error: "+am.Error.Message)
+				markdown += github.AppMarkdownStart(am.ArgoApp.Metadata.Name, "Error: "+am.Error.Message)
+				markdown += github.AppMarkdownEnd()
 			}
 			if firstError == "" {
 				firstError = am.Error.Message
@@ -71,14 +73,16 @@ func processEvent(eventInfo webhook.EventInfo) {
 				if firstError == "" {
 					firstError = "gendiff.K8sAppDiff() failed"
 				}
-				markdown += github.AppMarkdown(am.ArgoApp.Metadata.Name, "Warning: Unable to generate diff, but manifests were succesfully fetched")
+				markdown += github.AppMarkdownStart(am.ArgoApp.Metadata.Name, "Warning: Unable to generate diff, but manifests were succesfully fetched")
+				markdown += github.AppMarkdownEnd()
 			}
 			if len(k8sDiffs) > 0 {
 				changeCount++
-				markdown += github.AppMarkdown(am.ArgoApp.Metadata.Name, "")
+				markdown += github.AppMarkdownStart(am.ArgoApp.Metadata.Name, "")
 				for _, k := range k8sDiffs {
 					markdown += github.ResourceDiffMarkdown(k.ApiVersion, k.Kind, k.Name, k.Namespace, k.DiffStr)
 				}
+				markdown += github.AppMarkdownEnd()
 			}
 		}
 	}

@@ -1,9 +1,30 @@
 package github
 
-import "fmt"
+import (
+	"fmt"
+	"os"
 
-func AppMarkdown(appName, warnStr string) string {
-	md := fmt.Sprintf("### %s\n\n", appName)
+	"github.com/rs/zerolog/log"
+)
+
+var argocdUiUrl string
+
+func init() {
+	argocdUiUrl = os.Getenv("ARGOCD_UI_BASE_URL")
+	if argocdUiUrl == "" {
+		log.Warn().Msg("ARGOCD_UI_BASE_URL is not set - links won't be created im comments")
+	} else {
+		log.Info().Msgf("ARGOCD_UI_BASE_URL is set to %s for comment links", argocdUiUrl)
+	}
+}
+
+func AppMarkdownStart(appName, warnStr string) string {
+	md := "\n---\n"
+	md += "<details open>\n"
+	md += fmt.Sprintf("<summary>%s</summary>\n\n", appName)
+	if argocdUiUrl != "" {
+		md += fmt.Sprintf("[ArgoCD UI](%s/applications/argocd/%s)", argocdUiUrl, appName)
+	}
 	if warnStr != "" {
 		md += warnStr + "\n\n"
 	}
@@ -24,4 +45,8 @@ func ResourceDiffMarkdown(apiVersion, kind, name, ns, diffStr string) string {
 	}
 	md += "</details>\n\n"
 	return md
+}
+
+func AppMarkdownEnd() string {
+	return "</details>\n\n"
 }
