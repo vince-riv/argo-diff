@@ -56,26 +56,29 @@ func processEvent(eventInfo webhook.EventInfo) {
 			if am.Error.Code == argocd.ErrCurAppManifestFetch || am.Error.Code == argocd.ErrCurAppManifestDecode {
 				// don't fail the check if just current manifests are busted
 				unknownCount++
-				markdown += github.AppendDiffComment(am.ArgoApp.Metadata.Name, "", "Warning: Unable to fetch base ref manifests to generate diff")
+				markdown += github.AppMarkdown(am.ArgoApp.Metadata.Name, "Warning: Unable to fetch base ref manifests to generate diff")
 			} else {
 				errorCount++
-				markdown += github.AppendDiffComment(am.ArgoApp.Metadata.Name, "", "Error: "+am.Error.Message)
+				markdown += github.AppMarkdown(am.ArgoApp.Metadata.Name, "Error: "+am.Error.Message)
 			}
 			if firstError == "" {
 				firstError = am.Error.Message
 			}
 		} else {
-			diffStr, err := gendiff.K8sAppDiff(am.CurrentManifests.Manifests, am.NewManifests.Manifests)
+			k8sDiffs, err := gendiff.K8sAppDiff(am.CurrentManifests.Manifests, am.NewManifests.Manifests)
 			if err != nil {
 				log.Error().Err(err).Msgf("gendiff.K8sAppDiff() failed for %s; SHA %s" + am.ArgoApp.Metadata.Name)
 				if firstError == "" {
 					firstError = "gendiff.K8sAppDiff() failed"
 				}
-				markdown += github.AppendDiffComment(am.ArgoApp.Metadata.Name, "", "Warning: Unable to generate diff, but manifests were succesfully fetched")
+				markdown += github.AppMarkdown(am.ArgoApp.Metadata.Name, "Warning: Unable to generate diff, but manifests were succesfully fetched")
 			}
-			if diffStr != "" {
+			if len(k8sDiffs) > 0 {
 				changeCount++
-				markdown += github.AppendDiffComment(am.ArgoApp.Metadata.Name, diffStr, "")
+				markdown += github.AppMarkdown(am.ArgoApp.Metadata.Name, "")
+				for _, k := range k8sDiffs {
+					markdown += github.ResourceDiffMarkdown(k.ApiVersion, k.Kind, k.Name, k.Namespace, k.DiffStr)
+				}
 			}
 		}
 	}
@@ -181,7 +184,18 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 func devHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Str("method", r.Method).Str("url", r.URL.String()).Msg("dev endpoint")
-	_, _ = github.Comment(r.Context(), "vince-riv", "argo-diff", 3, "Testing\n")
+	evt := webhook.EventInfo{
+		Ignore:         false,
+		RepoOwner:      "vince-riv",
+		RepoName:       "argo-diff",
+		RepoDefaultRef: "main",
+		Sha:            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		PrNum:          2,
+		ChangeRef:      "test-branch",
+		BaseRef:        "main",
+	}
+	wg.Add(1)
+	go processEvent(evt)
 }
 
 func healthZ(w http.ResponseWriter, r *http.Request) {
@@ -224,7 +238,8 @@ func init() {
 
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if devMode {
-		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+		// zerolog.SetGlobalLevel(zerolog.TraceLevel)
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	} else if debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}

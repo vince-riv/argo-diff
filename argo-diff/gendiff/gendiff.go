@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
-	"strings"
 
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
@@ -16,22 +15,28 @@ import (
 )
 
 type K8sYaml struct {
-	Filename string
-	YamlStr  string
+	ApiVersion string
+	Kind       string
+	Name       string
+	Namespace  string
+	Filename   string
+	YamlStr    string
+	DiffStr    string
 }
 
-func K8sAppDiff(from, to []string) (string, error) {
-	fromM := make(map[string]string)
-	toM := make(map[string]string)
-	var files, diffs []string
+func K8sAppDiff(from, to []string) ([]K8sYaml, error) {
+	fromM := make(map[string]K8sYaml)
+	toM := make(map[string]K8sYaml)
+	var files []string
+	var diffs []K8sYaml
 
 	for idx, m := range from {
 		log.Trace().Msgf("K8sAppDif() - from[%d]: %s", idx, m)
 		k, err := k8sJsonToYaml(m)
 		if err != nil {
-			return "", err
+			return diffs, err
 		}
-		fromM[k.Filename] = k.YamlStr
+		fromM[k.Filename] = k
 		files = append(files, k.Filename)
 	}
 
@@ -39,9 +44,9 @@ func K8sAppDiff(from, to []string) (string, error) {
 		log.Trace().Msgf("K8sAppDif() - to[%d]: %s", idx, m)
 		k, err := k8sJsonToYaml(m)
 		if err != nil {
-			return "", err
+			return diffs, err
 		}
-		toM[k.Filename] = k.YamlStr
+		toM[k.Filename] = k
 		if _, exists := fromM[k.Filename]; !exists {
 			files = append(files, k.Filename)
 		}
@@ -50,72 +55,74 @@ func K8sAppDiff(from, to []string) (string, error) {
 	sort.Strings(files)
 
 	for _, f := range files {
-		diff := unifiedDiff(f+".yaml", f+"-new.yaml", fromM[f], toM[f])
+		diff := unifiedDiff(f+".yaml", f+"-new.yaml", fromM[f].YamlStr, toM[f].YamlStr)
 		if diff != "" {
-			diffs = append(diffs, diff)
+			k := toM[f]
+			if k.Filename == "" {
+				k = fromM[f]
+			}
+			k.DiffStr = diff
+			diffs = append(diffs, k)
 		}
 	}
-	return strings.Join(diffs, ""), nil
+	return diffs, nil
 }
 
-func manifestFilename(jsonObj map[string]interface{}) (string, error) {
+func manifestFilename(jsonObj map[string]interface{}) (string, string, string, string, string, error) {
 	var apiVersion, kind, name, ns string
 
 	if val, ok := jsonObj["apiVersion"].(string); ok {
 		apiVersion = val
 	} else {
-		return "", fmt.Errorf("apiVersion missing in jsonObj")
+		return apiVersion, kind, name, ns, "", fmt.Errorf("apiVersion missing in jsonObj")
 	}
 	if val, ok := jsonObj["kind"].(string); ok {
 		kind = val
 	} else {
-		return "", fmt.Errorf("kind missing in jsobObj")
+		return apiVersion, kind, name, ns, "", fmt.Errorf("kind missing in jsobObj")
 	}
 
 	if metadata, ok := jsonObj["metadata"].(map[string]interface{}); ok {
 		if val, ok := metadata["name"].(string); ok {
 			name = val
 		} else {
-			return "", fmt.Errorf("name missing from jsonObj.metadata")
+			return apiVersion, kind, name, ns, "", fmt.Errorf("name missing from jsonObj.metadata")
 		}
 		if val, ok := metadata["namespace"].(string); ok {
 			ns = val
 		}
 	} else {
-		return "", fmt.Errorf("metadata missing from jsonObj")
+		return apiVersion, kind, name, ns, "", fmt.Errorf("metadata missing from jsonObj")
 	}
 
 	re := regexp.MustCompile("[^a-zA-Z0-9_.-]+")
 	if ns == "" {
-		return re.ReplaceAllString(apiVersion+"_"+kind+"_"+name, "_"), nil
+		return apiVersion, kind, name, ns, re.ReplaceAllString(apiVersion+"_"+kind+"_"+name, "_"), nil
 	}
-	return re.ReplaceAllString(ns+"-"+apiVersion+"_"+kind+"_"+name, "_"), nil
+	return apiVersion, kind, name, ns, re.ReplaceAllString(ns+"-"+apiVersion+"_"+kind+"_"+name, "_"), nil
 }
 
 func k8sJsonToYaml(JsonString string) (K8sYaml, error) {
 	var jsonObj map[string]interface{}
-	retval := K8sYaml{
-		Filename: "",
-		YamlStr:  "",
-	}
+	k := K8sYaml{}
 
 	err := json.Unmarshal([]byte(JsonString), &jsonObj)
 	if err != nil {
-		return retval, err
+		return k, err
 	}
 
-	retval.Filename, err = manifestFilename(jsonObj)
+	k.ApiVersion, k.Kind, k.Name, k.Namespace, k.Filename, err = manifestFilename(jsonObj)
 	if err != nil {
-		return retval, err
+		return k, err
 	}
 
 	yamlObj, err := yaml.Marshal(jsonObj)
 	if err != nil {
-		return retval, err
+		return k, err
 	}
-	retval.YamlStr = string(yamlObj)
+	k.YamlStr = string(yamlObj)
 
-	return retval, nil
+	return k, nil
 }
 
 func unifiedDiff(srcFile, destFile, from, to string) string {

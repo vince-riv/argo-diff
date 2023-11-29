@@ -27,16 +27,28 @@ func TestK8sJsonToYaml(t *testing.T) {
 	if err == nil {
 		t.Error("k8sJsonToYaml() should have return an error")
 	}
-	testStr = "{\"apiVersion\": \"v1\", \"kind\": \"Service\", \"metadata\": {\"name\": \"svc\"}}"
+	testStr = "{\"apiVersion\": \"v1\", \"kind\": \"Service\", \"metadata\": {\"name\": \"svc\", \"namespace\": \"ns\"}}"
 	r, err := k8sJsonToYaml(testStr)
 	if err != nil {
 		t.Error("k8sJsonToYaml() shouldn't have return an error")
 	}
-	if r.YamlStr != "apiVersion: v1\nkind: Service\nmetadata:\n  name: svc\n" {
+	if r.YamlStr != "apiVersion: v1\nkind: Service\nmetadata:\n  name: svc\n  namespace: ns\n" {
 		t.Error("k8sJsonToYaml() returned unexpected YAML: " + r.YamlStr)
 	}
-	if r.Filename != "v1_Service_svc" {
+	if r.Filename != "ns-v1_Service_svc" {
 		t.Error("k8sJsonToYaml() returned unexpected filename: " + r.Filename)
+	}
+	if r.ApiVersion != "v1" {
+		t.Error("k8sJsonToYaml() returned unexpected api version: " + r.ApiVersion)
+	}
+	if r.Kind != "Service" {
+		t.Error("k8sJsonToYaml() returned unexpected kind: " + r.Kind)
+	}
+	if r.Name != "svc" {
+		t.Error("k8sJsonToYaml() returned unexpected name: " + r.Name)
+	}
+	if r.Namespace != "ns" {
+		t.Error("k8sJsonToYaml() returned unexpected namespace: " + r.Namespace)
 	}
 }
 
@@ -69,7 +81,7 @@ func TestK8sAppDiff(t *testing.T) {
 	if err != nil {
 		t.Error("Unexpected error: " + err.Error())
 	}
-	if diffStr == "" {
+	if len(diffStr) == 0 {
 		t.Error("Empty diff produced")
 	}
 }
