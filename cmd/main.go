@@ -111,7 +111,7 @@ func processEvent(eventInfo webhook.EventInfo) {
 	}
 	github.Status(ctx, isPr, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
-	if eventInfo.PrNum > 0 {
+	if eventInfo.PrNum > 0 && (changeCount > 0 || errorCount > 0 || unknownCount > 0) {
 		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, markdownStart+"\n\n"+markdown)
 		return
 	}
