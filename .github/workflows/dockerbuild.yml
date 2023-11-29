@@ -6,11 +6,13 @@ on:
     tags: ['*.*.*', '*.*.*-*']
     branches: [main]
     paths-ignore:
-      - 'k8s/**'
+      - 'doc/**'
+      - 'temp/**'
   pull_request:
     branches: [main]
     paths-ignore:
-      - 'k8s/**'
+      - 'doc/**'
+      - 'temp/**'
   workflow_dispatch: {}
 
 env:
@@ -31,9 +33,9 @@ jobs:
         run: |
           set -x
           if [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo ${GITHUB_REF#refs/tags/} > argo-diff/git-rev.txt
+            echo ${GITHUB_REF#refs/tags/} > git-rev.txt
           else
-            echo ${GITHUB_SHA::8} > argo-diff/git-rev.txt
+            echo ${GITHUB_SHA::8} > git-rev.txt
           fi
       -
         name: Set up Docker Context for Buildx
