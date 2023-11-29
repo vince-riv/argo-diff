@@ -55,3 +55,38 @@ This is still in a proof-of-concept and alpha version state, so there are a numb
 - When many Argo applications are served by a single repository, performance is slow. Manifests for each Argo
     application are fetched sequentially, so this could result in argo-diff statuses and/or comments taking
     minutes to complete.
+
+## Running locally
+
+Set environment variables used by argo-diff and then execute `go run cmd/main.go`.
+
+For example, you can place these in a file called `.env.sh`:
+
+```sh
+GITHUB_PERSONAL_ACCESS_TOKEN='github_pat_XXXX'
+ARGOCD_AUTH_TOKEN='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+ARGOCD_BASE_URL='https://argocd.your.domain'
+ARGOCD_UI_BASE_URL='https://argocd.your.domain'
+APP_ENV='dev'
+```
+
+Then source it and execute go run:
+
+```
+$ set -o allexport ; . .env.sh ; set +o allexport
+$ go run cmd/main.go
+```
+
+To send requests, you can copy webhook request headers and payloads to `temp/curl-headers.txt` and
+`temp/curl-payload.json` and use the `post-local.sh` script to ship them to the local server.
+
+There is also the `/dev` endpoint that gets enabled when `APP_ENV=dev` - this endpoint is handled by
+`devHandler()` in main.go and can be hardcoded to specific event data.
+
+## Development Notes
+
+This was originally developed by @vrivellino as a way to learn Go. Its functionality replicates that of an
+internal tool written by smart people at a previous job.
+
+For contributions, please use [gofmt](https://pkg.go.dev/cmd/gofmt) and the following linters: errcheck,
+gosimple, govet, ineffassign, staticcheck, unused.
