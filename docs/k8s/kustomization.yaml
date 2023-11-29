@@ -1,0 +1,15 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+resources:
+  - deployment.yaml
+  - env-secret.yaml
+  - traefik_ingressroute.yaml
+  - service.yaml
+
+images:
+  - name: argo-diff
+    newName: ghcr.io/vince-riv/argo-diff
+    newTag: sha-ac1c526

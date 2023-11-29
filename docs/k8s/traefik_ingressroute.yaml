@@ -1,0 +1,17 @@
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: argocd-diff
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`argocd.your.domain`) && HeadersRegexp(`X-GitHub-Event`, `.*`) && PathPrefix(`/webhook`)
+      priority: 100
+      services:
+        - name: argo-diff
+          port: 8080
+  tls:
+    certResolver: default

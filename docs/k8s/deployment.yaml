@@ -1,0 +1,70 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-diff
+  labels:
+    app: argo-diff
+    app.kubernetes.io/name: argo-diff
+    app.kubernetes.io/instance: argo-diff
+    app.kubernetes.io/component: webhook-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argo-diff
+  template:
+    metadata:
+      labels:
+        app: argo-diff
+        app.kubernetes.io/name: argo-diff
+        app.kubernetes.io/instance: argo-diff
+        app.kubernetes.io/component: webhook-processor
+    spec:
+      imagePullSecrets:
+        - name: ecr-login
+      containers:
+        - name: worker
+          image: argo-diff:CHANGEME
+          imagePullPolicy: Always
+          #imagePullPolicy: IfNotPresent
+          env:
+            - name: ARGOCD_BASE_URL
+              value: http://argocd-server.argocd.svc.cluster.local
+            - name: ARGOCD_UI_BASE_URL
+              value: https://argocd.your.domain
+          envFrom:
+            - secretRef:
+                name: argo-diff-env
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 10
+            periodSeconds: 2
+          resources: {}
+          #  limits:
+          #    cpu: 250m
+          #    memory: 250Mi
+          #  requests:
+          #    cpu: 10m
+          #    memory: 45Mi
+          #env:
+          #  - name: AWS_DEFAULT_REGION
+          #    value: us-east-1
