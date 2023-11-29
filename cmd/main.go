@@ -31,6 +31,15 @@ const gitRevTxt = "git-rev.txt"
 
 const sigHeaderName = "X-Hub-Signature-256"
 
+// Returns first 7 characters of a string (to produce a short commit sha)
+func shortSha(str string) string {
+	v := []rune(str)
+	if len(v) <= 7 {
+		return str
+	}
+	return string(v[:7])
+}
+
 // Processes github webhook event data by getting a list of matching argo applications & their manifests and generating diffs
 // Sets Github status checks for the relevant commit sha and posts a Github comment it is a pull-request event
 // Designed to run within a gorouting to decouple from the webhook response
@@ -79,7 +88,9 @@ func processEvent(eventInfo webhook.EventInfo) {
 			}
 		} else {
 			// get a list of changed manifests by way to internal/gendiff
-			k8sDiffs, err := gendiff.K8sAppDiff(am.CurrentManifests.Manifests, am.NewManifests.Manifests)
+			curSha := shortSha(am.CurrentManifests.Revision)
+			newSha := shortSha(am.NewManifests.Revision)
+			k8sDiffs, err := gendiff.K8sAppDiff(am.CurrentManifests.Manifests, am.NewManifests.Manifests, curSha, newSha)
 			if err != nil {
 				log.Error().Err(err).Msgf("gendiff.K8sAppDiff() failed for %s; SHA %s" + am.ArgoApp.Metadata.Name)
 				if firstError == "" {
@@ -210,11 +221,11 @@ func devHandler(w http.ResponseWriter, r *http.Request) {
 	evt := webhook.EventInfo{
 		Ignore:         false,
 		RepoOwner:      "vince-riv",
-		RepoName:       "argo-diff",
+		RepoName:       "home-k3s",
 		RepoDefaultRef: "main",
-		Sha:            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		PrNum:          2,
-		ChangeRef:      "test-branch",
+		Sha:            "71337e7a9ee35cd30308b30a161ccac3654eda4d",
+		PrNum:          8,
+		ChangeRef:      "blackbox-exporter-chart-v8.6.1",
 		BaseRef:        "main",
 	}
 	wg.Add(1)
