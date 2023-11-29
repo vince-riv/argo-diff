@@ -31,6 +31,8 @@ spec:
           env:
             - name: ARGOCD_BASE_URL
               value: http://argocd-server.argocd.svc.cluster.local
+            - name: ARGOCD_UI_BASE_URL
+              value: https://argocd.k3s.vince-riv.io
           envFrom:
             - secretRef:
                 name: argo-diff-env
