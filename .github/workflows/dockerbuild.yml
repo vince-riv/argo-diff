@@ -6,11 +6,15 @@ on:
     tags: ['*.*.*', '*.*.*-*']
     branches: [main]
     paths-ignore:
+      - README.md
+      - LICENSE
       - 'doc/**'
       - 'temp/**'
   pull_request:
     branches: [main]
     paths-ignore:
+      - README.md
+      - LICENSE
       - 'doc/**'
       - 'temp/**'
   workflow_dispatch: {}

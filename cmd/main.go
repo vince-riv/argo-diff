@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"argo-diff/argocd"
-	"argo-diff/gendiff"
-	"argo-diff/github"
-	"argo-diff/webhook"
+	"github.com/vince-riv/argo-diff/internal/argocd"
+	"github.com/vince-riv/argo-diff/internal/gendiff"
+	"github.com/vince-riv/argo-diff/internal/github"
+	"github.com/vince-riv/argo-diff/internal/webhook"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
