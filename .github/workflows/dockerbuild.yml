@@ -5,16 +5,16 @@ on:
   push:
     tags: ['*.*.*', '*.*.*-*']
     branches: [main]
-    paths-ignore:
-      - '**/README.md'
-      - 'doc/**'
-      - 'temp/**'
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.*'
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**/README.md'
-      - 'doc/**'
-      - 'temp/**'
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.*'
   workflow_dispatch: {}
 
 env:
