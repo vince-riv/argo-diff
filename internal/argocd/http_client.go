@@ -1,5 +1,13 @@
 package argocd
 
+/*
+ * Simple http client for calling argocd
+ */
+
+// TODO handle pagination
+// TODO accept context.Context to gracefully handle deadlines
+// TODO cache some payloads in-memory (maybe?)
+
 import (
 	"fmt"
 	"io"

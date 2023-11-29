@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Data structure for a kubernetes manifest and an associated diff
 type K8sYaml struct {
 	ApiVersion string
 	Kind       string
@@ -24,6 +25,8 @@ type K8sYaml struct {
 	DiffStr    string
 }
 
+// Returns a list of K8sYaml (which represent differing kubernetes manifests/resources) based on a list
+// of current manifests in json [from parameter] and predicted manifests in json [to parameter]
 func K8sAppDiff(from, to []string) ([]K8sYaml, error) {
 	fromM := make(map[string]K8sYaml)
 	toM := make(map[string]K8sYaml)
@@ -68,6 +71,7 @@ func K8sAppDiff(from, to []string) ([]K8sYaml, error) {
 	return diffs, nil
 }
 
+// Extracts kubernetes resource metadata and generates a filename based on it
 func manifestFilename(jsonObj map[string]interface{}) (string, string, string, string, string, error) {
 	var apiVersion, kind, name, ns string
 
@@ -102,6 +106,7 @@ func manifestFilename(jsonObj map[string]interface{}) (string, string, string, s
 	return apiVersion, kind, name, ns, re.ReplaceAllString(ns+"-"+apiVersion+"_"+kind+"_"+name, "_"), nil
 }
 
+// Converts a Kubernetets manifests in json to a K8sYaml
 func k8sJsonToYaml(JsonString string) (K8sYaml, error) {
 	var jsonObj map[string]interface{}
 	k := K8sYaml{}
@@ -125,6 +130,7 @@ func k8sJsonToYaml(JsonString string) (K8sYaml, error) {
 	return k, nil
 }
 
+// Produces a unified diff of two strings
 func unifiedDiff(srcFile, destFile, from, to string) string {
 	edits := myers.ComputeEdits(span.URIFromPath(srcFile), from, to)
 	diff := fmt.Sprint(gotextdiff.ToUnified(srcFile, destFile, from, edits))

@@ -6,6 +6,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// Simplified data structure of an Argo application
 type Application struct {
 	Metadata struct {
 		Name      string `json:"name"`
@@ -34,6 +35,7 @@ type Application struct {
 	} `json:"status"`
 }
 
+// List of Argo Applications (payload of /api/v1/applications)
 type ApplicationList struct {
 	Metadata struct {
 		ResourceVersion string `json:"resourceVersion"`
@@ -41,6 +43,7 @@ type ApplicationList struct {
 	Items []Application `json:"items"`
 }
 
+// Manifests of an Argo Application
 type Manifests struct {
 	Manifests  []string `json:"manifests"`
 	Revision   string   `json:"revision"`
@@ -59,6 +62,7 @@ type Manifests struct {
 //	Items []ManagedResource `json:"items"`
 //}
 
+// Wrapper around ArgoApp and Manifests structs - processEvent() in main.go consumes this
 type ApplicationManifests struct {
 	ArgoApp          *Application
 	CurrentManifests *Manifests

@@ -31,12 +31,23 @@ const gitRevTxt = "git-rev.txt"
 
 const sigHeaderName = "X-Hub-Signature-256"
 
+// Processes github webhook event data by getting a list of matching argo applications & their manifests and generating diffs
+// Sets Github status checks for the relevant commit sha and posts a Github comment it is a pull-request event
+// Designed to run within a gorouting to decouple from the webhook response
 func processEvent(eventInfo webhook.EventInfo) {
 	defer wg.Done()
+	// Don't take longer than 3 minutes to execute
+	// TODO update internal/argocd to use ctx to gracefully handle timeouts
+	// TODO figure out how to call github.Status() with an error status when there's a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
+
 	isPr := eventInfo.PrNum > 0
+
+	// set commit status to PENDING
 	github.Status(ctx, isPr, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+
+	// get a list of ArgoCD applications and their manifests whose git URLs match the webhook event
 	appManifests, err := argocd.GetApplicationManifests(eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef)
 	if err != nil {
 		github.Status(ctx, isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
@@ -46,11 +57,11 @@ func processEvent(eventInfo webhook.EventInfo) {
 	}
 	log.Trace().Msgf("Received app manifests: %v", appManifests)
 
-	errorCount := 0
-	changeCount := 0
-	unknownCount := 0
-	firstError := ""
-	markdown := ""
+	errorCount := 0   // keep track of the number of errors
+	changeCount := 0  // how many apps have changes
+	unknownCount := 0 // how many apps we can't determine if there's changes (usually when we can new manifests but not current ones)
+	firstError := ""  // string of the first error we receive - used in commit status message
+	markdown := ""    // markdown for pull request comment
 	for _, am := range appManifests {
 		if am.Error != nil {
 			if am.Error.Code == argocd.ErrCurAppManifestFetch || am.Error.Code == argocd.ErrCurAppManifestDecode {
@@ -67,6 +78,7 @@ func processEvent(eventInfo webhook.EventInfo) {
 				firstError = am.Error.Message
 			}
 		} else {
+			// get a list of changed manifests by way to internal/gendiff
 			k8sDiffs, err := gendiff.K8sAppDiff(am.CurrentManifests.Manifests, am.NewManifests.Manifests)
 			if err != nil {
 				log.Error().Err(err).Msgf("gendiff.K8sAppDiff() failed for %s; SHA %s" + am.ArgoApp.Metadata.Name)
@@ -87,36 +99,41 @@ func processEvent(eventInfo webhook.EventInfo) {
 		}
 	}
 
-	newStatus := github.StatusError
+	newStatus := github.StatusError // commit status is currently pending, newStatus will be the updated status (default to error)
 	statusDescription := "Unknown"
 	changeCountStr := fmt.Sprintf("%d of %d apps with changes", changeCount, len(appManifests))
 	if unknownCount > 0 {
 		changeCountStr += fmt.Sprintf(" [%d apps unknown]", unknownCount)
 	}
-	markdownStart := changeCountStr
-	if isPr {
-		t := time.Now()
-		tStr := t.Format("2006-01-02 15:04:05Z07:00")
-		markdownStart += fmt.Sprintf(" as compared to manifests in [%s](https://github.com/%s/%s/tree/%s) as of _%s_", eventInfo.BaseRef, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.BaseRef, tStr)
-	}
+	markdownStart := changeCountStr // markdownStart is the pre-amble of the github comment
+
 	if errorCount > 0 {
+		// if we had errors, commit status should be a failure
 		newStatus = github.StatusFailure
 		statusDescription = fmt.Sprintf("%s; %d had an error; first error: %s", changeCountStr, errorCount, firstError)
 	} else if firstError != "" {
+		// if we had a recoverable error, commit status can be a success (but let's give them the first error)
 		newStatus = github.StatusSuccess
 		statusDescription = fmt.Sprintf("%s; diff generator failed; first error: %s", changeCountStr, firstError)
 	} else {
+		// else everything is happy - commit status success
 		newStatus = github.StatusSuccess
 		statusDescription = fmt.Sprintf("%s - no errors", changeCountStr)
 	}
+	// send the commit status
 	github.Status(ctx, isPr, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
-	if eventInfo.PrNum > 0 && (changeCount > 0 || errorCount > 0 || unknownCount > 0) {
+	if isPr && (changeCount > 0 || errorCount > 0 || unknownCount > 0) {
+		// if it's a pull-request event, only comment when something has happened
+		t := time.Now()
+		tStr := t.Format("2006-01-02 15:04:05Z07:00")
+		markdownStart += fmt.Sprintf(" as compared to manifests in [%s](https://github.com/%s/%s/tree/%s) as of _%s_", eventInfo.BaseRef, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.BaseRef, tStr)
 		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, markdownStart+"\n\n"+markdown)
 		return
 	}
 }
 
+// HTTP handler for github webhook events
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -145,7 +162,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 			log.Error().Err(err).Msg("io.WriteString() failed")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
-		return // we're done with a ping event
+		return // we're done when it's a ping event
 	case "pull_request":
 		eventInfo, err = webhook.ProcessPullRequest(payload)
 		if err != nil {
@@ -165,7 +182,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 			log.Error().Err(err).Msg("io.WriteString() failed")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
-		return // we're done with an event we don't know about
+		return // we're done when it's an event we don't know about
 	}
 	if eventInfo.Ignore {
 		log.Info().Msgf("Ignoring %s event. Event Info: %v", event, eventInfo)
@@ -174,9 +191,10 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 			log.Error().Err(err).Msg("io.WriteString() failed")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
-		return // we're done with a PR/PUSH event we don't care about
+		return // we're done when it's a PR/PUSH event we don't care about
 	}
-	// call process event in a new gorouting and send a 200 OK back to Github
+
+	// call processEvent in a new gorouting and send a 200 OK back to Github
 	wg.Add(1)
 	go processEvent(eventInfo)
 	_, err = io.WriteString(w, "event accepted for processing\n")
@@ -186,6 +204,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HTTP Handler for futzing around locally
 func devHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Str("method", r.Method).Str("url", r.URL.String()).Msg("dev endpoint")
 	evt := webhook.EventInfo{
@@ -202,6 +221,7 @@ func devHandler(w http.ResponseWriter, r *http.Request) {
 	go processEvent(evt)
 }
 
+// HTTP Handler for health checks
 func healthZ(w http.ResponseWriter, r *http.Request) {
 	//fmt.Sprintln("EVENT [%s]: %s", event, payload)
 	log.Debug().Str("method", r.Method).Str("url", r.URL.String()).Msg("healthz endpoint")
@@ -212,6 +232,7 @@ func healthZ(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HTTP Handler for development - receive github webhook events and log them out
 func printWebHook(w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -248,6 +269,7 @@ func init() {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
+	// git revision for logger - there's probably a better way to do this at build time
 	data, err := os.ReadFile(gitRevTxt)
 	if err != nil {
 		log.Info().Msg(fmt.Sprintf("Cannot open %s; assuming we're in local development", gitRevTxt))
@@ -262,13 +284,19 @@ func init() {
 
 	log.Logger = log.With().Str("service", "argo-diff").Str("version", gitRev).Caller().Logger()
 
+	// make sure critical secrets are set in the environment
+	if os.Getenv("ARGOCD_AUTH_TOKEN") == "" {
+		log.Fatal().Msg("ARGOCD_AUTH_TOKEN environment variable not set")
+	}
+	if os.Getenv("ARGOCD_BASE_URL") == "" {
+		log.Fatal().Msg("ARGOCD_BASE_URL environment variable not set")
+	}
+	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" {
+		log.Fatal().Msg("GITHUB_PERSONAL_ACCESS_TOKEN environment variable not set")
+	}
 	githubWebhookSecret = os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if githubWebhookSecret == "" {
 		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
-	}
-
-	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" {
-		log.Fatal().Msg("GITHUB_PERSONAL_ACCESS_TOKEN environment variable not set")
 	}
 }
 
@@ -298,7 +326,7 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Warn().Err(err).Msg("Server forced to shutdown")
 	}
-	// Wait for all goroutines to finish
+	// Wait for all processEvent() goroutines to finish
 	wg.Wait()
 	log.Info().Msg("Server gracefully stopped")
 }

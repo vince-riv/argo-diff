@@ -32,6 +32,7 @@ func init() {
 	}
 }
 
+// Helper that sets commit status for the request commit sha
 func Status(ctx context.Context, isPr bool, status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
 	if status != StatusPending && status != StatusSuccess && status != StatusFailure && status != StatusError {
 		log.Fatal().Msgf("Cannot create github status with status string '%s'", status)

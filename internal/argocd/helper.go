@@ -19,6 +19,7 @@ const ErrNewAppManifestDecode = 10005
 var argoAppsCache *ttlcache.Cache[int, []Application]
 
 func init() {
+	// Initialize a simple cache for application list
 	argoAppsLoader := ttlcache.LoaderFunc[int, []Application](
 		func(c *ttlcache.Cache[int, []Application], key int) *ttlcache.Item[int, []Application] {
 			log.Trace().Msg("ArgoApps cache loader called")
@@ -52,13 +53,11 @@ func errorPayloadHelper(payload []byte, message string, code int) ErrorPayload {
 	}
 }
 
+// Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
+// and return their manifests.
 func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, changeRef string) ([]ApplicationManifests, error) {
 	var appManList []ApplicationManifests
-	//payload, err := fetchApplications()
-	//if err != nil {
-	//	return appManList, err
-	//}
-	//apps, err := decodeApplicationListPayload(payload)
+	// cache loader executes the GET to list applications when it's not in cache
 	argoApps := argoAppsCache.Get(0)
 	if argoApps == nil {
 		return appManList, fmt.Errorf("empty ArgoCD app list")
@@ -68,6 +67,7 @@ func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, chan
 		return appManList, err
 	}
 	log.Debug().Msgf("Matching apps: %v", apps)
+
 	for _, app := range apps {
 		appName := app.Metadata.Name
 		// Application Refresh [TODO: perform hard refresh?]
@@ -111,9 +111,11 @@ func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, chan
 		}
 		appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, CurrentManifests: &curManifests, NewManifests: &newManifests})
 	}
+
 	return appManList, nil
 }
 
+// Returns a list of Applications whose git URLs match repo owner & name
 func filterApplications(a []Application, repoOwner, repoName, repoDefaultRef, changeRef string) ([]Application, error) {
 	var appList []Application
 	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", repoOwner, repoName)

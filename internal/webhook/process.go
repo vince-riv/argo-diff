@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// Data structure for information passed by github webhook events
 type EventInfo struct {
 	Ignore         bool
 	RepoOwner      string
@@ -52,6 +53,7 @@ func validateEventInfo(e EventInfo) error {
 	return nil
 }
 
+// Processes a pull_request event received from github
 func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	prInfo := NewEventInfo()
 	var prEvent github.PullRequestEvent
@@ -80,6 +82,7 @@ func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	return prInfo, validateEventInfo(prInfo)
 }
 
+// Processes a pull_request event received from github
 func ProcessPush(payload []byte) (EventInfo, error) {
 	pushInfo := NewEventInfo()
 	var pushEvent github.PushEvent
