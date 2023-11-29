@@ -18,6 +18,7 @@ func init() {
 	}
 }
 
+// Helper to generate markdown for pre-amble of argo-diff's PR comment
 func AppMarkdownStart(appName, warnStr string) string {
 	md := "\n---\n"
 	md += "<details open>\n"
@@ -31,6 +32,7 @@ func AppMarkdownStart(appName, warnStr string) string {
 	return md
 }
 
+// Helper to generate markdown a diff in argo-diff's PR comment
 func ResourceDiffMarkdown(apiVersion, kind, name, ns, diffStr string) string {
 	md := "<details open>\n"
 	// TODO link to argo app?
@@ -47,6 +49,7 @@ func ResourceDiffMarkdown(apiVersion, kind, name, ns, diffStr string) string {
 	return md
 }
 
+// Helper to generate markdown for the end of argo-diff's PR comment
 func AppMarkdownEnd() string {
 	return "</details>\n\n"
 }
