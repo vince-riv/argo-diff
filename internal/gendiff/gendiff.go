@@ -27,7 +27,7 @@ type K8sYaml struct {
 
 // Returns a list of K8sYaml (which represent differing kubernetes manifests/resources) based on a list
 // of current manifests in json [from parameter] and predicted manifests in json [to parameter]
-func K8sAppDiff(from, to []string) ([]K8sYaml, error) {
+func K8sAppDiff(from, to []string, fromName, toName string) ([]K8sYaml, error) {
 	fromM := make(map[string]K8sYaml)
 	toM := make(map[string]K8sYaml)
 	var files []string
@@ -58,7 +58,7 @@ func K8sAppDiff(from, to []string) ([]K8sYaml, error) {
 	sort.Strings(files)
 
 	for _, f := range files {
-		diff := unifiedDiff(f+".yaml", f+"-new.yaml", fromM[f].YamlStr, toM[f].YamlStr)
+		diff := unifiedDiff(fromName+".yaml", toName+".yaml", fromM[f].YamlStr, toM[f].YamlStr)
 		if diff != "" {
 			k := toM[f]
 			if k.Filename == "" {
@@ -71,7 +71,7 @@ func K8sAppDiff(from, to []string) ([]K8sYaml, error) {
 	return diffs, nil
 }
 
-// Extracts kubernetes resource metadata and generates a filename based on it
+// Extracts kubernetes resource metadata and generates a fake filename based on it
 func manifestFilename(jsonObj map[string]interface{}) (string, string, string, string, string, error) {
 	var apiVersion, kind, name, ns string
 

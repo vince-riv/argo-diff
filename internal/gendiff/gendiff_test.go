@@ -76,7 +76,7 @@ func TestUnifiedDiffNoDiff(t *testing.T) {
 }
 
 func TestK8sAppDiff(t *testing.T) {
-	diffStr, err := K8sAppDiff(curManifests, newManifests)
+	diffStr, err := K8sAppDiff(curManifests, newManifests, "cur.yaml", "new.yaml")
 	//println(diffStr)
 	if err != nil {
 		t.Error("Unexpected error: " + err.Error())
