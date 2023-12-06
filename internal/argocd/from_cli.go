@@ -8,7 +8,6 @@ import (
 	"github.com/argoproj/gitops-engine/pkg/sync/hook"
 	"github.com/argoproj/gitops-engine/pkg/sync/ignore"
 	"github.com/argoproj/gitops-engine/pkg/utils/kube"
-	"github.com/argoproj/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -100,8 +99,11 @@ func groupObjsByKey(localObs []*unstructured.Unstructured, liveObjs []*unstructu
 		}
 	}
 	localObs, _, err := controller.DeduplicateTargetObjects(appNamespace, localObs, &resourceInfoProvider{namespacedByGk: namespacedByGk})
-	errors.CheckError(err)
 	objByKey := make(map[kube.ResourceKey]*unstructured.Unstructured)
+	if err != nil {
+		log.Error().Err(err).Msg("controller.DeduplicateTargetObjects failed")
+		return objByKey
+	}
 	for i := range localObs {
 		obj := localObs[i]
 		if !(hook.IsHook(obj) || ignore.Ignore(obj)) {
@@ -130,7 +132,10 @@ func findDifferingObjects(ctx context.Context, app *argoappv1.Application, proj 
 		var unstructureds []*unstructured.Unstructured
 		for _, mfst := range diffOptions.res.Manifests {
 			obj, err := argoappv1.UnmarshalToUnstructured(mfst)
-			errors.CheckError(err)
+			if err != nil {
+				log.Error().Err(err).Msg("argoappv1.UnmarshalToUnstructured() failed")
+				return appResources, totalResources, err
+			}
 			unstructureds = append(unstructureds, obj)
 		}
 		groupedObjs := groupObjsByKey(unstructureds, liveObjs, app.Spec.Destination.Namespace)
@@ -215,10 +220,14 @@ func findDifferingObjects(ctx context.Context, app *argoappv1.Application, proj 
 
 func groupObjsForDiff(resources *application.ManagedResourcesResponse, objs map[kube.ResourceKey]*unstructured.Unstructured, items []objKeyLiveTarget, argoSettings *settings.Settings, appName, namespace string) []objKeyLiveTarget {
 	resourceTracking := argo.NewResourceTracking()
+	var emptyReturn []objKeyLiveTarget
 	for _, res := range resources.Items {
 		var live = &unstructured.Unstructured{}
 		err := json.Unmarshal([]byte(res.NormalizedLiveState), &live)
-		errors.CheckError(err)
+		if err != nil {
+			log.Error().Err(err).Msg("json.Unmarshal() failed for res.NormalizedLiveState")
+			return emptyReturn
+		}
 
 		key := kube.ResourceKey{Name: res.Name, Namespace: res.Namespace, Group: res.Group, Kind: res.Kind}
 		if key.Kind == kube.SecretKind && key.Group == "" {
@@ -229,7 +238,10 @@ func groupObjsForDiff(resources *application.ManagedResourcesResponse, objs map[
 		if local, ok := objs[key]; ok || live != nil {
 			if local != nil && !kube.IsCRD(local) {
 				err = resourceTracking.SetAppInstance(local, argoSettings.AppLabelKey, appName, namespace, argoappv1.TrackingMethod(argoSettings.GetTrackingMethod()))
-				errors.CheckError(err)
+				if err != nil {
+					log.Error().Err(err).Msg("resourceTracking.SetAppInstance() failed")
+					return emptyReturn
+				}
 			}
 
 			items = append(items, objKeyLiveTarget{key, live, local})

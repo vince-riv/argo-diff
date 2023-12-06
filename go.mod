@@ -5,7 +5,6 @@ go 1.21.3
 require (
 	github.com/argoproj/argo-cd/v2 v2.9.3
 	github.com/argoproj/gitops-engine v0.7.1-0.20230906152414-b0fffe419a0f
-	github.com/argoproj/pkg v0.13.7-0.20230626144333-d56162821bd1
 	github.com/google/go-github/v56 v56.0.0
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/rs/zerolog v1.31.0
@@ -23,6 +22,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20230717121422-5aa5874ade95 // indirect
 	github.com/acomagu/bufpipe v1.0.4 // indirect
+	github.com/argoproj/pkg v0.13.7-0.20230626144333-d56162821bd1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.6.0 // indirect
 	github.com/bombsimon/logrusr/v2 v2.0.1 // indirect
