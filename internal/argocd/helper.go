@@ -1,136 +1,54 @@
 package argocd
 
 import (
+	"context"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/jellydator/ttlcache/v3"
+	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
 )
 
-const ErrAppRefresh = 10000
-const ErrAppRefreshDecode = 10001
-const ErrCurAppManifestFetch = 10002
-const ErrCurAppManifestDecode = 10003
-const ErrNewAppManifestFetch = 10004
-const ErrNewAppManifestDecode = 10005
-
-var argoAppsCache *ttlcache.Cache[int, []Application]
-
-func init() {
-	// Initialize a simple cache for application list
-	argoAppsLoader := ttlcache.LoaderFunc[int, []Application](
-		func(c *ttlcache.Cache[int, []Application], key int) *ttlcache.Item[int, []Application] {
-			log.Trace().Msg("ArgoApps cache loader called")
-			payload, err := fetchApplications()
-			if err != nil {
-				return nil
-			}
-			apps, err := decodeApplicationListPayload(payload)
-			if err != nil {
-				return nil
-			}
-			item := c.Set(key, apps, ttlcache.DefaultTTL)
-			return item
-		},
-	)
-	argoAppsCache = ttlcache.New[int, []Application](
-		ttlcache.WithTTL[int, []Application](15*time.Minute),
-		ttlcache.WithLoader[int, []Application](argoAppsLoader),
-	)
-	go argoAppsCache.Start()
-}
-
-func errorPayloadHelper(payload []byte, message string, code int) ErrorPayload {
-	if payload != nil {
-		return decodeErrorPayload(payload)
-	}
-	return ErrorPayload{
-		Error:   message,
-		Code:    code,
-		Message: message,
-	}
-}
-
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
 // and return their manifests.
-func GetApplicationManifests(repoOwner, repoName, repoDefaultRef, revision, changeRef string) ([]ApplicationManifests, error) {
-	var appManList []ApplicationManifests
-	// cache loader executes the GET to list applications when it's not in cache
-	argoApps := argoAppsCache.Get(0)
-	if argoApps == nil {
-		return appManList, fmt.Errorf("empty ArgoCD app list")
-	}
-	apps, err := filterApplications(argoApps.Value(), repoOwner, repoName, repoDefaultRef, changeRef)
+func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefaultRef, revision, changeRef string) ([]ApplicationResourcesWithChanges, error) {
+	var appResList []ApplicationResourcesWithChanges
+	argoApps, err := listApplications(ctx)
 	if err != nil {
-		return appManList, err
+		return appResList, err
+	}
+	if len(argoApps.Items) == 0 {
+		return appResList, fmt.Errorf("empty ArgoCD app list")
+	}
+	apps, err := filterApplications(argoApps.Items, repoOwner, repoName, repoDefaultRef, changeRef)
+	if err != nil {
+		return appResList, err
 	}
 	log.Debug().Msgf("Matching apps: %v", apps)
 
 	for _, app := range apps {
-		appName := app.Metadata.Name
-		// Application Refresh [TODO: perform hard refresh?]
-		payload, err := fetchAppRefresh(appName)
-		if err != nil {
-			errPayload := errorPayloadHelper(payload, "App Refresh Failed - see logs for more details", ErrAppRefresh)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
-			continue
-		}
-		refreshApp, err := decodeApplicationRefreshPayload(payload)
-		if err != nil {
-			errPayload := errorPayloadHelper(payload, "App Refresh Failed to decode - see logs for more details", ErrAppRefreshDecode)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &app, Error: &errPayload})
-			continue
-		}
-		// Fetch Current App Manifests
-		payload, err = fetchManifests(appName, "")
-		if err != nil {
-			errPayload := errorPayloadHelper(payload, "Failed to Fetch App Manifests - see logs for more details", ErrCurAppManifestFetch)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, Error: &errPayload})
-			continue
-		}
-		curManifests, err := decodeManifestsPayload(payload)
-		if err != nil {
-			errPayload := errorPayloadHelper(payload, "App Manifests Failed to decode - see logs for more details", ErrCurAppManifestDecode)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, Error: &errPayload})
-			continue
-		}
-		// Fetch Predicted App Manifests
-		payload, err = fetchManifests(appName, revision)
-		if err != nil {
-			errPayload := errorPayloadHelper(payload, "Failed to Fetch New App Manifests - see logs for more details", ErrNewAppManifestFetch)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, CurrentManifests: &curManifests, Error: &errPayload})
-			continue
-		}
-		newManifests, err := decodeManifestsPayload(payload)
-		if err != nil {
-			errPayload := errorPayloadHelper(payload, "New App Manifests Failed to decode - see logs for more details", ErrNewAppManifestDecode)
-			appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, CurrentManifests: &curManifests, Error: &errPayload})
-			continue
-		}
-		appManList = append(appManList, ApplicationManifests{ArgoApp: &refreshApp, CurrentManifests: &curManifests, NewManifests: &newManifests})
+		applicationResourceChanges, _ := GetApplicationDiff(ctx, app.ObjectMeta.Name, app.ObjectMeta.Namespace, revision)
+		appResList = append(appResList, applicationResourceChanges)
 	}
-
-	return appManList, nil
+	return appResList, nil
 }
 
 // Returns a list of Applications whose git URLs match repo owner & name
-func filterApplications(a []Application, repoOwner, repoName, repoDefaultRef, changeRef string) ([]Application, error) {
-	var appList []Application
+func filterApplications(a []v1alpha1.Application, repoOwner, repoName, repoDefaultRef, changeRef string) ([]v1alpha1.Application, error) {
+	var appList []v1alpha1.Application
 	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", repoOwner, repoName)
 	ghMatch2 := fmt.Sprintf("github.com/%s/%s", repoOwner, repoName)
 	for _, app := range a {
 		if !strings.HasSuffix(app.Spec.Source.RepoURL, ghMatch1) && !strings.HasSuffix(app.Spec.Source.RepoURL, ghMatch2) {
-			log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", app.Metadata.Name, app.Spec.Source.RepoURL, ghMatch1, ghMatch2)
+			log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", app.ObjectMeta.Name, app.Spec.Source.RepoURL, ghMatch1, ghMatch2)
 			continue
 		}
 		if app.Spec.Source.TargetRevision == "HEAD" && changeRef == repoDefaultRef {
-			log.Debug().Msgf("Filtering application %s: Target Rev is HEAD; changeRef %s == repoDefaultRef %s", app.Metadata.Name, changeRef, repoDefaultRef)
+			log.Debug().Msgf("Filtering application %s: Target Rev is HEAD; changeRef %s == repoDefaultRef %s", app.ObjectMeta.Name, changeRef, repoDefaultRef)
 			continue
 		}
 		if changeRef == app.Spec.Source.TargetRevision {
-			log.Debug().Msgf("Filtering application %s: changeRef %s = Target Rev %s", app.Metadata.Name, changeRef, app.Spec.Source.TargetRevision)
+			log.Debug().Msgf("Filtering application %s: changeRef %s = Target Rev %s", app.ObjectMeta.Name, changeRef, app.Spec.Source.TargetRevision)
 			continue
 		}
 		appList = append(appList, app)

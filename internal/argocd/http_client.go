@@ -9,82 +9,125 @@ package argocd
 // TODO cache some payloads in-memory (maybe?)
 
 import (
-	"fmt"
-	"io"
-	"net/http"
+	"context"
+	"encoding/json"
+	"net/url"
 	"os"
 
+	"github.com/argoproj/argo-cd/v2/pkg/apiclient"
+	applicationpkg "github.com/argoproj/argo-cd/v2/pkg/apiclient/application"
+	projectpkg "github.com/argoproj/argo-cd/v2/pkg/apiclient/project"
+	settingspkg "github.com/argoproj/argo-cd/v2/pkg/apiclient/settings"
+	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
+	repoapiclient "github.com/argoproj/argo-cd/v2/reposerver/apiclient"
 	"github.com/rs/zerolog/log"
 )
 
 var (
-	httpClient      http.Client
-	httpBaseUrl     string
+	argocdApiClient apiclient.Client
+	applicationIf   applicationpkg.ApplicationServiceClient
+	settingsIf      settingspkg.SettingsServiceClient
+	projIf          projectpkg.ProjectServiceClient
 	httpBearerToken string
 )
 
 func init() {
-	httpClient = http.Client{}
-	httpBaseUrl = os.Getenv("ARGOCD_BASE_URL")
+	baseUrl := os.Getenv("ARGOCD_BASE_URL")
 	httpBearerToken = os.Getenv("ARGOCD_AUTH_TOKEN")
+	if baseUrl != "" && httpBearerToken != "" {
+		setArgoClients(baseUrl, httpBearerToken)
+	}
 }
 
-func httpGet(endpoint string) ([]byte, error) {
-	if httpBaseUrl == "" || httpBearerToken == "" {
-		log.Info().Msg("ArgoCD base url and/or auth token are not set; can't perform httpGet()")
-		return nil, fmt.Errorf("ARGOCD_BASE_URL and/or ARGOCD_AUTH_TOKEN not configured")
-	}
-	url := httpBaseUrl + endpoint
-	log.Debug().Msg("Performing HTTP GET of " + url)
-	req, err := http.NewRequest("GET", url, nil)
+func setArgoClients(baseUrl, token string) {
+	u, err := url.Parse(baseUrl)
 	if err != nil {
+		log.Fatal().Err(err).Msgf("Failed to parse ARGOCD_BASE_URL '%s'", baseUrl)
+	}
+	argoInsecure := u.Scheme != "https"
+	argocdApiClient = apiclient.NewClientOrDie(&apiclient.ClientOptions{
+		ServerAddr: u.Host,
+		Insecure:   argoInsecure,
+		PlainText:  argoInsecure,
+		AuthToken:  token,
+	})
+	_, applicationIf = argocdApiClient.NewApplicationClientOrDie()
+	_, settingsIf = argocdApiClient.NewSettingsClientOrDie()
+	_, projIf = argocdApiClient.NewProjectClientOrDie()
+}
+
+func listApplications(ctx context.Context) (*v1alpha1.ApplicationList, error) {
+	apps, err := applicationIf.List(ctx, &applicationpkg.ApplicationQuery{})
+	if err != nil {
+		log.Error().Err(err).Msg("Application List failed")
 		return nil, err
 	}
-	req.Header.Add("Authorization", "Bearer "+httpBearerToken)
-	req.Header.Add("Accept", "application/json")
-	resp, err := httpClient.Do(req)
+	content, err := json.Marshal(apps)
 	if err != nil {
+		log.Error().Err(err).Msg("json.Marshal failed")
+		return apps, nil
+	}
+	err = os.WriteFile("app-list.json", content, 0644)
+	if err != nil {
+		log.Error().Err(err).Msg("os.WriteFile() failed")
+		return apps, nil
+	}
+	return apps, nil
+}
+
+func getApplication(ctx context.Context, appName, appNs string) (*v1alpha1.Application, error) {
+	refreshType := string(v1alpha1.RefreshTypeNormal) // switch to RefreshTypeHard ?
+	app, err := applicationIf.Get(ctx, &applicationpkg.ApplicationQuery{
+		Name:         &appName,
+		Refresh:      &refreshType,
+		AppNamespace: &appNs,
+	})
+	if err != nil {
+		log.Error().Err(err).Msgf("Get Argo application %s (namespace %s) failed", appName, appNs)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	return app, nil
+}
 
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == 500 {
-			log.Warn().Msgf("Received HTTP 500 from %s", url)
-			body, _ := io.ReadAll(resp.Body)
-			return body, fmt.Errorf("HTTP 500 returned from %s", url)
-		} else {
-			log.Warn().Msgf("Received HTTP %d from %s", resp.StatusCode, url)
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
+func getManagedResources(ctx context.Context, appName, appNs string) (*applicationpkg.ManagedResourcesResponse, error) {
+	resources, err := applicationIf.ManagedResources(ctx, &applicationpkg.ResourcesQuery{
+		ApplicationName: &appName,
+		AppNamespace:    &appNs,
+	})
+	if err != nil {
+		log.Error().Err(err).Msgf("Get Argo managed-resources for %s (namespace %s) failed", appName, appNs)
+		return nil, err
 	}
-
-	body, err := io.ReadAll(resp.Body)
-	log.Info().Msgf("Received HTTP 200 from %s; content-length %d", url, len(body))
-	return body, err
+	return resources, nil
 }
 
-func fetchApplications() ([]byte, error) {
-	log.Debug().Msg("fetchApplications() called")
-	return httpGet("/api/v1/applications")
-}
-
-func fetchAppRefresh(appName string) ([]byte, error) {
-	log.Debug().Msgf("fetchAppRefresh(%s) called", appName)
-	return httpGet(fmt.Sprintf("/api/v1/applications/%s?refresh=normal", appName))
-}
-
-func fetchManifests(appName, revision string) ([]byte, error) {
-	log.Debug().Msgf("fetchManifests(%s, %s) called", appName, revision)
-	endpoint := fmt.Sprintf("/api/v1/applications/%s/manifests", appName)
-	if revision != "" {
-		endpoint = fmt.Sprintf("/api/v1/applications/%s/manifests?revision=%s", appName, revision)
+func getAppManifests(ctx context.Context, appName, appNs, revision string) (*repoapiclient.ManifestResponse, error) {
+	m, err := applicationIf.GetManifests(ctx, &applicationpkg.ApplicationManifestQuery{
+		Name:         &appName,
+		AppNamespace: &appNs,
+		Revision:     &revision,
+	})
+	if err != nil {
+		log.Error().Err(err).Msgf("Get Argo manifests for %s (namespace %s) @ %s failed", appName, appNs, revision)
+		return nil, err
 	}
-	return httpGet(endpoint)
+	return m, nil
 }
 
-//func fetchManagedResources(appName, revision string) ([]byte, error) {
-//	log.Debug().Msgf("fetchManagedResources(%s, %s) called", appName, revision)
-//	endpoint := fmt.Sprintf("/api/v1/applications/%s/managed-resources?fields=items.normalizedLiveState%%2Citems.predictedLiveState%%2Citems.group%%2Citems.kind%%2Citems.namespace%%2Citems.name&version=%s", appName, revision)
-//	return httpGet(endpoint)
-//}
+func getProject(ctx context.Context, projName string) (*projectpkg.DetailedProjectsResponse, error) {
+	detailedProject, err := projIf.GetDetailedProject(ctx, &projectpkg.ProjectQuery{Name: projName})
+	if err != nil {
+		log.Error().Err(err).Msgf("Get Project details for %s failed", projName)
+		return nil, err
+	}
+	return detailedProject, nil
+}
+
+func getSettings(ctx context.Context) (*settingspkg.Settings, error) {
+	s, err := settingsIf.Get(ctx, &settingspkg.SettingsQuery{})
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to fetch ArgoCD Settings")
+		return nil, err
+	}
+	return s, nil
+}
