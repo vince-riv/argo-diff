@@ -206,7 +206,7 @@ func devHandler(w http.ResponseWriter, r *http.Request) {
 		RepoOwner:      "vince-riv",
 		RepoName:       "argo-diff-config",
 		RepoDefaultRef: "main",
-		Sha:            "5ec9695fd6e34fd034af325ef7355d62e7de1272",
+		Sha:            "5ca9064a15269439dcfb16658d74bcf74c30b983",
 		PrNum:          2,
 		ChangeRef:      "annotation",
 		BaseRef:        "main",
