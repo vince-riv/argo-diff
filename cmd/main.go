@@ -57,53 +57,36 @@ func processEvent(eventInfo webhook.EventInfo) {
 	github.Status(ctx, isPr, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
 	// get a list of ArgoCD applications and their manifests whose git URLs match the webhook event
-	appManifests, err := argocd.GetApplicationManifests(eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef)
+	appResList, err := argocd.GetApplicationChanges(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef)
 	if err != nil {
 		github.Status(ctx, isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
-		log.Error().Err(err).Msg("argocd.GetApplicationManifests() failed")
+		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
 		return // we're done due to a processing error
 
 	}
-	log.Trace().Msgf("Received app manifests: %v", appManifests)
 
 	errorCount := 0   // keep track of the number of errors
 	changeCount := 0  // how many apps have changes
 	unknownCount := 0 // how many apps we can't determine if there's changes (usually when we can new manifests but not current ones)
 	firstError := ""  // string of the first error we receive - used in commit status message
 	markdown := ""    // markdown for pull request comment
-	for _, am := range appManifests {
-		if am.Error != nil {
-			if am.Error.Code == argocd.ErrCurAppManifestFetch || am.Error.Code == argocd.ErrCurAppManifestDecode {
-				// don't fail the check if just current manifests are busted
-				unknownCount++
-				markdown += github.AppMarkdownStart(am.ArgoApp.Metadata.Name, "Warning: Unable to fetch base ref manifests to generate diff")
-				markdown += github.AppMarkdownEnd()
-			} else {
-				errorCount++
-				markdown += github.AppMarkdownStart(am.ArgoApp.Metadata.Name, "Error: "+am.Error.Message)
-				markdown += github.AppMarkdownEnd()
-			}
+	for _, a := range appResList {
+		appName := a.ArgoApp.ObjectMeta.Name
+		// appNs := a.ArgoApp.ObjectMeta.Namespance
+		if a.WarnStr != "" {
+			errorCount++
+			markdown += github.AppMarkdownStart(appName, "Error: "+a.WarnStr)
+			markdown += github.AppMarkdownEnd()
 			if firstError == "" {
-				firstError = am.Error.Message
+				firstError = a.WarnStr
 			}
 		} else {
-			// get a list of changed manifests by way to internal/gendiff
-			curSha := shortSha(am.CurrentManifests.Revision)
-			newSha := shortSha(am.NewManifests.Revision)
-			k8sDiffs, err := gendiff.K8sAppDiff(am.CurrentManifests.Manifests, am.NewManifests.Manifests, curSha, newSha)
-			if err != nil {
-				log.Error().Err(err).Msgf("gendiff.K8sAppDiff() failed for %s; SHA %s" + am.ArgoApp.Metadata.Name)
-				if firstError == "" {
-					firstError = "gendiff.K8sAppDiff() failed"
-				}
-				markdown += github.AppMarkdownStart(am.ArgoApp.Metadata.Name, "Warning: Unable to generate diff, but manifests were succesfully fetched")
-				markdown += github.AppMarkdownEnd()
-			}
-			if len(k8sDiffs) > 0 {
+			if len(a.ChangedResources) > 0 {
 				changeCount++
-				markdown += github.AppMarkdownStart(am.ArgoApp.Metadata.Name, "")
-				for _, k := range k8sDiffs {
-					markdown += github.ResourceDiffMarkdown(k.ApiVersion, k.Kind, k.Name, k.Namespace, k.DiffStr)
+				markdown += github.AppMarkdownStart(appName, "")
+				for _, ar := range a.ChangedResources {
+					diffStr := gendiff.UnifiedDiff("live.yaml", fmt.Sprintf("%s.yaml", shortSha(eventInfo.Sha)), ar.YamlCur, ar.YamlNew)
+					markdown += github.ResourceDiffMarkdown(ar.Group, ar.Kind, ar.Name, ar.Namespace, diffStr)
 				}
 				markdown += github.AppMarkdownEnd()
 			}
@@ -112,7 +95,7 @@ func processEvent(eventInfo webhook.EventInfo) {
 
 	newStatus := github.StatusError // commit status is currently pending, newStatus will be the updated status (default to error)
 	statusDescription := "Unknown"
-	changeCountStr := fmt.Sprintf("%d of %d apps with changes", changeCount, len(appManifests))
+	changeCountStr := fmt.Sprintf("%d of %d apps with changes", changeCount, len(appResList))
 	if unknownCount > 0 {
 		changeCountStr += fmt.Sprintf(" [%d apps unknown]", unknownCount)
 	}
@@ -221,11 +204,11 @@ func devHandler(w http.ResponseWriter, r *http.Request) {
 	evt := webhook.EventInfo{
 		Ignore:         false,
 		RepoOwner:      "vince-riv",
-		RepoName:       "home-k3s",
+		RepoName:       "argo-diff-config",
 		RepoDefaultRef: "main",
-		Sha:            "71337e7a9ee35cd30308b30a161ccac3654eda4d",
-		PrNum:          8,
-		ChangeRef:      "blackbox-exporter-chart-v8.6.1",
+		Sha:            "5ec9695fd6e34fd034af325ef7355d62e7de1272",
+		PrNum:          2,
+		ChangeRef:      "annotation",
 		BaseRef:        "main",
 	}
 	wg.Add(1)
