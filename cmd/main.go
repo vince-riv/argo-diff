@@ -174,18 +174,6 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Could not process push event data", http.StatusInternalServerError)
 			return
 		}
-		// Skip non-branch pushes (eg: tags)
-		// TODO make this configurable?
-		if !strings.HasPrefix(eventInfo.ChangeRef, "refs/heads/") {
-			log.Info().Msgf("Ignoring non-branch push to %s", eventInfo.ChangeRef)
-			_, err := io.WriteString(w, fmt.Sprintf("non-branch %s event ignored\n%v\n", event, eventInfo))
-			if err != nil {
-				log.Error().Err(err).Msg("io.WriteString() failed")
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			}
-			return // we're done when it's a non-branch PUSH event we don't care about
-		}
-
 	default:
 		log.Info().Str("method", r.Method).Str("url", r.URL.String()).Msgf("Ignoring X-GitHub-Event %s", event)
 		_, err := io.WriteString(w, "event ignored\n")

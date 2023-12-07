@@ -16,6 +16,7 @@ const payloadPrSync = "payload-pr-sync.json"
 const payloadPushBranchDelete = "payload-push-branch-delete.json"
 const payloadPushBranchDev = "payload-push-branch-dev.json"
 const payloadPushBranchMain = "payload-push-branch-main.json"
+const payloadPushTag = "payload-push-tag.json"
 
 func readFileToByteArray(fileName string) ([]byte, string, error) {
 	workingDir, err := os.Getwd()
@@ -81,7 +82,7 @@ func TestLoadNotAPullRequestEvent(t *testing.T) {
 func TestLoadPushEvents(t *testing.T) {
 	var result EventInfo
 
-	payloadFiles := []string{payloadPushBranchDelete, payloadPushBranchDev, payloadPushBranchMain}
+	payloadFiles := []string{payloadPushBranchDelete, payloadPushBranchDev, payloadPushBranchMain, payloadPushTag}
 	for _, payloadFile := range payloadFiles {
 		payload, filePath, err := readFileToByteArray(payloadFile)
 		if err != nil {
@@ -91,7 +92,7 @@ func TestLoadPushEvents(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to load payload from %s: %v", filePath, err)
 		}
-		if payloadFile == payloadPushBranchDelete {
+		if payloadFile == payloadPushBranchDelete || payloadFile == payloadPushTag {
 			if !result.Ignore {
 				t.Errorf("ProcessPushRequest() Expected to ignore this event. Payload %s", filePath)
 			}
