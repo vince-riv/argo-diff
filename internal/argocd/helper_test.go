@@ -40,7 +40,7 @@ func readFileToByteArray(fileName string) ([]byte, string, error) {
 func TestFilterApplications(t *testing.T) {
 	var a []v1alpha1.Application
 
-	result, _ := filterApplications(a, "o", "r", "m", "m")
+	result, _ := filterApplications(a, "o", "r", "m", "m", "")
 	if len(result) != 0 {
 		t.Error("Empty param didn't lead to empty result")
 	}
@@ -57,30 +57,47 @@ func TestFilterApplications(t *testing.T) {
 		t.Errorf("decodeApplicationListPayload() failed: %s", err)
 	}
 
-	result, _ = filterApplications(a, "o", "r", "m", "m")
+	result, _ = filterApplications(a, "o", "r", "m", "m", "")
 	if len(result) != 0 {
 		t.Error("Unmatchable params didn't lead to empty result")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "main")
-	if len(result) != 0 {
-		t.Error("Push to main shouldn't have matched")
+	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	if len(result) != 1 {
+		t.Error("Push to main should have matched 1 (auto-sync off)")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev")
+	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "main")
 	if len(result) != 1 {
 		t.Error("Push to dev should have matched")
 	}
 
-	a[0].Spec.Source.TargetRevision = "main"
-	a[1].Spec.Source.TargetRevision = "main"
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "main")
+	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "not_main")
 	if len(result) != 0 {
-		t.Error("Push to main shouldn't have matched (targetRev main)")
+		t.Error("Non-main baseRef should not have matched")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev")
+	a[0].Spec.Source.TargetRevision = "main"
+	a[1].Spec.Source.TargetRevision = "main"
+	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	if len(result) != 1 {
+		t.Error("Push to main should have matched (targetRev main) (auto-sync off)")
+	}
+
+	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "main")
 	if len(result) != 1 {
 		t.Error("Push to dev should have matched (targetRev main)")
+	}
+
+	a[1].Spec.SyncPolicy = &v1alpha1.SyncPolicy{}
+	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	if len(result) != 1 {
+		t.Error("Push to main should have matched (targetRev main) (auto-sync still off)")
+	}
+
+	a[1].Spec.SyncPolicy.Automated = &v1alpha1.SyncPolicyAutomated{}
+	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	if len(result) != 0 {
+		t.Error("Push to main should NOT have matched (targetRev main) (auto-sync ENABLED)")
 	}
 }
