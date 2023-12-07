@@ -17,6 +17,16 @@ failure for that associated commit.
 If the event is for a pull request, argo-diff will comment on the associated pull request with markdown
 displaying the diff of the manifests.
 
+Argo-diff will not run (but may stil produce status checks) in the following situations:
+- Base branch of the pull request (branch in which the PR will be merged) is not the target revision for the
+    Argo application. (eg: Your Argo application targets `production`, but your PR is to be merged into
+    `dev`.)
+- Any git push that is not a branch. (eg: When tags are pushed, they are completely ignored by argo-diff.)
+- When your application has an
+    [Automated Sync Policy](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/) configured, and
+    commits are pushed to that application's target branch. (ie: There's no need to run argo-diff, when ArgoCD
+    will automatically pick up the change.)
+
 ## Deploying
 
 - Generate a fine-grained Github Personal Access Token. It should have the following Repository permissions:
