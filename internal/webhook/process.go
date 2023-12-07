@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/go-github/v56/github" // Ensure to get the latest version
 	"github.com/rs/zerolog/log"
@@ -97,14 +98,18 @@ func ProcessPush(payload []byte) (EventInfo, error) {
 	}
 	pushInfo.RepoOwner = *pushEvent.Repo.Owner.Login
 	pushInfo.RepoName = *pushEvent.Repo.Name
+	pushInfo.ChangeRef = *pushEvent.Ref
 	if pushEvent.HeadCommit == nil {
 		log.Info().Msgf("Ignoring push event ref %s; before %s, after %s", *pushEvent.Ref, *pushEvent.Before, *pushEvent.After)
+		return pushInfo, nil
+	}
+	if !strings.HasPrefix(pushInfo.ChangeRef, "refs/heads/") {
+		log.Info().Msgf("Ignoring non-branch push event ref %s", pushInfo.ChangeRef)
 		return pushInfo, nil
 	}
 	pushInfo.Ignore = false
 	pushInfo.Sha = *pushEvent.HeadCommit.ID
 	pushInfo.RepoDefaultRef = *pushEvent.Repo.DefaultBranch
-	pushInfo.ChangeRef = *pushEvent.Ref
 	log.Debug().Msgf("Returning EventInfo: %+v", pushInfo)
 	return pushInfo, validateEventInfo(pushInfo)
 }
