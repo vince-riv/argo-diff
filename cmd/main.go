@@ -72,10 +72,13 @@ func processEvent(eventInfo webhook.EventInfo) {
 	markdown := ""    // markdown for pull request comment
 	for _, a := range appResList {
 		appName := a.ArgoApp.ObjectMeta.Name
+		appSyncStatus := a.ArgoApp.Status.Sync.Status
+		appHealthStatus := a.ArgoApp.Status.Health.Status
+		appHealthMsg := a.ArgoApp.Status.Health.Message
 		// appNs := a.ArgoApp.ObjectMeta.Namespance
 		if a.WarnStr != "" {
 			errorCount++
-			markdown += github.AppMarkdownStart(appName, "Error: "+a.WarnStr)
+			markdown += github.AppMarkdownStart(appName, "Error: "+a.WarnStr, appSyncStatus, appHealthStatus, appHealthMsg)
 			markdown += github.AppMarkdownEnd()
 			if firstError == "" {
 				firstError = a.WarnStr
@@ -83,10 +86,10 @@ func processEvent(eventInfo webhook.EventInfo) {
 		} else {
 			if len(a.ChangedResources) > 0 {
 				changeCount++
-				markdown += github.AppMarkdownStart(appName, "")
+				markdown += github.AppMarkdownStart(appName, "", appSyncStatus, appHealthStatus, appHealthMsg)
 				for _, ar := range a.ChangedResources {
 					diffStr := gendiff.UnifiedDiff("live.yaml", fmt.Sprintf("%s.yaml", shortSha(eventInfo.Sha)), ar.YamlCur, ar.YamlNew)
-					markdown += github.ResourceDiffMarkdown(ar.Group, ar.Kind, ar.Name, ar.Namespace, diffStr)
+					markdown += github.ResourceDiffMarkdown(ar.ApiVersion, ar.Kind, ar.Name, ar.Namespace, diffStr)
 				}
 				markdown += github.AppMarkdownEnd()
 			}
@@ -120,8 +123,10 @@ func processEvent(eventInfo webhook.EventInfo) {
 	if isPr && (changeCount > 0 || errorCount > 0 || unknownCount > 0) {
 		// if it's a pull-request event, only comment when something has happened
 		t := time.Now()
-		tStr := t.Format("2006-01-02 15:04:05Z07:00")
-		markdownStart += fmt.Sprintf(" as compared to manifests in [%s](https://github.com/%s/%s/tree/%s) as of _%s_", eventInfo.BaseRef, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.BaseRef, tStr)
+		tStr := t.Format("3:04PM MST, 2 Jan 2006")
+		markdownStart += " compared to live state\n"
+		markdownStart += "\n" + tStr + "\n"
+		// markdownStart += fmt.Sprintf(" as compared to live state in [%s](https://github.com/%s/%s/tree/%s) as of _%s_", eventInfo.BaseRef, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.BaseRef, tStr)
 		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, markdownStart+"\n\n"+markdown)
 		return
 	}
@@ -206,7 +211,7 @@ func devHandler(w http.ResponseWriter, r *http.Request) {
 		RepoOwner:      "vince-riv",
 		RepoName:       "argo-diff-config",
 		RepoDefaultRef: "main",
-		Sha:            "5ca9064a15269439dcfb16658d74bcf74c30b983",
+		Sha:            "06cddc3a36c3b7758349104a429488901923c6c4",
 		PrNum:          2,
 		ChangeRef:      "annotation",
 		BaseRef:        "main",

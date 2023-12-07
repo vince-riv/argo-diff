@@ -194,8 +194,10 @@ func findDifferingObjects(ctx context.Context, app *argoappv1.Application, proj 
 				target = item.target
 			}
 			if live == nil {
+				r.ApiVersion = target.GetAPIVersion()
 				r.YamlCur = ""
 			} else {
+				r.ApiVersion = live.GetAPIVersion()
 				curObj, err := yaml.Marshal(live)
 				if err != nil {
 					log.Error().Err(err).Msgf("Failed to yaml.Unmarshal() for live state of %s/%s %s/%s", item.key.Group, item.key.Kind, item.key.Namespace, item.key.Name)

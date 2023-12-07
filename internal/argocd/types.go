@@ -5,12 +5,13 @@ import (
 )
 
 type AppResource struct {
-	Group     string
-	Kind      string
-	Namespace string
-	Name      string
-	YamlCur   string
-	YamlNew   string
+	ApiVersion string
+	Group      string
+	Kind       string
+	Namespace  string
+	Name       string
+	YamlCur    string
+	YamlNew    string
 }
 
 type ApplicationResourcesWithChanges struct {
