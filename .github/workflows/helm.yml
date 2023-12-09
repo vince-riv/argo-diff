@@ -1,0 +1,21 @@
+name: Helm Lint and Test
+
+on:
+  pull_request:
+    paths:
+      - 'charts/argo-diff/**'
+
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: d3adb5/helm-unittest-action@v2
+        with:
+          charts: charts/argo-diff
+          unittest-version: "0.3.4"
+          helm-version: "3.13.1"
+      - run: helm lint charts/argo-diff
