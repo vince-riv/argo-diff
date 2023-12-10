@@ -9,12 +9,14 @@ on:
       - 'cmd/**'
       - 'internal/**'
       - 'go.*'
+      - '.github/workflows/*'
   pull_request:
     branches: [main]
     paths:
       - 'cmd/**'
       - 'internal/**'
       - 'go.*'
+      - '.github/workflows/*'
   workflow_dispatch: {}
 
 env:
