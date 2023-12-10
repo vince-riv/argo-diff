@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'charts/argo-diff/**'
-
+      - '.github/workflows/helm.yml'
 
 jobs:
   unittest:
