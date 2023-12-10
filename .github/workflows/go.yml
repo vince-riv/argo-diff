@@ -1,31 +1,65 @@
+---
 name: Go
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
     paths:
       - '**/**.go'
       - 'go.mod'
       - 'go.sum'
+      - '**/_testdata/**'
+      - '.github/workflows/*'
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '>=1.21.0'
-
-    - name: Format
-      run: go fmt ./...
-
-    - name: Build
-      run: go build -v ./...
-
-    - name: Test
-      run: go test -v ./...
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: go build -v ./...
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      - name: Format
+        run: go fmt ./...
+  lint:
+    # Disable Go 1.11 modules when running per:
+    # https://github.com/golangci/golangci-lint/issues/395#issuecomment-922153131
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go for golangci-lint
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+          cache: false
+        env:
+          GO111MODULE: "off"
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.54
+          only-new-issues: true
+        env:
+          GO111MODULE: "off"
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test -v ./...
