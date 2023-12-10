@@ -1,0 +1,45 @@
+---
+name: Helm Push to GHCR
+
+on:
+  push:
+    tags: ['chart-*.*.*', 'chart-*.*.*-*']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, commit, or tag to checkout'
+        required: true
+
+jobs:
+  publish-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+      - name: Install yq
+        run: sudo snap install yq
+      - name: Extract Chart Version
+        id: extract_version
+        run: |
+          VERSION=$(yq e '.version' Chart.yaml)
+          echo "CHART_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "::set-output name=chart_version::$VERSION"
+      - name: Verify Chart Version
+        if: github.event_name == 'push'
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          if [ "$TAG_VERSION" != "chart-${{ steps.extract_version.outputs.chart_version }}" ]; then
+            echo "Tag version ($TAG_VERSION) does not match the chart version (${{ steps.extract_version.outputs.chart_version }})"
+            exit 1
+          fi
+      - name: Publish Helm Chart
+        uses: appany/helm-oci-chart-releaser@v0.4.1
+        with:
+          name: argo-diff
+          tag: ${{ steps.extract_version.outputs.chart_version }}
+          registry: ghcr.io
+          registry_username: ${{ secrets.REGISTRY_USERNAME }}
+          registry_password: ${{ secrets.REGISTRY_PASSWORD }}
+          update_dependencies: 'true' # Defaults to false
