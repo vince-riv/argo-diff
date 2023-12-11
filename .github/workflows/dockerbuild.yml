@@ -8,16 +8,16 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+-*'
     branches: [main]
     paths:
-      - 'cmd/**'
-      - 'internal/**'
-      - 'go.*'
+      - '**/**.go'
+      - 'go.mod'
+      - 'go.sum'
       - '.github/workflows/dockerbuild.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'cmd/**'
-      - 'internal/**'
-      - 'go.*'
+      - '**/**.go'
+      - 'go.mod'
+      - 'go.sum'
       - '.github/workflows/dockerbuild.yml'
   workflow_dispatch:
     inputs:
