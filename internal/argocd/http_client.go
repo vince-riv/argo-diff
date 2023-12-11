@@ -15,6 +15,7 @@ import (
 	"os"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apiclient"
+	"github.com/argoproj/argo-cd/v2/pkg/apiclient/application"
 	applicationpkg "github.com/argoproj/argo-cd/v2/pkg/apiclient/application"
 	projectpkg "github.com/argoproj/argo-cd/v2/pkg/apiclient/project"
 	settingspkg "github.com/argoproj/argo-cd/v2/pkg/apiclient/settings"
@@ -130,4 +131,15 @@ func getSettings(ctx context.Context) (*settingspkg.Settings, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+func syncApplication(ctx context.Context, appSyncReq application.ApplicationSyncRequest) (*v1alpha1.Application, error) {
+	appName := *appSyncReq.Name
+	appNs := *appSyncReq.AppNamespace
+	app, err := applicationIf.Sync(ctx, &appSyncReq)
+	if err != nil {
+		log.Error().Err(err).Msgf("Sync Argo application %s (namespace %s) failed", appName, appNs)
+		return nil, err
+	}
+	return app, nil
 }

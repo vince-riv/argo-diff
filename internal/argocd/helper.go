@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/argoproj/argo-cd/v2/pkg/apiclient/application"
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
 )
 
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
-// and return their manifests.
+// and return any changes that are contained at the commit sha in revision
 func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefaultRef, revision, changeRef, baseRef string) ([]ApplicationResourcesWithChanges, error) {
 	var appResList []ApplicationResourcesWithChanges
 	argoApps, err := listApplications(ctx)
@@ -31,6 +32,74 @@ func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefault
 		appResList = append(appResList, applicationResourceChanges)
 	}
 	return appResList, nil
+}
+
+// Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
+// and perform a dry-run sync (with a fallback to fetching manifests)
+func SyncApplications(ctx context.Context, repoOwner, repoName, repoDefaultRef, revision, changeRef, baseRef string) ([]ApplicationSyncResult, error) {
+	var appSyncList []ApplicationSyncResult
+	argoApps, err := listApplications(ctx)
+	if err != nil {
+		return appSyncList, err
+	}
+	if len(argoApps.Items) == 0 {
+		return appSyncList, fmt.Errorf("empty ArgoCD app list")
+	}
+	apps, err := filterApplications(argoApps.Items, repoOwner, repoName, repoDefaultRef, changeRef, baseRef)
+	if err != nil {
+		return appSyncList, err
+	}
+	log.Debug().Msgf("Matching apps: %v", apps)
+
+	for _, app := range apps {
+		// get manifests
+		_, err := getAppManifests(ctx, app.ObjectMeta.Name, app.ObjectMeta.Namespace, revision)
+		if err != nil {
+			appSyncList = append(appSyncList, ApplicationSyncResult{
+				ManifestsFetchMsg: fmt.Sprintf("Failed to fetch application manifests %s at revision %s: %s", app.ObjectMeta.Name, revision, err.Error()),
+				ManifestsFetched:  false,
+				SyncSuccess:       SyncSkip,
+				SyncMsg:           "Skipped app sync due to manifest fetch failure",
+			})
+			continue
+		}
+		appSyncRes := ApplicationSyncResult{
+			ArgoApp:           &app,
+			ManifestsFetched:  true,
+			ManifestsFetchMsg: "Success",
+			SyncSuccess:       SyncFail,
+			SyncMsg:           "Unknown",
+		}
+		// get sync options (eg: use server-side apply?)
+		dryRun := true
+		prune := true
+		syncReq := application.ApplicationSyncRequest{
+			Name:         &app.ObjectMeta.Name,
+			AppNamespace: &app.ObjectMeta.Namespace,
+			DryRun:       &dryRun,
+			Revision:     &revision,
+			Prune:        &prune,
+			Strategy:     &v1alpha1.SyncStrategy{Hook: &v1alpha1.SyncStrategyHook{}}, // TODO support apply maybe?
+		}
+		// pull sync options from app config (if it's set)
+		if app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil {
+			*syncReq.Prune = app.Spec.SyncPolicy.Automated.Prune
+			if len(app.Spec.SyncPolicy.SyncOptions) > 0 {
+				syncReq.SyncOptions = &application.SyncOptions{
+					Items: app.Spec.SyncPolicy.SyncOptions,
+				}
+			}
+		}
+		_, err = syncApplication(ctx, syncReq)
+		if err != nil {
+			appSyncRes.SyncSuccess = SyncFail
+			appSyncRes.SyncMsg = err.Error()
+		}
+		appSyncRes.SyncSuccess = SyncSuccess
+		appSyncRes.SyncMsg = ""
+		appSyncList = append(appSyncList, appSyncRes)
+	}
+	return appSyncList, nil
 }
 
 // Returns a list of Applications whose git URLs match repo owner & name
