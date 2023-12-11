@@ -4,6 +4,12 @@ name: Go
 on:
   push:
     branches: ["main"]
+    paths:
+      - '**/**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '**/_testdata/**'
+      - '.github/workflows/go.yml'
   pull_request:
     branches: ["main"]
     paths:
@@ -34,6 +40,8 @@ jobs:
       - name: Format
         run: go fmt ./...
   lint:
+    # Only lint on PRs; it's not as useful on pushes to main
+    if: github.event_name == 'pull_request'
     # Disable Go 1.11 modules when running per:
     # https://github.com/golangci/golangci-lint/issues/395#issuecomment-922153131
     runs-on: ubuntu-latest
