@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -12,9 +13,10 @@ import (
 )
 
 var (
-	commentClient *github.Client
-	commentUser   *github.User
-	mux           *sync.RWMutex
+	commentClient      *github.Client
+	commentUser        *github.User
+	mux                *sync.RWMutex
+	commentLineMaxChar int
 )
 
 const commentIdentifier = "<!-- comment produced by argo-diff -->"
@@ -27,6 +29,17 @@ func init() {
 		commentClient = github.NewClient(nil).WithAuthToken(githubPAT)
 	}
 	mux = &sync.RWMutex{}
+
+	commentLineMaxChar = 175
+	lineMaxCharStr := os.Getenv("COMMENT_LINE_MAX_CHARS")
+	if lineMaxCharStr != "" {
+		v, err := strconv.Atoi(lineMaxCharStr)
+		if err == nil {
+			commentLineMaxChar = v
+		} else {
+			log.Warn().Err(err).Msg("Failed to decode COMMENT_LINE_MAX_CHARS")
+		}
+	}
 }
 
 // Populates commentUser singleton with the Github user associated with our github client
@@ -128,7 +141,7 @@ func Comment(ctx context.Context, owner, repo string, prNum int, commentBody str
 	commentBody += "\n\n"
 	commentBody += commentIdentifier
 	commentBody += "\n"
-	newComment := github.IssueComment{Body: &commentBody}
+	newComment := github.IssueComment{Body: truncateLines(commentBody, commentLineMaxChar)}
 	var issueComment *github.IssueComment
 	var resp *github.Response
 	if existingComment != nil {
@@ -153,4 +166,18 @@ func Comment(ctx context.Context, owner, repo string, prNum int, commentBody str
 	}
 	log.Info().Msgf("Created or Updated comment ID %d in %s/%s#%d: %s", *issueComment.ID, owner, repo, prNum, *issueComment.IssueURL)
 	return *issueComment.ID, nil
+}
+
+func truncateLines(s string, maxLen int) *string {
+	var result string
+	lines := strings.Split(s, "\n")
+	for _, line := range lines {
+		if len(line) > maxLen {
+			result += line[:maxLen] + "...[TRUNCATED]"
+		} else {
+			result += line
+		}
+		result += "\n"
+	}
+	return &result
 }
