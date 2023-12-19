@@ -205,7 +205,11 @@ func findDifferingObjects(ctx context.Context, app *argoappv1.Application, proj 
 				} else {
 					r.YamlCur = string(curObj)
 				}
+			}
 
+			if target == nil {
+				r.YamlNew = ""
+			} else {
 				newObj, err := yaml.Marshal(target)
 				if err != nil {
 					log.Error().Err(err).Msgf("Failed to yaml.Unmarshal() for target state of %s/%s %s/%s", item.key.Group, item.key.Kind, item.key.Namespace, item.key.Name)
