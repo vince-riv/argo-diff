@@ -1,13 +1,17 @@
 package github
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-github/v56/github"
@@ -18,9 +22,12 @@ const payloadUser = "payload-user.json"
 const payloadPr1Comments = "payload-pr-1-comments.json"
 const payloadPr2Comments = "payload-pr-2-comments.json"
 const payloadPr3Comments = "payload-pr-3-comments.json"
+const payloadPr4Comments = "payload-pr-4-comments.json"
 const payloadPr1CreateComment = "payload-pr-1-create-comment.json"
 const payloadPr2CreateComment = "payload-pr-2-create-comment.json"
-const payloadPr3UpdateComment = "payload-pr-3-update-comment.json"
+
+// const payloadPr3UpdateComment = "payload-pr-3-update-comment.json"
+const payloadPatchComment = "payload-pr-patch-comment.json"
 
 func readFileToByteArray(fileName string) ([]byte, string, error) {
 	workingDir, err := os.Getwd()
@@ -38,6 +45,25 @@ func readFileToByteArray(fileName string) ([]byte, string, error) {
 	return data, filePath, nil
 }
 
+func jsonFieldExtract(srcField string, src []byte, destField string, dest []byte) ([]byte, error) {
+	var srcData, destData map[string]interface{}
+	err := json.Unmarshal(src, &srcData)
+	if err != nil {
+		return []byte{}, err
+	}
+	err = json.Unmarshal(dest, &destData)
+	if err != nil {
+		return []byte{}, err
+	}
+	destData[destField] = srcData[srcField]
+
+	ret, err := json.Marshal(destData)
+	if err != nil {
+		return []byte{}, err
+	}
+	return ret, nil
+}
+
 func newHttpTestServer(t *testing.T) *httptest.Server {
 	newServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		statusCode := http.StatusNotFound
@@ -45,42 +71,67 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 		var filePath string
 		var err error
 		//println("r.URL.Path: " + r.URL.Path)
-		switch r.URL.Path {
-		case "/user":
-			statusCode = http.StatusOK
-			payload, filePath, err = readFileToByteArray(payloadUser)
-		case "/repos/vince-riv/argo-diff/issues/1/comments":
-			if r.Method == "GET" {
-				statusCode = http.StatusOK
-				payload, filePath, err = readFileToByteArray(payloadPr1Comments)
-			} else if r.Method == "POST" {
-				statusCode = http.StatusCreated
-				payload, filePath, err = readFileToByteArray(payloadPr1CreateComment)
-			} else {
-				statusCode = http.StatusMethodNotAllowed
-			}
-		case "/repos/vince-riv/argo-diff/issues/2/comments":
-			if r.Method == "GET" {
-				statusCode = http.StatusOK
-				payload, filePath, err = readFileToByteArray(payloadPr2Comments)
-			} else if r.Method == "POST" {
-				statusCode = http.StatusCreated
-				payload, filePath, err = readFileToByteArray(payloadPr2CreateComment)
-			} else {
-				statusCode = http.StatusMethodNotAllowed
-			}
-		case "/repos/vince-riv/argo-diff/issues/3/comments":
-			statusCode = http.StatusOK
-			payload, filePath, err = readFileToByteArray(payloadPr3Comments)
-		case "/repos/vince-riv/argo-diff/issues/comments/3333333333":
+		if strings.HasPrefix(r.URL.Path, "/repos/vince-riv/argo-diff/issues/comments/") {
 			if r.Method == "PATCH" {
-				statusCode = http.StatusOK
-				payload, filePath, err = readFileToByteArray(payloadPr3UpdateComment)
+				var reqBody []byte
+				reqBody, err = io.ReadAll(r.Body)
+				urlPathParts := strings.Split(r.URL.Path, "/")
+				if urlPathParts[6] == "" {
+					statusCode = http.StatusInternalServerError
+					t.Errorf("Bad URL Path: %s", r.URL.Path)
+				} else {
+					statusCode = http.StatusOK
+					payload, filePath, err = readFileToByteArray(payloadPatchComment)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						t.Errorf("readFileToByteArray() failed: %s", err)
+						return
+					}
+					payload = bytes.Replace(payload, []byte("%%_COMMENT_ID_%%"), []byte(urlPathParts[6]), -1)
+					payload, err = jsonFieldExtract("body", reqBody, "body", payload)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						t.Errorf("jsonFieldExtract() failed: %s", err)
+						return
+					}
+				}
 			} else {
 				statusCode = http.StatusMethodNotAllowed
 			}
-		default:
-			t.Errorf("Mock server not configured to serve path %s", r.URL.Path)
+		} else {
+			switch r.URL.Path {
+			case "/user":
+				statusCode = http.StatusOK
+				payload, filePath, err = readFileToByteArray(payloadUser)
+			case "/repos/vince-riv/argo-diff/issues/1/comments":
+				if r.Method == "GET" {
+					statusCode = http.StatusOK
+					payload, filePath, err = readFileToByteArray(payloadPr1Comments)
+				} else if r.Method == "POST" {
+					statusCode = http.StatusCreated
+					payload, filePath, err = readFileToByteArray(payloadPr1CreateComment)
+				} else {
+					statusCode = http.StatusMethodNotAllowed
+				}
+			case "/repos/vince-riv/argo-diff/issues/2/comments":
+				if r.Method == "GET" {
+					statusCode = http.StatusOK
+					payload, filePath, err = readFileToByteArray(payloadPr2Comments)
+				} else if r.Method == "POST" {
+					statusCode = http.StatusCreated
+					payload, filePath, err = readFileToByteArray(payloadPr2CreateComment)
+				} else {
+					statusCode = http.StatusMethodNotAllowed
+				}
+			case "/repos/vince-riv/argo-diff/issues/3/comments":
+				statusCode = http.StatusOK
+				payload, filePath, err = readFileToByteArray(payloadPr3Comments)
+			case "/repos/vince-riv/argo-diff/issues/4/comments":
+				statusCode = http.StatusOK
+				payload, filePath, err = readFileToByteArray(payloadPr4Comments)
+			default:
+				t.Errorf("Mock server not configured to serve path %s", r.URL.Path)
+			}
 		}
 		if err != nil {
 			t.Errorf("Failed to load %s: %s", filePath, err)
@@ -100,20 +151,20 @@ func TestCommentNoExistingComments(t *testing.T) {
 	commentClient.BaseURL = httpBaseUrl
 	commentClient.UploadURL = httpBaseUrl
 
-	c, err := getExistingComment(context.Background(), "vince-riv", "argo-diff", 1)
+	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 1)
 	if err != nil {
-		t.Errorf("getExistingComment() failed: %s", err)
+		t.Errorf("getExistingComments() failed: %s", err)
 	}
-	if c != nil {
+	if len(c) > 0 {
 		t.Error("Expected no existing comment")
 	}
 
-	commentId, err := Comment(context.Background(), "vince-riv", "argo-diff", 1, "argo-diff test comment")
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 1, []string{"argo-diff test comment"})
 	if err != nil {
-		t.Errorf("getExistingComment() failed: %s", err)
+		t.Errorf("Comment() failed: %s", err)
 	}
-	if commentId != 1111111111 {
-		t.Errorf("Comment ID %d doesn't match 1111111111", commentId)
+	if *comments[0].ID != 1111111111 {
+		t.Error("Comment ID doesn't match")
 	}
 }
 
@@ -125,20 +176,20 @@ func TestCommentExistingDifferentUser(t *testing.T) {
 	commentClient.BaseURL = httpBaseUrl
 	commentClient.UploadURL = httpBaseUrl
 
-	c, err := getExistingComment(context.Background(), "vince-riv", "argo-diff", 2)
+	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 2)
 	if err != nil {
-		t.Errorf("getExistingComment() failed: %s", err)
+		t.Errorf("getExistingComments() failed: %s", err)
 	}
-	if c != nil {
+	if len(c) > 0 {
 		t.Error("Expected no existing comment")
 	}
 
-	commentId, err := Comment(context.Background(), "vince-riv", "argo-diff", 2, "argo-diff test comment")
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 2, []string{"argo-diff test comment"})
 	if err != nil {
-		t.Errorf("getExistingComment() failed: %s", err)
+		t.Errorf("Comment() failed: %s", err)
 	}
-	if commentId != 2222222222 {
-		t.Errorf("Comment ID %d doesn't match 2222222222", commentId)
+	if *comments[0].ID != 2222222222 {
+		t.Error("Comment ID doesn't match")
 	}
 }
 
@@ -150,21 +201,57 @@ func TestCommentExisting(t *testing.T) {
 	commentClient.BaseURL = httpBaseUrl
 	commentClient.UploadURL = httpBaseUrl
 
-	c, err := getExistingComment(context.Background(), "vince-riv", "argo-diff", 3)
+	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 3)
 	if err != nil {
-		t.Errorf("getExistingComment() failed: %s", err)
+		t.Errorf("getExistingComments() failed: %s", err)
 	}
-	if c == nil {
+	if len(c) != 1 {
 		t.Error("Could not find existing comment")
-	} else if *c.ID != 3333333333 {
-		t.Error("Expected issue comment ID to be 3333333333")
+	} else if *c[0].ID != 3333333333 {
+		t.Error("Comment ID doesn't match")
 	}
 
-	commentId, err := Comment(context.Background(), "vince-riv", "argo-diff", 3, "argo-diff test comment")
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 3, []string{"argo-diff test comment"})
 	if err != nil {
-		t.Errorf("getExistingComment() failed: %s", err)
+		t.Errorf("Comment() failed: %s", err)
 	}
-	if commentId != 3333333333 {
-		t.Errorf("Comment ID %d doesn't match 3333333333", commentId)
+	if *comments[0].ID != 3333333333 {
+		t.Error("Comment ID doesn't match")
+	}
+}
+
+func TestCommentExistingMulti(t *testing.T) {
+	server := newHttpTestServer(t)
+	defer server.Close()
+	httpBaseUrl, _ := url.Parse(server.URL + "/")
+	commentClient = github.NewClient(nil).WithAuthToken("test1234")
+	commentClient.BaseURL = httpBaseUrl
+	commentClient.UploadURL = httpBaseUrl
+
+	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 4)
+	if err != nil {
+		t.Errorf("getExistingComments() failed: %s", err)
+	}
+	if len(c) != 2 {
+		t.Error("Could not find existing comment")
+	} else if *c[0].ID != 4444444222 && *c[1].ID != 4444444333 {
+		t.Error("Unexpected issue commit IDs")
+	}
+
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 4, []string{"argo-diff test comment update"})
+	if err != nil {
+		t.Errorf("Comment() failed: %s", err)
+	}
+	if *comments[0].ID != 4444444222 {
+		t.Errorf("1st Comment ID doesn't match 4444444222: %d", *comments[0].ID)
+	}
+	if !strings.Contains(*comments[0].Body, "argo-diff test comment update") {
+		t.Errorf("1st Comment body doesn't match 'argo-diff test comment update': %s", *comments[0].Body)
+	}
+	if *comments[1].ID != 4444444333 {
+		t.Errorf("2nd Comment ID doesn't match 4444444333: %d", *comments[1].ID)
+	}
+	if !strings.Contains(*comments[1].Body, "Refreshed diff content is in above comments") {
+		t.Errorf("1st Comment body doesn't match 'Refreshed diff content is in above comments': %s", *comments[1].Body)
 	}
 }
