@@ -20,3 +20,17 @@ type ApplicationResourcesWithChanges struct {
 	ChangedResources []AppResource
 	WarnStr          string
 }
+
+const (
+	SyncSkip    = -1
+	SyncFail    = 0
+	SyncSuccess = 1
+)
+
+type ApplicationSyncResult struct {
+	ArgoApp           *v1alpha1.Application
+	ManifestsFetched  bool
+	ManifestsFetchMsg string
+	SyncSuccess       int
+	SyncMsg           string
+}

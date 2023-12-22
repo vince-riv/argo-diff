@@ -86,6 +86,12 @@ func processEvent(eventInfo webhook.EventInfo) {
 		} else {
 			if len(a.ChangedResources) > 0 {
 				changeCount++
+				syncRes, err := argocd.SyncApplication(ctx, *a.ArgoApp, eventInfo.Sha)
+				if err != nil {
+					markdown += "Sync dry-run failed: " + err.Error() + "\n\n"
+				} else if syncRes == argocd.SyncSuccess {
+					markdown += "Sync dry-run successful\n\n"
+				}
 				markdown += github.AppMarkdownStart(appName, "", appSyncStatus, appHealthStatus, appHealthMsg)
 				for _, ar := range a.ChangedResources {
 					diffStr := gendiff.UnifiedDiff("live.yaml", fmt.Sprintf("%s.yaml", shortSha(eventInfo.Sha)), ar.YamlCur, ar.YamlNew)
@@ -209,11 +215,11 @@ func devHandler(w http.ResponseWriter, r *http.Request) {
 	evt := webhook.EventInfo{
 		Ignore:         false,
 		RepoOwner:      "vince-riv",
-		RepoName:       "argo-diff-config",
+		RepoName:       "home-k3s",
 		RepoDefaultRef: "main",
-		Sha:            "06cddc3a36c3b7758349104a429488901923c6c4",
-		PrNum:          2,
-		ChangeRef:      "annotation",
+		Sha:            "4f95c12ac35d96378ba4c8c8cf21486409b44afa",
+		PrNum:          19,
+		ChangeRef:      "external-dns-affinity",
 		BaseRef:        "main",
 	}
 	wg.Add(1)
