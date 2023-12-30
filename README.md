@@ -80,11 +80,8 @@ This is still in a proof-of-concept and alpha version state, so there are some k
 - When many Argo applications are served by a single repository, performance may be slow. Manifests for eac
     Argo application are fetched sequentially, so this could result in argo-diff statuses and/or comments
     taking minutes to complete.
-- There is not concurrency logic. So if multiple webhooks are received nearly in parallel (due to delayed
-    webhook notifications and/or successive git push's), comment output on tThere is not concurrency
-    logic. So if multiple webhooks are received nearly in parallel (due to delayed webhook notifications
-    and/or successive git push's), comment output on the PR may be unreliable.
-
+- There is no concurrency logic. So if multiple webhooks are received nearly in parallel (due to delayed
+    webhook notifications and/or successive git push's), comment output in the PR may be unreliable.
 
 ## Running locally
 
