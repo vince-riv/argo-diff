@@ -17,7 +17,7 @@ failure for that associated commit.
 If the event is for a pull request, argo-diff will comment on the associated pull request with markdown
 displaying the diff of the manifests.
 
-Argo-diff will not run (but may stil produce status checks) in the following situations:
+Argo-diff will not run (but may still produce status checks) in the following situations:
 - Base branch of the pull request (branch in which the PR will be merged) is not the target revision for the
     Argo application. (eg: Your Argo application targets `production`, but your PR is to be merged into
     `dev`.)
@@ -26,6 +26,13 @@ Argo-diff will not run (but may stil produce status checks) in the following sit
     [Automated Sync Policy](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/) configured, and
     commits are pushed to that application's target branch. (ie: There's no need to run argo-diff, when ArgoCD
     will automatically pick up the change.)
+
+### Why argo-diff?
+
+There are multiple ways to produce diff previews of proposed manifest changes to ArgoCD applications in Github
+Pull Requests, but they often require per-repository configuration. Because argo-diff is triggered by Github
+event notifications, and because argo-diff auto-discovers ArgoCD applications configured in the source code
+repository, no configuration is needed when repositories and/or ArgoCD applications are added and removed.
 
 ### Screenshots
 
@@ -70,9 +77,14 @@ This is still in a proof-of-concept and alpha version state, so there are some k
 
 - If there's a problem, and the diff comment needs to be regenerated, an admin must redeliver the webhook
     event associated with the PR. In the future, argo-diff may be re-initated by a comment on the PR.
-- When many Argo applications are served by a single repository, performance is slow. Manifests for each Argo
-    application are fetched sequentially, so this could result in argo-diff statuses and/or comments taking
-    minutes to complete.
+- When many Argo applications are served by a single repository, performance may be slow. Manifests for eac
+    Argo application are fetched sequentially, so this could result in argo-diff statuses and/or comments
+    taking minutes to complete.
+- There is not concurrency logic. So if multiple webhooks are received nearly in parallel (due to delayed
+    webhook notifications and/or successive git push's), comment output on tThere is not concurrency
+    logic. So if multiple webhooks are received nearly in parallel (due to delayed webhook notifications
+    and/or successive git push's), comment output on the PR may be unreliable.
+
 
 ## Running locally
 
