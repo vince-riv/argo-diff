@@ -3,6 +3,7 @@ package github
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -15,6 +16,7 @@ const maxCommentLen = 64000
 const maxResourceDiffLen = 63000
 
 var argocdUiUrl string
+var commentLineMaxChar int
 
 func init() {
 	argocdUiUrl = os.Getenv("ARGOCD_UI_BASE_URL")
@@ -22,6 +24,16 @@ func init() {
 		log.Warn().Msg("ARGOCD_UI_BASE_URL is not set - links won't be created im comments")
 	} else {
 		log.Info().Msgf("ARGOCD_UI_BASE_URL is set to %s for comment links", argocdUiUrl)
+	}
+	commentLineMaxChar = 175
+	lineMaxCharStr := os.Getenv("COMMENT_LINE_MAX_CHARS")
+	if lineMaxCharStr != "" {
+		v, err := strconv.Atoi(lineMaxCharStr)
+		if err == nil {
+			commentLineMaxChar = v
+		} else {
+			log.Warn().Err(err).Msg("Failed to decode COMMENT_LINE_MAX_CHARS")
+		}
 	}
 }
 
@@ -54,6 +66,20 @@ func syncString(s v1alpha1.SyncStatusCode) string {
 	default:
 		return string(s) + " :interrobang:"
 	}
+}
+
+func truncateLines(s string, maxLen int) string {
+	var result string
+	lines := strings.Split(s, "\n")
+	for _, line := range lines {
+		if len(line) > maxLen {
+			result += line[:maxLen] + "...[TRUNCATED]"
+		} else {
+			result += line
+		}
+		result += "\n"
+	}
+	return result
 }
 
 func healthString(s health.HealthStatusCode, msg string) string {
@@ -107,7 +133,7 @@ func ResourceDiffMarkdown(apiVersion, kind, name, ns, diffStr string) string {
 	md += fmt.Sprintf("  <summary>%s/%s %s/%s</summary>\n\n", apiVersion, kind, ns, name)
 	if diffStr != "" {
 		md += "```diff\n"
-		md += diffStr
+		md += truncateLines(diffStr, commentLineMaxChar)
 		if diffStr[len(diffStr)-1] != '\n' {
 			md += "\n"
 		}
@@ -209,7 +235,7 @@ func (a *ArgoAppMarkdown) AddResourceDiff(apiVersion, kind, name, ns, diffStr st
 	diffMd := ""
 	if diffStr != "" {
 		diffMd += "```diff\n"
-		diffMd += diffStr
+		diffMd += truncateLines(diffStr, commentLineMaxChar)
 		if diffStr[len(diffStr)-1] != '\n' {
 			diffMd += "\n"
 		}
