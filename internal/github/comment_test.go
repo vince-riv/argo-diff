@@ -251,7 +251,7 @@ func TestCommentExistingMulti(t *testing.T) {
 	if *comments[1].ID != 4444444333 {
 		t.Errorf("2nd Comment ID doesn't match 4444444333: %d", *comments[1].ID)
 	}
-	if !strings.Contains(*comments[1].Body, "Refreshed diff content is in above comments") {
-		t.Errorf("1st Comment body doesn't match 'Refreshed diff content is in above comments': %s", *comments[1].Body)
+	if !strings.Contains(*comments[1].Body, "[Outdated argo-diff content]") {
+		t.Errorf("1st Comment body doesn't match '[Outdated argo-diff content]': %s", *comments[1].Body)
 	}
 }

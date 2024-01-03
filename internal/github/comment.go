@@ -163,7 +163,7 @@ func Comment(ctx context.Context, owner, repo string, prNum int, commentBodies [
 	}
 	for nextExistingCommentIdx < len(existingComments) {
 		existingComment := existingComments[nextExistingCommentIdx]
-		truncateCommentBody := "[Refreshed diff content is in above comments]\n\n" + commentIdentifier + "\n"
+		truncateCommentBody := "[Outdated argo-diff content]\n\n" + commentIdentifier + "\n"
 		newComment := github.IssueComment{Body: &truncateCommentBody}
 		issueComment, resp, err := commentClient.Issues.EditComment(ctx, owner, repo, *existingComment.ID, &newComment)
 		if resp != nil {
