@@ -124,7 +124,7 @@ func processEvent(eventInfo webhook.EventInfo) {
 	// send the commit status
 	github.Status(ctx, isPr, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
-	if isPr && (changeCount > 0 || errorCount > 0 || unknownCount > 0) {
+	if isPr {
 		// if it's a pull-request event, only comment when something has happened
 		t := time.Now()
 		tStr := t.Format("3:04PM MST, 2 Jan 2006")
