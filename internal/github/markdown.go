@@ -224,8 +224,8 @@ func (c CommentMarkdown) String() []string {
 			}
 		}
 		md += "</details>\n\n"
-		res = append(res, md)
 	}
+	res = append(res, md)
 	return res
 }
 
