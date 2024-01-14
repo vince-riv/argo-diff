@@ -1,0 +1,61 @@
+---
+  name: Helm Push to GHCR
+  
+  on:
+    push:
+      tags:
+        - 'chart-[0-9]+.[0-9]+.[0-9]+'
+        - 'chart-[0-9]+.[0-9]+.[0-9]+-*'
+    workflow_dispatch:
+      inputs:
+        ref:
+          description: 'Branch, commit, or tag to checkout'
+          required: true
+  env:
+    GCR: ghcr.io/${{ github.repository_owner }}
+  
+  jobs:
+    publish-chart:
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        packages: write
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+          with:
+            ref: ${{ github.event.inputs.ref || github.ref }}
+        - name: Install Helm
+          uses: azure/setup-helm@v3
+          with:
+            version: 3.13.2
+            token: ${{ secrets.GITHUB_TOKEN }}
+        - name: Install yq
+          run: sudo snap install yq
+        - name: Extract Chart Version
+          id: extract_version
+          run: |
+            VERSION=$(yq e '.version' charts/argo-diff/Chart.yaml)
+            echo "chart_version=$VERSION" >> $GITHUB_OUTPUT
+        - name: Verify Chart Version
+          if: ${{ startsWith(github.ref, 'refs/tags/') }}
+          run: |
+            TAG_VERSION=${GITHUB_REF#refs/tags/}
+            if [ "$TAG_VERSION" != "chart-${{ steps.extract_version.outputs.chart_version }}" ]; then
+              echo "Tag version ($TAG_VERSION) does not match the chart version (${{ steps.extract_version.outputs.chart_version }})"
+              exit 1
+            fi
+        - name: Helm login
+          run: |
+            helm version
+            cd charts/argo-diff
+            echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.GCR }} --username ${{ github.repository_owner }} --password-stdin
+        - name: Helm push
+          run: |
+            set -x
+            cd charts/argo-diff
+            version=${{ steps.extract_version.outputs.chart_version }}
+            helm package .
+            helm push ./argo-diff-$version.tgz oci://${{ env.GCR }}/chart
+        - name: Helm logout
+          run: helm registry logout ${{ env.GCR }}

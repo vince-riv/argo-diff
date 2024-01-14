@@ -12,10 +12,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o argo-diff ./cmd/
 ## Final image
 FROM alpine:latest
 
-COPY --from=build /src/argo-diff /app/argo-diff
-COPY --from=build /src/git-rev.txt /app/git-rev.txt
+# add new user
+RUN adduser -D argo-diff
 
+USER argo-diff
 WORKDIR /app
+
+COPY --from=build --chown=argo-diff /src/argo-diff argo-diff
+COPY --from=build --chown=argo-diff /src/git-rev.txt git-rev.txt
 
 EXPOSE 8080
 
