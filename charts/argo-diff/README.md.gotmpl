@@ -1,0 +1,59 @@
+# Argo Diff
+
+{{ template "chart.description" . }}
+
+{{ template "chart.versionBadge" . }}{{ template "chart.typeBadge" . }}{{ template "chart.appVersionBadge" . }}
+
+## Extended Description
+
+The Argo Diff chart provides a method of comparing the generated manifests in a PR to the manifests that are currently deployed in the cluster. Then argo diff comments on the PR with any changes to ensure that the PR is not introducing any unexpected changes.
+
+## Installing the Chart
+
+
+## Aids to navigation
+
+- `templates/` contains all of the templates that are rendered by this chart.
+  Note that files starting with `_` are not used to generate output directly,
+  but the constructs therein are accessible by other template files (handy for
+  reusable template fragments).
+- `values.yaml` contains the default configuration parameters for the chart.
+  This is also where we document configuration options for end users. Be sure to
+  read https://helm.sh/docs/chart_best_practices/values/ before editing this
+  file.
+
+## Bootstrap yourself on Helm
+
+- https://helm.sh/docs/intro/quickstart/
+- http://masterminds.github.io/sprig/
+- https://helm.sh/docs/chart_best_practices
+- https://helm.sh/docs/chart_template_guide/data_types/
+- https://json-schema.org/understanding-json-schema/
+- https://go101.org/article/101.html (not required, but a handy reference for Go
+  idioms that bleed through)
+
+## Run Unittests
+
+### Pre-Requisites
+
+- helm
+- https://github.com/helm-unittest/helm-unittest/tree/main
+
+### Running Tests
+
+1. `helm unittest .`
+
+## Installing the Chart
+
+To install the chart with the release name `my-release`:
+
+```console
+$ helm repo add foo-bar http://charts.foo-bar.com
+$ helm install my-release foo-bar/{{ template "chart.name" . }}
+```
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}
