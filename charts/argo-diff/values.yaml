@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: argo-diff
+  repository: ghcr.io/vince-riv/argo-diff
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
@@ -23,6 +23,30 @@ config:
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+
+# livenessProbe -- Configuration for liveness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 2
+  periodSeconds: 10
+
+# readinessProbe -- Configuration for readiness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 2
+  periodSeconds: 10
+
+# startupProbe -- Configuration for startup check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  failureThreshold: 10
+  periodSeconds: 2
 
 serviceAccount:
   # Specifies whether a service account should be created
