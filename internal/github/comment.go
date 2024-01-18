@@ -59,6 +59,37 @@ func getCommentUser(ctx context.Context) error {
 	return nil
 }
 
+// Gets the specified pull request
+func GetPullRequest(ctx context.Context, owner, repo string, prNum int) (*github.PullRequest, error) {
+	pr, resp, err := commentClient.PullRequests.Get(ctx, owner, repo, prNum)
+	if resp != nil {
+		log.Info().Msgf("%s received when calling client.Users.Get() via go-github", resp.Status)
+	}
+	if err != nil {
+		log.Error().Err(err).Msgf("Unable to fetch pull request %s/%s#%d", owner, repo, prNum)
+		return nil, err
+	}
+	return pr, nil
+}
+
+// Returns true if sha is HEAD of the pull request
+func isPrHead(ctx context.Context, sha, owner, repo string, prNum int) bool {
+	pr, err := GetPullRequest(ctx, owner, repo, prNum)
+	if err != nil {
+		log.Warn().Msgf("GetPullRequest() err'd - assuming %s is HEAD of %s/%s#%d", sha, owner, repo, prNum)
+		return true
+	}
+	if pr.Head == nil {
+		log.Warn().Msgf("%s/%s#%d has no HEAD - assuming %s is not HEAD", owner, repo, prNum, sha)
+		return false
+	}
+	if pr.Head.SHA == nil {
+		log.Warn().Msgf("SHA for PullRequestBranch of %s/%s#%d is nil - assuming %s is not HEAD", owner, repo, prNum, sha)
+		return false
+	}
+	return sha == *pr.Head.SHA
+}
+
 //func saveResponse(v any, filename string) {
 //	jsonData, err := json.Marshal(v)
 //	if err != nil {
@@ -121,8 +152,12 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 }
 
 // Creates or updates comment on the specified pull request
-func Comment(ctx context.Context, owner, repo string, prNum int, commentBodies []string) ([]*github.IssueComment, error) {
+func Comment(ctx context.Context, owner, repo string, prNum int, sha string, commentBodies []string) ([]*github.IssueComment, error) {
 	var res []*github.IssueComment
+	if !isPrHead(ctx, sha, owner, repo, prNum) {
+		log.Info().Msgf("%s is not HEAD for %s/%s#%d - skipping comment", sha, owner, repo, prNum)
+		return res, nil
+	}
 	existingComments, err := getExistingComments(ctx, owner, repo, prNum)
 	if err != nil {
 		return res, err
