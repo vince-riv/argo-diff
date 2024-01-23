@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v56/github"
+	"github.com/google/go-github/v58/github"
 )
 
 const testDataDir = "github_testdata"

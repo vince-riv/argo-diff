@@ -5,7 +5,7 @@ go 1.21.3
 require (
 	github.com/argoproj/argo-cd/v2 v2.9.5
 	github.com/argoproj/gitops-engine v0.7.1-0.20230906152414-b0fffe419a0f
-	github.com/google/go-github/v56 v56.0.0
+	github.com/google/go-github/v58 v58.0.0
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/rs/zerolog v1.31.0
 	gopkg.in/yaml.v2 v2.4.0
