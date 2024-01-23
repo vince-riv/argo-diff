@@ -28,6 +28,9 @@ const payloadPr2CreateComment = "payload-pr-2-create-comment.json"
 
 // const payloadPr3UpdateComment = "payload-pr-3-update-comment.json"
 const payloadPatchComment = "payload-pr-patch-comment.json"
+const payloadPullRequest = "payload-pr-get.json"
+
+const prHeadSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 func readFileToByteArray(fileName string) ([]byte, string, error) {
 	workingDir, err := os.Getwd()
@@ -65,6 +68,7 @@ func jsonFieldExtract(srcField string, src []byte, destField string, dest []byte
 }
 
 func newHttpTestServer(t *testing.T) *httptest.Server {
+	// TODO - unclutter this mess
 	newServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		statusCode := http.StatusNotFound
 		payload := []byte(`404 Page Not Found`)
@@ -89,6 +93,30 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 					}
 					payload = bytes.Replace(payload, []byte("%%_COMMENT_ID_%%"), []byte(urlPathParts[6]), -1)
 					payload, err = jsonFieldExtract("body", reqBody, "body", payload)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						t.Errorf("jsonFieldExtract() failed: %s", err)
+						return
+					}
+				}
+			} else {
+				statusCode = http.StatusMethodNotAllowed
+			}
+		} else if strings.HasPrefix(r.URL.Path, "/repos/vince-riv/argo-diff/pulls/") {
+			if r.Method == "GET" {
+				urlPathParts := strings.Split(r.URL.Path, "/")
+				if urlPathParts[5] == "" {
+					statusCode = http.StatusInternalServerError
+					t.Errorf("Bad URL Path: %s", r.URL.Path)
+				} else {
+					statusCode = http.StatusOK
+					payload, filePath, err = readFileToByteArray(payloadPullRequest)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						t.Errorf("readFileToByteArray() failed: %s", err)
+						return
+					}
+					payload = bytes.Replace(payload, []byte("%%_PR_NUM_%%"), []byte(urlPathParts[5]), -1)
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
 						t.Errorf("jsonFieldExtract() failed: %s", err)
@@ -159,7 +187,7 @@ func TestCommentNoExistingComments(t *testing.T) {
 		t.Error("Expected no existing comment")
 	}
 
-	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 1, []string{"argo-diff test comment"})
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 1, prHeadSha, []string{"argo-diff test comment"})
 	if err != nil {
 		t.Errorf("Comment() failed: %s", err)
 	}
@@ -184,7 +212,7 @@ func TestCommentExistingDifferentUser(t *testing.T) {
 		t.Error("Expected no existing comment")
 	}
 
-	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 2, []string{"argo-diff test comment"})
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 2, prHeadSha, []string{"argo-diff test comment"})
 	if err != nil {
 		t.Errorf("Comment() failed: %s", err)
 	}
@@ -211,7 +239,7 @@ func TestCommentExisting(t *testing.T) {
 		t.Error("Comment ID doesn't match")
 	}
 
-	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 3, []string{"argo-diff test comment"})
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 3, prHeadSha, []string{"argo-diff test comment"})
 	if err != nil {
 		t.Errorf("Comment() failed: %s", err)
 	}
@@ -238,7 +266,7 @@ func TestCommentExistingMulti(t *testing.T) {
 		t.Error("Unexpected issue commit IDs")
 	}
 
-	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 4, []string{"argo-diff test comment update"})
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 4, prHeadSha, []string{"argo-diff test comment update"})
 	if err != nil {
 		t.Errorf("Comment() failed: %s", err)
 	}
@@ -253,5 +281,24 @@ func TestCommentExistingMulti(t *testing.T) {
 	}
 	if !strings.Contains(*comments[1].Body, "[Outdated argo-diff content]") {
 		t.Errorf("1st Comment body doesn't match '[Outdated argo-diff content]': %s", *comments[1].Body)
+	}
+}
+
+func TestCommentNotHead(t *testing.T) {
+	server := newHttpTestServer(t)
+	defer server.Close()
+	httpBaseUrl, _ := url.Parse(server.URL + "/")
+	commentClient = github.NewClient(nil).WithAuthToken("test1234")
+	commentClient.BaseURL = httpBaseUrl
+	commentClient.UploadURL = httpBaseUrl
+
+	prHeadShaOld := "1111111111111111111111111111111111111111"
+
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 1, prHeadShaOld, []string{"argo-diff test comment"})
+	if err != nil {
+		t.Errorf("Comment() failed: %s", err)
+	}
+	if len(comments) > 0 {
+		t.Error("Not expecting to comment")
 	}
 }

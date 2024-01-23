@@ -138,7 +138,7 @@ func processEvent(eventInfo webhook.EventInfo) {
 		//println("+++++++++++++")
 		//fmt.Print(cMarkdown.String()[0])
 		//println(".............")
-		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, cMarkdown.String())
+		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
 		return
 	}
 }
