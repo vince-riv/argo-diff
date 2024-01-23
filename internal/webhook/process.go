@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/go-github/v56/github" // Ensure to get the latest version
+	"github.com/google/go-github/v58/github"
 	"github.com/rs/zerolog/log"
 )
 
