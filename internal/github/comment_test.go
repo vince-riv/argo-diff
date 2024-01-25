@@ -284,6 +284,42 @@ func TestCommentExistingMulti(t *testing.T) {
 	}
 }
 
+func TestCommentExistingMultiNoComment(t *testing.T) {
+	server := newHttpTestServer(t)
+	defer server.Close()
+	httpBaseUrl, _ := url.Parse(server.URL + "/")
+	commentClient = github.NewClient(nil).WithAuthToken("test1234")
+	commentClient.BaseURL = httpBaseUrl
+	commentClient.UploadURL = httpBaseUrl
+
+	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 4)
+	if err != nil {
+		t.Errorf("getExistingComments() failed: %s", err)
+	}
+	if len(c) != 2 {
+		t.Error("Could not find existing comment")
+	} else if *c[0].ID != 4444444222 && *c[1].ID != 4444444333 {
+		t.Error("Unexpected issue commit IDs")
+	}
+
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 4, prHeadSha, []string{})
+	if err != nil {
+		t.Errorf("Comment() failed: %s", err)
+	}
+	if *comments[0].ID != 4444444222 {
+		t.Errorf("1st Comment ID doesn't match 4444444222: %d", *comments[0].ID)
+	}
+	if !strings.Contains(*comments[0].Body, "[Outdated argo-diff content]") {
+		t.Errorf("1st Comment body doesn't match '[Outdated argo-diff content]': %s", *comments[1].Body)
+	}
+	if *comments[1].ID != 4444444333 {
+		t.Errorf("2nd Comment ID doesn't match 4444444333: %d", *comments[1].ID)
+	}
+	if !strings.Contains(*comments[1].Body, "[Outdated argo-diff content]") {
+		t.Errorf("2nd Comment body doesn't match '[Outdated argo-diff content]': %s", *comments[1].Body)
+	}
+}
+
 func TestCommentNotHead(t *testing.T) {
 	server := newHttpTestServer(t)
 	defer server.Close()
