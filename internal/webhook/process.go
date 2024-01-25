@@ -12,14 +12,14 @@ import (
 
 // Data structure for information passed by github webhook events
 type EventInfo struct {
-	Ignore         bool
-	RepoOwner      string
-	RepoName       string
-	RepoDefaultRef string
-	Sha            string
-	PrNum          int
-	ChangeRef      string
-	BaseRef        string
+	Ignore         bool   `json:"ignore"`
+	RepoOwner      string `json:"owner"`
+	RepoName       string `json:"repo"`
+	RepoDefaultRef string `json:"default_ref"`
+	Sha            string `json:"commit_sha"`
+	PrNum          int    `json:"pr"`
+	ChangeRef      string `json:"change_ref"`
+	BaseRef        string `json:"base_ref"`
 }
 
 func NewEventInfo() EventInfo {

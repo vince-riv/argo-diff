@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,18 +28,19 @@ type WebhookProcessor struct {
 // HTTP Handler for futzing around locally
 func (wp *WebhookProcessor) devHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Str("method", r.Method).Str("url", r.URL.String()).Msg("dev endpoint")
-	evt := webhook.EventInfo{
-		Ignore:         false,
-		RepoOwner:      "vince-riv",
-		RepoName:       "argo-diff-config",
-		RepoDefaultRef: "main",
-		Sha:            "ad5613a98f8db09f26981ce709ea039d3012e240",
-		PrNum:          2,
-		ChangeRef:      "annotation",
-		BaseRef:        "main",
+	if r.Method != "POST" {
+		http.Error(w, "Only POSTs allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var evt webhook.EventInfo
+	err := json.NewDecoder(r.Body).Decode(&evt)
+	if err != nil {
+		http.Error(w, "Cannot unmarshal POST'ed json to webhook.EventInfo struct", http.StatusBadRequest)
+		return
 	}
 	wp.Wg.Add(1)
 	go process_event.ProcessCodeChange(evt, wp.DevMode, &wp.Wg)
+	_, _ = io.WriteString(w, "Event dispatched to process_event.ProcessCodeChange()\n")
 }
 
 // HTTP handler for github webhook events
