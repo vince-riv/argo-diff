@@ -112,15 +112,13 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		tStr := t.Format("3:04PM MST, 2 Jan 2006")
 		markdownStart += " compared to live state\n"
 		markdownStart += "\n" + tStr + "\n"
-		// markdownStart += fmt.Sprintf(" as compared to live state in [%s](https://github.com/%s/%s/tree/%s) as of _%s_", eventInfo.BaseRef, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.BaseRef, tStr)
-		//_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, markdownStart+"\n\n"+markdown)
 		cMarkdown.Preamble = markdownStart
-		//println(".............")
-		//fmt.Print(markdown)
-		//println("+++++++++++++")
-		//fmt.Print(cMarkdown.String()[0])
-		//println(".............")
-		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
+		if changeCount == 0 {
+			// if there are no change, don't comment (but clear out any existing comments)
+			_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, []string{})
+		} else {
+			_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
+		}
 		return
 	}
 }
