@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -22,13 +21,18 @@ func VerifySignature(payload []byte, headerSignature string, secret string) bool
 		return false
 	}
 
+	if len(headerSignature) == 0 {
+		log.Error().Msgf("%s header has no value - did you forget to configure the webhook secret in github?", headerSignature)
+		return false
+	}
+
 	if len(headerSignature) != sigLength {
-		log.Error().Msg(fmt.Sprintf("signature is not %d chars long: %s", sigLength, headerSignature))
+		log.Error().Msgf("signature '%s' is not %d chars long - assuming the signature is bad", headerSignature, sigLength)
 		return false
 	}
 
 	if !strings.HasPrefix(headerSignature, signaturePrefix) {
-		log.Error().Msg(fmt.Sprintf("signature has invalid format: %s", headerSignature))
+		log.Error().Msgf("signature has invalid format: %s", headerSignature)
 		return false
 	}
 
@@ -39,6 +43,6 @@ func VerifySignature(payload []byte, headerSignature string, secret string) bool
 	expectedSignature := hex.EncodeToString(expectedMAC)
 
 	sigIsValid := hmac.Equal([]byte(signature), []byte(expectedSignature))
-	log.Debug().Msg(fmt.Sprintf("signature [%s] verification result: %s", headerSignature, strconv.FormatBool(sigIsValid)))
+	log.Debug().Msgf("signature [%s] verification result: %s", headerSignature, strconv.FormatBool(sigIsValid))
 	return sigIsValid
 }
