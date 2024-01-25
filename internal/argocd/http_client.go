@@ -10,7 +10,6 @@ package argocd
 
 import (
 	"context"
-	"encoding/json"
 	"net/url"
 	"os"
 
@@ -61,16 +60,6 @@ func listApplications(ctx context.Context) (*v1alpha1.ApplicationList, error) {
 	if err != nil {
 		log.Error().Err(err).Msg("Application List failed")
 		return nil, err
-	}
-	content, err := json.Marshal(apps)
-	if err != nil {
-		log.Error().Err(err).Msg("json.Marshal failed")
-		return apps, nil
-	}
-	err = os.WriteFile("app-list.json", content, 0644)
-	if err != nil {
-		log.Error().Err(err).Msg("os.WriteFile() failed")
-		return apps, nil
 	}
 	return apps, nil
 }
