@@ -11,14 +11,31 @@ import (
 	"github.com/vince-riv/argo-diff/internal/server"
 )
 
-const debug = true // TODO: switch to command line arg for trace logs
 const gitRevTxt = "git-rev.txt"
 
 func init() {
 	// Load GitHub secrets from env and setup logger
 	gitRev := "UNKNOWN"
 
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
+	case "panic":
+		zerolog.SetGlobalLevel(zerolog.PanicLevel)
+	case "fatal":
+		zerolog.SetGlobalLevel(zerolog.FatalLevel)
+	case "error":
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	case "warn":
+		zerolog.SetGlobalLevel(zerolog.WarnLevel)
+	case "info":
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	case "debug":
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	case "trace":
+		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	default:
+		log.Info().Msg("LOG_LEVEL env var not set or set to an unknown value. Defaulting to INFO level logging.")
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	}
 
 	// git revision for logger - there's probably a better way to do this at build time
 	data, err := os.ReadFile(gitRevTxt)
@@ -47,12 +64,6 @@ func main() {
 	devMode := false
 	if os.Getenv("APP_ENV") == "dev" {
 		devMode = true
-	}
-	if devMode {
-		// zerolog.SetGlobalLevel(zerolog.TraceLevel)
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else if debug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
 	// make sure critical secrets are set in the environment
