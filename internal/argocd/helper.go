@@ -12,11 +12,13 @@ import (
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
 // and return their manifests.
 func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefaultRef, revision, changeRef, baseRef string) ([]ApplicationResourcesWithChanges, error) {
+	log.Trace().Msgf("GetApplicationChanges(%s, %s, %s, %s, %s, %s)", repoOwner, repoName, repoDefaultRef, revision, changeRef, baseRef)
 	var appResList []ApplicationResourcesWithChanges
 	argoApps, err := listApplications(ctx)
 	if err != nil {
 		return appResList, err
 	}
+	log.Trace().Msgf("listApplications() returned %d items", len(argoApps.Items))
 	if len(argoApps.Items) == 0 {
 		return appResList, fmt.Errorf("empty ArgoCD app list")
 	}
@@ -35,9 +37,11 @@ func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefault
 
 // Returns a list of Applications whose git URLs match repo owner & name
 func filterApplications(a []v1alpha1.Application, repoOwner, repoName, repoDefaultRef, changeRef, baseRef string) ([]v1alpha1.Application, error) {
+	log.Trace().Msgf("filterApplications([%d apps], %s, %s, %s, %s, %s)", len(a), repoOwner, repoName, repoDefaultRef, changeRef, baseRef)
 	var appList []v1alpha1.Application
 	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", repoOwner, repoName)
 	ghMatch2 := fmt.Sprintf("github.com/%s/%s", repoOwner, repoName)
+	log.Debug().Msgf("filterApplications() - matching candidates against '%s' and '%s'", ghMatch1, ghMatch2)
 	for _, app := range a {
 		if !strings.HasSuffix(app.Spec.Source.RepoURL, ghMatch1) && !strings.HasSuffix(app.Spec.Source.RepoURL, ghMatch2) {
 			log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", app.ObjectMeta.Name, app.Spec.Source.RepoURL, ghMatch1, ghMatch2)

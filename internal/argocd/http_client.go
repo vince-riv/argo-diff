@@ -56,11 +56,13 @@ func setArgoClients(baseUrl, token string) {
 }
 
 func listApplications(ctx context.Context) (*v1alpha1.ApplicationList, error) {
+	log.Trace().Msg("listApplications() called")
 	apps, err := applicationIf.List(ctx, &applicationpkg.ApplicationQuery{})
 	if err != nil {
 		log.Error().Err(err).Msg("Application List failed")
 		return nil, err
 	}
+	log.Trace().Msg("applicationIf.List() completed")
 	return apps, nil
 }
 
