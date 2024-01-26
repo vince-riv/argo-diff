@@ -14,6 +14,8 @@ var (
 	statusContextStr = "argo-diff"
 )
 
+const statusDescriptionMaxLen = 140
+
 const StatusPending = "pending"
 const StatusSuccess = "success"
 const StatusFailure = "failure"
@@ -41,6 +43,9 @@ func Status(ctx context.Context, isPr bool, status, description, repoOwner, repo
 	contextStr := statusContextStr + " (push)"
 	if isPr {
 		contextStr = statusContextStr + " (pull_request)"
+	}
+	if len(description) > statusDescriptionMaxLen {
+		description = description[:137] + "..."
 	}
 	// TODO add support for AvatarURL ?
 	// TODO add support for TargetURL ?
