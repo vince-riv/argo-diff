@@ -43,20 +43,26 @@ func filterApplications(a []v1alpha1.Application, repoOwner, repoName, repoDefau
 	ghMatch2 := fmt.Sprintf("github.com/%s/%s", repoOwner, repoName)
 	log.Debug().Msgf("filterApplications() - matching candidates against '%s' and '%s'", ghMatch1, ghMatch2)
 	for _, app := range a {
-		if !strings.HasSuffix(app.Spec.Source.RepoURL, ghMatch1) && !strings.HasSuffix(app.Spec.Source.RepoURL, ghMatch2) {
-			log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", app.ObjectMeta.Name, app.Spec.Source.RepoURL, ghMatch1, ghMatch2)
+		if len(app.Spec.Sources) > 0 {
+			log.Info().Msgf("Application %s has multiple sources - skipping as it is not supported", app.ObjectMeta.Name)
+			continue
+		}
+		appSpecSource := app.Spec.GetSource()
+
+		if !strings.HasSuffix(appSpecSource.RepoURL, ghMatch1) && !strings.HasSuffix(appSpecSource.RepoURL, ghMatch2) {
+			log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", app.ObjectMeta.Name, appSpecSource.RepoURL, ghMatch1, ghMatch2)
 			continue
 		}
 		if baseRef != "" {
 			// Processing a PR ...
-			if app.Spec.Source.TargetRevision == "HEAD" && baseRef != repoDefaultRef {
+			if appSpecSource.TargetRevision == "HEAD" && baseRef != repoDefaultRef {
 				// filter application if argo targets repo default (eg: main) and PR is not targetting main
 				log.Debug().Msgf("Filtering application %s: Target Rev is HEAD; baseRef %s != repoDefaultRef %s", app.ObjectMeta.Name, baseRef, repoDefaultRef)
 				continue
 			}
-			if app.Spec.Source.TargetRevision != "HEAD" && baseRef != app.Spec.Source.TargetRevision {
+			if appSpecSource.TargetRevision != "HEAD" && baseRef != appSpecSource.TargetRevision {
 				// filter application if argo doesn't target repo default (eg: main)  and PR is not targetting that branch
-				log.Debug().Msgf("Filtering application %s: baseRef %s != Target Rev %s", app.ObjectMeta.Name, baseRef, app.Spec.Source.TargetRevision)
+				log.Debug().Msgf("Filtering application %s: baseRef %s != Target Rev %s", app.ObjectMeta.Name, baseRef, appSpecSource.TargetRevision)
 				continue
 			}
 		} else {
@@ -64,12 +70,12 @@ func filterApplications(a []v1alpha1.Application, repoOwner, repoName, repoDefau
 			// eg: refs/heads/main -> main
 			changeRef = strings.TrimPrefix(changeRef, "refs/heads/")
 			// filter out apps where auto-sync is enabled for the branch of the push
-			if app.Spec.Source.TargetRevision == "HEAD" && changeRef == repoDefaultRef && app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil {
+			if appSpecSource.TargetRevision == "HEAD" && changeRef == repoDefaultRef && app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil {
 				log.Debug().Msgf("Filtering auto-sync application %s: Target Rev is HEAD; changeRef %s == repoDefaultRef %s", app.ObjectMeta.Name, changeRef, repoDefaultRef)
 				continue
 			}
-			if app.Spec.Source.TargetRevision != "HEAD" && changeRef == app.Spec.Source.TargetRevision && app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil {
-				log.Debug().Msgf("Filtering auto-sync application %s: changeRef %s = Target Rev %s", app.ObjectMeta.Name, changeRef, app.Spec.Source.TargetRevision)
+			if appSpecSource.TargetRevision != "HEAD" && changeRef == appSpecSource.TargetRevision && app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil {
+				log.Debug().Msgf("Filtering auto-sync application %s: changeRef %s = Target Rev %s", app.ObjectMeta.Name, changeRef, appSpecSource.TargetRevision)
 				continue
 			}
 		}
