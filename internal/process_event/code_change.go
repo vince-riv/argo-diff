@@ -115,8 +115,8 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		markdownStart += " compared to live state\n"
 		markdownStart += "\n" + tStr + "\n"
 		cMarkdown.Preamble = markdownStart
-		if changeCount == 0 {
-			// if there are no change, don't comment (but clear out any existing comments)
+		if changeCount == 0 && firstError == "" {
+			// if there are no changes or warnings, don't comment (but clear out any existing comments)
 			_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, []string{})
 		} else {
 			_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
