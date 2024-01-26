@@ -11,15 +11,21 @@ image:
   tag: ""
 
 config:
-  # config.argocdBaseURL -- The base URL of the ArgoCD server. Through which the argo-diff app can communicate with argocd server.
-  argocdBaseURL: ""
+  # config.argocdServerAddr -- REQUIRED: hostname and/or port of the ArgoCD server (eg: argocd.domain.tld or argocd.domain.tld:8080)
+  argocdServerAddr: ""
+  # config.argocdServerInsecure -- flag to enable/disable TLS verification when communicating to the ArgoCD server
+  argocdServerInsecure: "false"
+  # config.argocdServerPlainText -- flag to enable/disable TLS negotiation (ie: set to true when the ArgoCD server does not have TLS/SSL)
+  argocdServerPlainText: "false"
   # config.argocdUIBaseURL -- The base URL of the ArgoCD UI. Used for link generation in comments
   argocdUIBaseURL: ""
-  # config.secretName -- The name of the secret that contains the argocd credentials.
+  # config.secretName -- REQUIRED: The name of the secret that contains the argocd credentials.
   # Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_WEBHOOK_SECRET
   secretName: ""
 
 command: ["/app/argo-diff"]
+
+logLevel: info
 
 imagePullSecrets: []
 nameOverride: ""

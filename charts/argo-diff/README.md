@@ -25,9 +25,12 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | autoscaling.maxReplicas | int | `100` |  |
 | autoscaling.minReplicas | int | `1` |  |
 | autoscaling.targetCPUUtilizationPercentage | int | `80` |  |
-| config.argocdBaseURL | string | `""` | The base URL of the ArgoCD server. Through which the argo-diff app can communicate with argocd server. |
+| command[0] | string | `"/app/argo-diff"` |  |
+| config.argocdServerAddr | string | `""` | REQUIRED: hostname and/or port of the ArgoCD server (eg: argocd.domain.tld or argocd.domain.tld:8080) |
+| config.argocdServerInsecure | string | `"false"` | flag to enable/disable TLS verification when communicating to the ArgoCD server |
+| config.argocdServerPlainText | string | `"false"` | flag to enable/disable TLS negotiation (ie: set to true when the ArgoCD server does not have TLS/SSL) |
 | config.argocdUIBaseURL | string | `""` | The base URL of the ArgoCD UI. Used for link generation in comments |
-| config.secretName | string | `""` | The name of the secret that contains the argocd credentials. Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_WEBHOOK_SECRET |
+| config.secretName | string | `""` | REQUIRED: The name of the secret that contains the argocd credentials. Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_WEBHOOK_SECRET |
 | fullnameOverride | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/vince-riv/argo-diff"` |  |
@@ -41,6 +44,7 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | ingress.tls | list | `[]` |  |
 | livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"},"initialDelaySeconds":2,"periodSeconds":10}` | Configuration for liveness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
+| logLevel | string | `"info"` |  |
 | nameOverride | string | `""` |  |
 | nodeSelector | object | `{}` |  |
 | podAnnotations | object | `{}` |  |
