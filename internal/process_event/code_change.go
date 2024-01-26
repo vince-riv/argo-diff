@@ -44,8 +44,8 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		github.Status(ctx, isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
 		return // we're done due to a processing error
-
 	}
+	log.Trace().Msgf("argocd.GetApplicationChanges() returned %d results", len(appResList))
 
 	errorCount := 0   // keep track of the number of errors
 	changeCount := 0  // how many apps have changes
@@ -60,6 +60,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		appHealthMsg := a.ArgoApp.Status.Health.Message
 		// appNs := a.ArgoApp.ObjectMeta.Namespance
 		if a.WarnStr != "" {
+			log.Trace().Msgf("%s has WarnStr %s", appName, a.WarnStr)
 			errorCount++
 			markdown += github.AppMarkdownStart(appName, "Error: "+a.WarnStr, appSyncStatus, appHealthStatus, appHealthMsg)
 			markdown += github.AppMarkdownEnd()
@@ -68,6 +69,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 				firstError = a.WarnStr
 			}
 		} else {
+			log.Trace().Msgf("%s has %d Changed Resources", appName, len(a.ChangedResources))
 			if len(a.ChangedResources) > 0 {
 				changeCount++
 				markdown += github.AppMarkdownStart(appName, "", appSyncStatus, appHealthStatus, appHealthMsg)

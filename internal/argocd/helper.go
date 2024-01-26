@@ -26,9 +26,19 @@ func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefault
 	if err != nil {
 		return appResList, err
 	}
-	log.Debug().Msgf("Matching apps: %v", apps)
+	log.Debug().Msgf("Matching apps: %s", func() (s string) {
+		for _, app := range apps {
+			if s != "" {
+				s += ", " + app.ObjectMeta.Name
+			} else {
+				s += app.ObjectMeta.Name
+			}
+		}
+		return
+	}())
 
 	for _, app := range apps {
+		log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, revision)
 		applicationResourceChanges, _ := GetApplicationDiff(ctx, app.ObjectMeta.Name, app.ObjectMeta.Namespace, revision)
 		appResList = append(appResList, applicationResourceChanges)
 	}
