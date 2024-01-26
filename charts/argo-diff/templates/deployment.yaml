@@ -45,10 +45,16 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
-          - name: ARGOCD_BASE_URL
-            value: {{ .Values.config.argocdBaseURL }}
+          - name: ARGOCD_SERVER_ADDR
+            value: "{{ .Values.config.argocdServerAddr }}"
+          - name: ARGOCD_SERVER_INSECURE
+            value: "{{ .Values.config.argocdServerInsecure }}"
+          - name: ARGOCD_SERVER_PLAINTEXT
+            value: "{{ .Values.config.argocdServerPlainText }}"
           - name: ARGOCD_UI_BASE_URL
-            value: {{ .Values.config.argocdUIBaseURL }}
+            value: "{{ .Values.config.argocdUIBaseURL }}"
+          - name: LOG_LEVEL
+            value: "{{ .Values.logLevel }}"
           envFrom:
             - secretRef:
                 name: {{ .Values.config.secretName }}

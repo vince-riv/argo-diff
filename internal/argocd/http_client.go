@@ -10,8 +10,9 @@ package argocd
 
 import (
 	"context"
-	"net/url"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apiclient"
 	applicationpkg "github.com/argoproj/argo-cd/v2/pkg/apiclient/application"
@@ -31,28 +32,37 @@ var (
 )
 
 func init() {
-	baseUrl := os.Getenv("ARGOCD_BASE_URL")
+	serverAddr := os.Getenv("ARGOCD_SERVER_ADDR")
+	insecure := strings.ToLower(os.Getenv("ARGOCD_SERVER_INSECURE")) == "true"
+	plaintext := strings.ToLower(os.Getenv("ARGOCD_SERVER_PLAINTEXT")) == "true"
 	httpBearerToken = os.Getenv("ARGOCD_AUTH_TOKEN")
-	if baseUrl != "" && httpBearerToken != "" {
-		setArgoClients(baseUrl, httpBearerToken)
+	if serverAddr != "" && httpBearerToken != "" {
+		setArgoClients(serverAddr, insecure, plaintext, httpBearerToken)
+	} else {
+		log.Warn().Msg("Initialized without ArgoCD server config")
 	}
 }
 
-func setArgoClients(baseUrl, token string) {
-	u, err := url.Parse(baseUrl)
-	if err != nil {
-		log.Fatal().Err(err).Msgf("Failed to parse ARGOCD_BASE_URL '%s'", baseUrl)
-	}
-	argoInsecure := u.Scheme != "https"
+func setArgoClients(serverAddr string, insecure, plaintext bool, token string) {
+	log.Info().Msgf("Creating new ArgoCD API Client; ServerAddr %s, Insecure %t, PlainText %t", serverAddr, insecure, plaintext)
 	argocdApiClient = apiclient.NewClientOrDie(&apiclient.ClientOptions{
-		ServerAddr: u.Host,
-		Insecure:   argoInsecure,
-		PlainText:  argoInsecure,
+		ServerAddr: serverAddr,
+		Insecure:   insecure,
+		PlainText:  plaintext,
 		AuthToken:  token,
 	})
 	_, applicationIf = argocdApiClient.NewApplicationClientOrDie()
 	_, settingsIf = argocdApiClient.NewSettingsClientOrDie()
 	_, projIf = argocdApiClient.NewProjectClientOrDie()
+	log.Debug().Msg("ArgoCD API clients created")
+}
+
+func ConnectivityCheck() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	log.Info().Msg("Calling ArgoCD to list applications for a connectivity test")
+	_, err := listApplications(ctx)
+	return err
 }
 
 func listApplications(ctx context.Context) (*v1alpha1.ApplicationList, error) {

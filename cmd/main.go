@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/vince-riv/argo-diff/internal/argocd"
 	"github.com/vince-riv/argo-diff/internal/server"
 )
 
@@ -70,11 +71,15 @@ func main() {
 	if os.Getenv("ARGOCD_AUTH_TOKEN") == "" {
 		log.Fatal().Msg("ARGOCD_AUTH_TOKEN environment variable not set")
 	}
-	if os.Getenv("ARGOCD_BASE_URL") == "" {
-		log.Fatal().Msg("ARGOCD_BASE_URL environment variable not set")
+	if os.Getenv("ARGOCD_SERVER_ADDR") == "" {
+		log.Fatal().Msg("ARGOCD_SERVER_ADDR environment variable not set")
 	}
 	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" {
 		log.Fatal().Msg("GITHUB_PERSONAL_ACCESS_TOKEN environment variable not set")
+	}
+
+	if err := argocd.ConnectivityCheck(); err != nil {
+		log.Fatal().Err(err).Msg("Connectivity check failed")
 	}
 
 	server.StartWebhookProcessor("", 8080, githubWebhookSecret, devMode)
