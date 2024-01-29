@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/vince-riv/argo-diff/internal/argocd"
+	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/server"
 )
 
@@ -75,11 +76,20 @@ func main() {
 		log.Fatal().Msg("ARGOCD_SERVER_ADDR environment variable not set")
 	}
 	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" {
-		log.Fatal().Msg("GITHUB_PERSONAL_ACCESS_TOKEN environment variable not set")
+		log.Info().Msg("GITHUB_PERSONAL_ACCESS_TOKEN environment variable not set - assuming Github App installation")
+		for _, e := range []string{"GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_PRIVATE_KEY_FILE"} {
+			if os.Getenv(e) == "" {
+				log.Fatal().Msgf("%s environment variable is not set for Github App installations", e)
+			}
+		}
 	}
 
 	if err := argocd.ConnectivityCheck(); err != nil {
-		log.Fatal().Err(err).Msg("Connectivity check failed")
+		log.Fatal().Err(err).Msg("Connectivity check to ArgoCD failed")
+	}
+
+	if err := github.ConnectivityCheck(); err != nil {
+		log.Fatal().Err(err).Msg("Connectivity check to Github API failed")
 	}
 
 	server.StartWebhookProcessor("", 8080, githubWebhookSecret, devMode)

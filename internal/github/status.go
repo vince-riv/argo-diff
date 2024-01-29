@@ -3,8 +3,11 @@ package github
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
 
+	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v58/github"
 	"github.com/rs/zerolog/log"
 )
@@ -22,16 +25,33 @@ const StatusFailure = "failure"
 const StatusError = "error"
 
 func init() {
-	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-	if githubPAT == "" {
-		log.Error().Msg("Cannot create github client - GITHUB_PERSONAL_ACCESS_TOKEN is empty")
-	} else {
-		statusClient = github.NewClient(nil).WithAuthToken(githubPAT)
-	}
 	statusContextEnv := os.Getenv("GITHUB_STATUS_CONTEXT_STR")
 	if statusContextEnv != "" {
 		statusContextStr = statusContextEnv
 	}
+	// Create Github API client
+	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
+		statusClient = github.NewClient(nil).WithAuthToken(githubPAT)
+		return
+	}
+	tr := http.DefaultTransport
+	appId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)
+	if err != nil {
+		log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_APP_ID"))
+		return
+	}
+	installId, err := strconv.ParseInt(os.Getenv("GITHUB_INSTALLATION_ID"), 10, 64)
+	if err != nil {
+		log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_INSTALLATION_ID"))
+		return
+	}
+	privKeyFile := os.Getenv("GITHUB_PRIVATE_KEY_FILE")
+	itr, err := ghinstallation.NewKeyFromFile(tr, appId, installId, privKeyFile)
+	if err != nil {
+		log.Error().Err(err).Msgf("Failed to create github client: appId %d, installId %d, privKeyFile %s", appId, installId, privKeyFile)
+		return
+	}
+	statusClient = github.NewClient(&http.Client{Transport: itr})
 }
 
 // Helper that sets commit status for the request commit sha

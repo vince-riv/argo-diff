@@ -2,60 +2,119 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v58/github"
 	"github.com/rs/zerolog/log"
 )
 
 var (
-	commentClient *github.Client
-	commentUser   *github.User
-	mux           *sync.RWMutex
+	commentClient      *github.Client
+	appsClient         *github.Client
+	commentClientIsApp bool
+	commentLogin       string
+	mux                *sync.RWMutex
 )
 
 const commentIdentifier = "<!-- comment produced by argo-diff -->"
 
 func init() {
-	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-	if githubPAT == "" {
-		log.Error().Msg("Cannot create github client - GITHUB_PERSONAL_ACCESS_TOKEN is empty")
-	} else {
-		commentClient = github.NewClient(nil).WithAuthToken(githubPAT)
-	}
+	commentClientIsApp = false
 	mux = &sync.RWMutex{}
+	// Create Github API client
+	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
+		commentClient = github.NewClient(nil).WithAuthToken(githubPAT)
+	} else {
+		tr := http.DefaultTransport
+		appId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)
+		if err != nil {
+			log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_APP_ID"))
+			return
+		}
+		installId, err := strconv.ParseInt(os.Getenv("GITHUB_INSTALLATION_ID"), 10, 64)
+		if err != nil {
+			log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_INSTALLATION_ID"))
+			return
+		}
+		privKeyFile := os.Getenv("GITHUB_PRIVATE_KEY_FILE")
+		atr, err := ghinstallation.NewAppsTransportKeyFromFile(tr, appId, privKeyFile)
+		if err != nil {
+			log.Error().Err(err).Msgf("Failed to create jwt transport: appId %d, privKeyFile %s", appId, privKeyFile)
+			return
+		}
+		itr := ghinstallation.NewFromAppsTransport(atr, installId)
+		commentClient = github.NewClient(&http.Client{Transport: itr})
+		appsClient = github.NewClient(&http.Client{Transport: atr}) // /app endpoints need separate client
+		commentClientIsApp = true
+	}
 }
 
-// Populates commentUser singleton with the Github user associated with our github client
+func ConnectivityCheck() error {
+	if commentClient == nil {
+		return errors.New("github client is not initialized")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	log.Info().Msg("Calling Github API for a connectivity test")
+	return getCommentUser(ctx)
+}
+
+// Populates commentLogin singleton with the Github user associated with our github client
 func getCommentUser(ctx context.Context) error {
 	if commentClient == nil {
 		log.Error().Msg("Cannot call github API - I don't have a client set")
 		return fmt.Errorf("no github commenter client")
 	}
+	log.Debug().Msg("Calling Github API to determine comment user")
 	mux.RLock()
-	if commentUser != nil {
+	if commentLogin != "" {
 		mux.RUnlock()
 		return nil
 	}
 	mux.RUnlock()
-	user, resp, err := commentClient.Users.Get(ctx, "")
-	if resp != nil {
-		log.Info().Msgf("%s received when calling client.Users.Get() via go-github", resp.Status)
+	if commentClientIsApp {
+		app, resp, err := appsClient.Apps.Get(ctx, "")
+		if resp != nil {
+			log.Info().Msgf("%s received when calling client.Apps.Get() via go-github", resp.Status)
+		}
+		if err != nil {
+			log.Error().Err(err).Msg("Unable to determine get my github app")
+			return err
+		}
+		log.Trace().Msgf("Github App: %+v", app)
+		if app == nil || app.Name == nil {
+			log.Error().Msg("Empty user returned - not sure how I got here")
+			return fmt.Errorf("empty app info")
+		}
+		mux.Lock()
+		commentLogin = *app.Name + "[bot]"
+		mux.Unlock()
+	} else {
+		user, resp, err := commentClient.Users.Get(ctx, "")
+		if resp != nil {
+			log.Info().Msgf("%s received when calling client.Users.Get() via go-github", resp.Status)
+		}
+		if err != nil {
+			log.Error().Err(err).Msg("Unable to determine get my github user")
+			return err
+		}
+		if user == nil || user.Login == nil {
+			log.Error().Msg("Empty user returned - not sure how I got here")
+			return fmt.Errorf("empty user info")
+		}
+		mux.Lock()
+		commentLogin = *user.Login
+		mux.Unlock()
 	}
-	if err != nil {
-		log.Error().Err(err).Msg("Unable to determine get my github user")
-		return err
-	}
-	if user == nil {
-		log.Error().Msg("Empty user returned - not sure how I got here")
-		return nil
-	}
-	mux.Lock()
-	commentUser = user
-	mux.Unlock()
+	log.Info().Msgf("Github Comment user name: %s", commentLogin)
 	return nil
 }
 
@@ -139,7 +198,7 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		}
 		log.Debug().Msgf("Checking %d comments in %s/%s#%d", len(comments), owner, repo, prNum)
 		for _, c := range comments {
-			if *c.User.Login == *commentUser.Login && strings.Contains(*c.Body, commentIdentifier) {
+			if *c.User.Login == commentLogin && strings.Contains(*c.Body, commentIdentifier) {
 				res = append(res, c)
 			}
 		}
