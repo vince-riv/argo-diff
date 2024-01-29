@@ -17,6 +17,8 @@ const payloadPushBranchDelete = "payload-push-branch-delete.json"
 const payloadPushBranchDev = "payload-push-branch-dev.json"
 const payloadPushBranchMain = "payload-push-branch-main.json"
 const payloadPushTag = "payload-push-tag.json"
+const payloadCommentCreated = "payload-comment-created.json"
+const payloadCommentCreatedArgoDiff = "payload-comment-argodiff-created.json"
 
 func readFileToByteArray(fileName string) ([]byte, string, error) {
 	workingDir, err := os.Getwd()
@@ -59,6 +61,9 @@ func TestLoadPullRequestEvents(t *testing.T) {
 			}
 			if result.RepoDefaultRef == result.ChangeRef {
 				t.Errorf("ProcessPullRequest() ChangeRef is the same as DefaultRef")
+			}
+			if result.Refresh {
+				t.Errorf("ProcessPullRequest() Expected to NOT set refresh flag. Payload %s", filePath)
 			}
 		}
 	}
@@ -107,6 +112,9 @@ func TestLoadPushEvents(t *testing.T) {
 				t.Errorf("ProcessPushRequest() Result has at least one empty value: %+v; Payload %s", result, filePath)
 			}
 		}
+		if result.Refresh {
+			t.Errorf("ProcessPushRequest() Expected to NOT set refresh flag. Payload %s", filePath)
+		}
 	}
 }
 
@@ -122,5 +130,44 @@ func TestLoadNotAPushEvent(t *testing.T) {
 	}
 	if !result.Ignore {
 		t.Errorf("ProcessPushRequest() Bad event %s should have been ignored", filePath)
+	}
+}
+
+func TestLoadCommentEvent(t *testing.T) {
+	var result EventInfo
+	// const payloadCommentCreated = "payload-comment-created.json"
+	// const payloadCommentCreatedArgoDiff = "payload-comment-argodiff-created.json"
+	payloadFiles := []string{payloadCommentCreated, payloadCommentCreatedArgoDiff}
+	for _, payloadFile := range payloadFiles {
+		payload, filePath, err := readFileToByteArray(payloadFile)
+		if err != nil {
+			t.Errorf("Failed to read %s: %v", payloadFile, err)
+		}
+		if err != nil {
+			t.Errorf("Failed to read %s: %v", payloadCommentCreated, err)
+		}
+		result, err = ProcessComment(payload)
+		if err != nil {
+			t.Errorf("Failed to load payload from %s: %v", filePath, err)
+		}
+		if result.RepoOwner == "" || result.RepoName == "" || result.RepoDefaultRef == "" || result.PrNum < 1 {
+			t.Errorf("ProcessComment() Result has at least one empty value: %+v; Payload %s", result, filePath)
+		}
+		if payloadFile == payloadCommentCreated {
+			if !result.Ignore {
+				t.Errorf("ProcessComment() Expected to ignore this event. Payload %s", filePath)
+			}
+			if result.Refresh {
+				t.Errorf("ProcessComment() Expected to NOT set refresh flag. Payload %s", filePath)
+			}
+		}
+		if payloadFile == payloadCommentCreatedArgoDiff {
+			if result.Ignore {
+				t.Errorf("ProcessComment() Expected to NOT ignore this event. Payload %s", filePath)
+			}
+			if !result.Refresh {
+				t.Errorf("ProcessComment() Expected to set refresh flag. Payload %s", filePath)
+			}
+		}
 	}
 }

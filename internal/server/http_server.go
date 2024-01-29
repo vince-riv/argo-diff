@@ -85,6 +85,12 @@ func (wp *WebhookProcessor) handleWebhook(w http.ResponseWriter, r *http.Request
 			http.Error(w, "Could not process push event data", http.StatusInternalServerError)
 			return
 		}
+	case "issue_comment":
+		eventInfo, err = webhook.ProcessComment(payload)
+		if err != nil {
+			http.Error(w, "Could not process issue comment data", http.StatusInternalServerError)
+			return
+		}
 	default:
 		log.Info().Str("method", r.Method).Str("url", r.URL.String()).Msgf("Ignoring X-GitHub-Event %s", event)
 		_, err := io.WriteString(w, "event ignored\n")
@@ -155,7 +161,7 @@ func StartWebhookProcessor(host string, port int, webhook_secret string, devMode
 
 	wp := WebhookProcessor{
 		GithubWebhookSecret: webhook_secret,
-		DevMode:             false,
+		DevMode:             devMode,
 	}
 
 	srv := &http.Server{Addr: addr}

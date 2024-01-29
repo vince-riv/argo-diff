@@ -20,6 +20,7 @@ type EventInfo struct {
 	PrNum          int    `json:"pr"`
 	ChangeRef      string `json:"change_ref"`
 	BaseRef        string `json:"base_ref"`
+	Refresh        bool   `json:"ignore"`
 }
 
 func NewEventInfo() EventInfo {
@@ -32,6 +33,7 @@ func NewEventInfo() EventInfo {
 		PrNum:          -1,
 		ChangeRef:      "",
 		BaseRef:        "",
+		Refresh:        false,
 	}
 }
 
@@ -45,10 +47,10 @@ func validateEventInfo(e EventInfo) error {
 	if e.RepoDefaultRef == "" {
 		return errors.New("missing default ref in event info object")
 	}
-	if e.Sha == "" {
+	if !e.Refresh && e.Sha == "" {
 		return errors.New("missing SHA in event info object")
 	}
-	if e.ChangeRef == "" {
+	if !e.Refresh && e.ChangeRef == "" {
 		return errors.New("missing change ref in event info object")
 	}
 	return nil
@@ -112,4 +114,42 @@ func ProcessPush(payload []byte) (EventInfo, error) {
 	pushInfo.RepoDefaultRef = *pushEvent.Repo.DefaultBranch
 	log.Debug().Msgf("Returning EventInfo: %+v", pushInfo)
 	return pushInfo, validateEventInfo(pushInfo)
+}
+
+// Processes a comment created event received from github
+func ProcessComment(payload []byte) (EventInfo, error) {
+	prInfo := NewEventInfo()
+	var commentEvent github.IssueCommentEvent
+	if err := json.Unmarshal(payload, &commentEvent); err != nil {
+		log.Error().Err(err).Msg("Error decoding JSON payload")
+		return prInfo, err
+	}
+	if action := commentEvent.GetAction(); action != "created" {
+		log.Info().Msgf("Ignoring issue comment event with action %s", action)
+		return prInfo, nil
+	}
+	issue := commentEvent.GetIssue()
+	issueComment := commentEvent.GetComment()
+	repo := commentEvent.GetRepo()
+	if issue == nil || issueComment == nil || repo == nil {
+		log.Warn().Msg("Ignoring issue comment event with missing field(s)")
+		return prInfo, nil
+	}
+	if issue.PullRequestLinks == nil {
+		log.Info().Msg("Ignoring non-pull issue comment")
+		return prInfo, nil
+	}
+	prInfo.PrNum = *issue.Number
+	prInfo.RepoOwner = *repo.Owner.Login
+	prInfo.RepoName = *repo.Name
+	prInfo.RepoDefaultRef = *repo.DefaultBranch
+	// TODO ToLower() and look at context string
+	if issueComment.Body == nil || strings.TrimSpace(*issueComment.Body) != "argo diff" {
+		log.Info().Msg("Ignoring pull request comment")
+		return prInfo, nil
+	}
+	prInfo.Ignore = false
+	prInfo.Refresh = true
+	log.Debug().Msgf("Returning EventInfo: %+v", prInfo)
+	return prInfo, validateEventInfo(prInfo)
 }
