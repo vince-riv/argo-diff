@@ -12,8 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const maxCommentLen = 64000
-const maxResourceDiffLen = 63000
+const maxCommentLen = 261500 // 262,144 per https://github.com/orgs/community/discussions/27190#discussioncomment-3254953
+const maxResourceDiffLen = 260000
 
 var argocdUiUrl string
 var commentLineMaxChar int
