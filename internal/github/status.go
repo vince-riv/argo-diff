@@ -40,15 +40,15 @@ func init() {
 		log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_APP_ID"))
 		return
 	}
-	installId, err := strconv.ParseInt(os.Getenv("GITHUB_INSTALLATION_ID"), 10, 64)
+	installId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_INSTALLATION_ID"), 10, 64)
 	if err != nil {
-		log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_INSTALLATION_ID"))
+		log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_APP_INSTALLATION_ID"))
 		return
 	}
-	privKeyFile := os.Getenv("GITHUB_PRIVATE_KEY_FILE")
-	itr, err := ghinstallation.NewKeyFromFile(tr, appId, installId, privKeyFile)
+	privKey := os.Getenv("GITHUB_APP_PRIVATE_KEY")
+	itr, err := ghinstallation.New(tr, appId, installId, []byte(privKey))
 	if err != nil {
-		log.Error().Err(err).Msgf("Failed to create github client: appId %d, installId %d, privKeyFile %s", appId, installId, privKeyFile)
+		log.Error().Err(err).Msgf("Failed to create github client: appId %d, installId %d, privKey %s...", appId, installId, privKey[:15])
 		return
 	}
 	statusClient = github.NewClient(&http.Client{Transport: itr})

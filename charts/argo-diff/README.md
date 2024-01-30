@@ -2,7 +2,7 @@
 
 A Helm chart for Kubernetes
 
-![Version: 0.6.0](https://img.shields.io/badge/Version-0.6.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.10.0](https://img.shields.io/badge/AppVersion-0.10.0-informational?style=flat-square)
+![Version: 0.7.0](https://img.shields.io/badge/Version-0.7.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.11.0](https://img.shields.io/badge/AppVersion-0.11.0-informational?style=flat-square)
 
 ## Extended Description
 
@@ -30,7 +30,10 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | config.argocdServerInsecure | string | `"false"` | flag to enable/disable TLS verification when communicating to the ArgoCD server |
 | config.argocdServerPlainText | string | `"false"` | flag to enable/disable TLS negotiation (ie: set to true when the ArgoCD server does not have TLS/SSL) |
 | config.argocdUIBaseURL | string | `""` | The base URL of the ArgoCD UI. Used for link generation in comments |
-| config.secretName | string | `""` | REQUIRED: The name of the secret that contains the argocd credentials. Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_WEBHOOK_SECRET |
+| config.githubAppId | string | `""` | GitHub Application Id - ignored if GITHUB_PERSONAL_ACCESS_TOKEN is set |
+| config.githubAppInstallationId | string | `""` | GitHub App Installation Id - ignored if GITHUB_PERSONAL_ACCESS_TOKEN is set |
+| config.githubStatusContext | string | `""` | Context string uses in github commit statuses. Defaults to "argo-diff" |
+| config.secretName | string | `""` | REQUIRED: The name of the secret that contains the argocd credentials. Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_WEBHOOK_SECRET, and GITHUB_PERSONAL_ACCESS_TOKEN/GITHUB_APP_PRIVATE_KEY |
 | fullnameOverride | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/vince-riv/argo-diff"` |  |
