@@ -34,6 +34,22 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	defer cancel()
 
 	isPr := eventInfo.PrNum > 0
+	if isPr && eventInfo.Refresh {
+		pull, err := github.GetPullRequest(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+		if err != nil {
+			log.Error().Err(err).Msgf("github.GetPullRequest(%s, %s, %d) failed", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+			return
+		}
+		base := pull.GetBase()
+		head := pull.GetHead()
+		if base == nil || head == nil {
+			log.Error().Msgf("Empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+			return
+		}
+		eventInfo.Sha = *head.SHA
+		eventInfo.ChangeRef = *head.Ref
+		eventInfo.BaseRef = *base.Ref
+	}
 
 	// set commit status to PENDING
 	github.Status(ctx, isPr, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
