@@ -29,10 +29,22 @@ spec:
           imagePullPolicy: Always
           #imagePullPolicy: IfNotPresent
           env:
-            - name: ARGOCD_BASE_URL
-              value: http://argocd-server.argocd.svc.cluster.local
+            - name: LOG_LEVEL
+              value: "debug"
+            - name: ARGOCD_SERVER_ADDR
+              value: argocd-server.argocd.svc.cluster.local:80
+            - name: ARGOCD_SERVER_INSECURE
+              value: "true"
+            - name: ARGOCD_SERVER_PLAINTEXT
+              value: "true"
             - name: ARGOCD_UI_BASE_URL
               value: https://argocd.your.domain
+            - name: GITHUB_APP_ID
+              value: ""
+            - name: GITHUB_APP_INSTALLATION_ID
+              value: ""
+            - name: GITHUB_STATUS_CONTEXT_STR
+              value: ""
           envFrom:
             - secretRef:
                 name: argo-diff-env
