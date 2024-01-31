@@ -77,7 +77,7 @@ func main() {
 	}
 	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" {
 		log.Info().Msg("GITHUB_PERSONAL_ACCESS_TOKEN environment variable not set - assuming Github App installation")
-		for _, e := range []string{"GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_PRIVATE_KEY_FILE"} {
+		for _, e := range []string{"GITHUB_APP_ID", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY"} {
 			if os.Getenv(e) == "" {
 				log.Fatal().Msgf("%s environment variable is not set for Github App installations", e)
 			}

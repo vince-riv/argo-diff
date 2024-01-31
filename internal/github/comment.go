@@ -39,15 +39,15 @@ func init() {
 			log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_APP_ID"))
 			return
 		}
-		installId, err := strconv.ParseInt(os.Getenv("GITHUB_INSTALLATION_ID"), 10, 64)
+		installId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_INSTALLATION_ID"), 10, 64)
 		if err != nil {
-			log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_INSTALLATION_ID"))
+			log.Error().Err(err).Msgf("Unable to parse %s", os.Getenv("GITHUB_APP_INSTALLATION_ID"))
 			return
 		}
-		privKeyFile := os.Getenv("GITHUB_PRIVATE_KEY_FILE")
-		atr, err := ghinstallation.NewAppsTransportKeyFromFile(tr, appId, privKeyFile)
+		privKey := os.Getenv("GITHUB_APP_PRIVATE_KEY")
+		atr, err := ghinstallation.NewAppsTransport(tr, appId, []byte(privKey))
 		if err != nil {
-			log.Error().Err(err).Msgf("Failed to create jwt transport: appId %d, privKeyFile %s", appId, privKeyFile)
+			log.Error().Err(err).Msgf("Failed to create jwt transport: appId %d, privKey %s...", appId, privKey[:15])
 			return
 		}
 		itr := ghinstallation.NewFromAppsTransport(atr, installId)

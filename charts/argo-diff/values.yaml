@@ -19,8 +19,14 @@ config:
   argocdServerPlainText: "false"
   # config.argocdUIBaseURL -- The base URL of the ArgoCD UI. Used for link generation in comments
   argocdUIBaseURL: ""
+  # config.githubAppId -- GitHub Application Id - ignored if GITHUB_PERSONAL_ACCESS_TOKEN is set
+  githubAppId: ""
+  # config.githubAppInstallationId -- GitHub App Installation Id - ignored if GITHUB_PERSONAL_ACCESS_TOKEN is set
+  githubAppInstallationId: ""
+  # config.githubStatusContext -- Context string uses in github commit statuses. Defaults to "argo-diff"
+  githubStatusContext: ""
   # config.secretName -- REQUIRED: The name of the secret that contains the argocd credentials.
-  # Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_WEBHOOK_SECRET
+  # Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_WEBHOOK_SECRET, and GITHUB_PERSONAL_ACCESS_TOKEN/GITHUB_APP_PRIVATE_KEY
   secretName: ""
 
 command: ["/app/argo-diff"]

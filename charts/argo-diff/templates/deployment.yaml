@@ -45,16 +45,24 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
-          - name: ARGOCD_SERVER_ADDR
-            value: "{{ .Values.config.argocdServerAddr }}"
-          - name: ARGOCD_SERVER_INSECURE
-            value: "{{ .Values.config.argocdServerInsecure }}"
-          - name: ARGOCD_SERVER_PLAINTEXT
-            value: "{{ .Values.config.argocdServerPlainText }}"
-          - name: ARGOCD_UI_BASE_URL
-            value: "{{ .Values.config.argocdUIBaseURL }}"
           - name: LOG_LEVEL
             value: "{{ .Values.logLevel }}"
+          {{- with .Values.config }}
+          - name: ARGOCD_SERVER_ADDR
+            value: {{ .argocdServerAddr | quote }}
+          - name: ARGOCD_SERVER_INSECURE
+            value: {{ .argocdServerInsecure | quote }}
+          - name: ARGOCD_SERVER_PLAINTEXT
+            value: {{ .argocdServerPlainText | quote }}
+          - name: ARGOCD_UI_BASE_URL
+            value: {{ .argocdUIBaseURL | quote }}
+          - name: GITHUB_APP_ID
+            value: {{ .githubAppId | quote }}
+          - name: GITHUB_APP_INSTALLATION_ID
+            value: {{ .githubAppInstallationId | quote }}
+          - name: GITHUB_STATUS_CONTEXT_STR
+            value: {{ .githubStatusContext | quote }}
+          {{- end }}
           envFrom:
             - secretRef:
                 name: {{ .Values.config.secretName }}
