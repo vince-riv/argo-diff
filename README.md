@@ -2,7 +2,9 @@
 
 Application written in [go](https://go.dev/) that provides Github status checks and Pull Request comments
 for changes to Kubernetes manifests when those manifests are delivered via
-[ArgoCD](https://argo-cd.readthedocs.io/en/stable/).
+[ArgoCD](https://argo-cd.readthedocs.io/en/stable/):
+
+<img src="./docs/img/diff-comment-simple.png?raw=true" alt="Example argo-diff comment showing a container image change" />
 
 ## Overview
 
