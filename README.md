@@ -2,7 +2,9 @@
 
 Application written in [go](https://go.dev/) that provides Github status checks and Pull Request comments
 for changes to Kubernetes manifests when those manifests are delivered via
-[ArgoCD](https://argo-cd.readthedocs.io/en/stable/).
+[ArgoCD](https://argo-cd.readthedocs.io/en/stable/):
+
+<img src="./docs/img/diff-comment-simple.png?raw=true" alt="Example argo-diff comment showing a container image change" />
 
 ## Overview
 
@@ -105,7 +107,7 @@ This is still in a proof-of-concept and alpha/beta version state, so there are s
 
 - Changes to Secrets are _not_ displayed. A future enhancement could flag that secrets are changing without
     displaying the contents. [#52]
-- When many Argo applications are served by a single repository, performance may be slow. Manifests for eac
+- When many Argo applications are served by a single repository, performance may be slow. Manifests for each
     Argo application are fetched sequentially, so this could result in argo-diff statuses and/or comments
     taking minutes to complete.
 
@@ -134,12 +136,35 @@ To send requests, you can copy webhook request headers and payloads to `temp/cur
 `temp/curl-payload.json` and use the `post-local.sh` script to ship them to the local server.
 
 There is also the `/dev` endpoint that gets enabled when `APP_ENV=dev` - this endpoint is handled by
-`devHandler()` in main.go and can be hardcoded to specific event data.
+`devHandler()` in main.go. This bypasses webhook processing is triggers argo-diff for specific event.
+When in `APP_ENV` is `dev`, argo-diff will comment but not set status checks.
+
+The json request data should be POSTed to `/dev` should look like this:
+
+```json
+{
+    "ignore": false,
+    "owner": "GITHUB_ORG_NAME",
+    "repo": "REPOSITORY_NAME",
+    "default_ref": "main",
+    "commit_sha": "LONG_SHA_OF_COMMIT",
+    "pr": 123,
+    "change_ref": "BRANCH_NAME_OF_PR",
+    "base_ref": "main"
+}
+```
+
+Description of those fields:
+ - `ignore`: tells argo-diff to ignore the event
+ - `owner`: Github organization name
+ - `repo`: Github repository name
+ - `default_ref`: the default branch of the repository
+ - `commit_sha`: the sha that triggered the event - should be HEAD of the branch of the PR if you want it to comment
+ - `pr`: pull request number (duh)
+ - `change_ref`: the source branch of the PR (the feature branch)
+ - `base_ref`: the branch to which the PR is getting merged
 
 ## Development Notes
 
 This was originally developed by @vrivellino as a way to learn Go. Its functionality replicates that of an
 internal tool written by smart people at a previous job.
-
-For contributions, please use [gofmt](https://pkg.go.dev/cmd/gofmt) and the following linters: errcheck,
-gosimple, govet, ineffassign, staticcheck, unused.
