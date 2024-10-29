@@ -21,16 +21,19 @@ import (
 	repoapiclient "github.com/argoproj/argo-cd/v2/reposerver/apiclient"
 	"github.com/argoproj/argo-cd/v2/util/argo"
 	argodiff "github.com/argoproj/argo-cd/v2/util/argo/diff"
+	"github.com/argoproj/argo-cd/v2/util/argo/normalizers"
 )
 
 // DifferenceOption struct to store diff options
 type DifferenceOption struct {
-	local         string
-	localRepoRoot string
-	revision      string
-	cluster       *argoappv1.Cluster
-	res           *repoapiclient.ManifestResponse
-	serversideRes *repoapiclient.ManifestResponse
+	local           string
+	localRepoRoot   string
+	revision        string
+	cluster         *argoappv1.Cluster
+	res             *repoapiclient.ManifestResponse
+	serversideRes   *repoapiclient.ManifestResponse
+	revisions       []string
+	sourcePositions []int64
 }
 
 func GetApplicationDiff(ctx context.Context, appName, appNs, revision string) (ApplicationResourcesWithChanges, error) {
@@ -128,7 +131,7 @@ func findDifferingObjects(ctx context.Context, app *argoappv1.Application, proj 
 		return appResources, totalResources, err
 	}
 	items := make([]objKeyLiveTarget, 0)
-	if diffOptions.revision != "" {
+	if diffOptions.revision != "" || (diffOptions.revisions != nil && len(diffOptions.revisions) > 0) {
 		var unstructureds []*unstructured.Unstructured
 		for _, mfst := range diffOptions.res.Manifests {
 			obj, err := argoappv1.UnmarshalToUnstructured(mfst)
@@ -158,8 +161,9 @@ func findDifferingObjects(ctx context.Context, app *argoappv1.Application, proj 
 		// TODO remove hardcoded IgnoreAggregatedRoles and retrieve the
 		// compareOptions in the protobuf
 		ignoreAggregatedRoles := false
+		ignoreNormalizerOpts := normalizers.IgnoreNormalizerOpts{}
 		diffConfig, err := argodiff.NewDiffConfigBuilder().
-			WithDiffSettings(app.Spec.IgnoreDifferences, overrides, ignoreAggregatedRoles).
+			WithDiffSettings(app.Spec.IgnoreDifferences, overrides, ignoreAggregatedRoles, ignoreNormalizerOpts).
 			WithTracking(argoSettings.AppLabelKey, argoSettings.TrackingMethod).
 			WithNoCache().
 			Build()
@@ -228,7 +232,7 @@ func groupObjsForDiff(resources *application.ManagedResourcesResponse, objs map[
 	resourceTracking := argo.NewResourceTracking()
 	var emptyReturn []objKeyLiveTarget
 	for _, res := range resources.Items {
-		var live = &unstructured.Unstructured{}
+		live := &unstructured.Unstructured{}
 		err := json.Unmarshal([]byte(res.NormalizedLiveState), &live)
 		if err != nil {
 			log.Error().Err(err).Msg("json.Unmarshal() failed for res.NormalizedLiveState")
