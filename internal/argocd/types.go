@@ -10,13 +10,11 @@ type AppResource struct {
 	Kind       string
 	Namespace  string
 	Name       string
-	YamlCur    string
-	YamlNew    string
+	DiffStr    string
 }
 
 type ApplicationResourcesWithChanges struct {
 	ArgoApp          *v1alpha1.Application
-	TotalObjectCount int
 	ChangedResources []AppResource
 	WarnStr          string
 }

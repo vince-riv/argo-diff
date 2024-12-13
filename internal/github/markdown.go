@@ -111,43 +111,6 @@ func healthString(s health.HealthStatusCode, msg string) string {
 	}
 }
 
-// Helper to generate markdown for pre-amble of argo-diff's PR comment
-func AppMarkdownStart(appName, warnStr string, syncStatus v1alpha1.SyncStatusCode, healthStatus health.HealthStatusCode, healthMsg string) string {
-	md := "\n---\n"
-	md += "<details open>\n"
-	md += fmt.Sprintf("<summary>=== %s ===</summary>\n\n", capitalizeWords(appName))
-	if argocdUiUrl != "" {
-		md += fmt.Sprintf("[ArgoCD UI](%s/applications/argocd/%s)\n", argocdUiUrl, appName)
-	}
-	md += syncString(syncStatus) + "\n"
-	md += healthString(healthStatus, healthMsg) + "\n\n"
-	if warnStr != "" {
-		md += warnStr + "\n\n"
-	}
-	return md
-}
-
-// Helper to generate markdown a diff in argo-diff's PR comment
-func ResourceDiffMarkdown(apiVersion, kind, name, ns, diffStr string) string {
-	md := "<details open>\n"
-	md += fmt.Sprintf("  <summary>%s/%s %s/%s</summary>\n\n", apiVersion, kind, ns, name)
-	if diffStr != "" {
-		md += "```diff\n"
-		md += truncateLines(diffStr, commentLineMaxChar)
-		if diffStr[len(diffStr)-1] != '\n' {
-			md += "\n"
-		}
-		md += "```\n\n"
-	}
-	md += "</details>\n\n"
-	return md
-}
-
-// Helper to generate markdown for the end of argo-diff's PR comment
-func AppMarkdownEnd() string {
-	return "</details>\n\n"
-}
-
 type ArgoAppMarkdown struct {
 	AppName      string
 	WarnStr      string
@@ -159,24 +122,11 @@ type ArgoAppMarkdown struct {
 	Closing      string
 }
 
-//type ArgoAppMarkdown interface {
-//	AddResourceDiff(apiVersion, kind, name, ns, diffStr string)
-//}
-
 type CommentMarkdown struct {
 	Preamble string
 	ArgoApps []ArgoAppMarkdown
 	Closing  string
 }
-
-//type CommentMarkdown interface {
-//	AppMarkdown(appName, warnStr, syncStatus, healthStatus, healthMsg string)
-//}
-
-//func NewCommentMarkdown() CommentMarkdown {
-//	var c CommentMarkdown = CommentMarkdownData{}
-//	return c
-//}
 
 func (c *CommentMarkdown) AppMarkdown(appName, warnStr string, syncStatus v1alpha1.SyncStatusCode, healthStatus health.HealthStatusCode, healthMsg string) *ArgoAppMarkdown {
 	a := ArgoAppMarkdown{
@@ -229,9 +179,9 @@ func (c CommentMarkdown) String() []string {
 	return res
 }
 
-func (a *ArgoAppMarkdown) AddResourceDiff(apiVersion, kind, name, ns, diffStr string) {
+func (a *ArgoAppMarkdown) AddResourceDiff(group, kind, name, ns, diffStr string) {
 	md := "\n<details open>\n"
-	md += fmt.Sprintf("  <summary>%s/%s %s/%s</summary>\n\n", apiVersion, kind, ns, name)
+	md += fmt.Sprintf("  <summary>===== %s/%s %s/%s =====</summary>\n\n", group, kind, ns, name)
 	diffMd := ""
 	if diffStr != "" {
 		diffMd += "```diff\n"

@@ -39,8 +39,21 @@ func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefault
 
 	for _, app := range apps {
 		log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, revision)
-		applicationResourceChanges, _ := GetApplicationDiff(ctx, app.ObjectMeta.Name, app.ObjectMeta.Namespace, revision)
-		appResList = append(appResList, applicationResourceChanges)
+		var appResChanges ApplicationResourcesWithChanges
+		//appResChanges.ArgoApp, err = getApplication(ctx, app.ObjectMeta.Name)
+		appResChanges.ArgoApp = &app
+		if err != nil {
+			appResChanges.WarnStr = fmt.Sprintf("Failed to refresh application %s: %s", app.ObjectMeta.Name, err.Error())
+		} else {
+			appResChanges.ChangedResources, err = diffApplication(ctx, app.ObjectMeta.Name, revision)
+			if err != nil {
+				appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
+			} else {
+				if len(appResChanges.ChangedResources) > 0 {
+					appResList = append(appResList, appResChanges)
+				}
+			}
+		}
 	}
 	return appResList, nil
 }
