@@ -8,12 +8,12 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/vince-riv/argo-diff/internal/argocd"
-	"github.com/vince-riv/argo-diff/internal/gendiff"
 	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
 // Returns first 7 characters of a string (to produce a short commit sha)
+/*
 func shortSha(str string) string {
 	v := []rune(str)
 	if len(v) <= 7 {
@@ -21,6 +21,7 @@ func shortSha(str string) string {
 	}
 	return string(v[:7])
 }
+*/
 
 // Processes github webhook event data by getting a list of matching argo applications & their manifests and generating diffs
 // Sets Github status checks for the relevant commit sha and posts a Github comment it is a pull-request event
@@ -28,7 +29,6 @@ func shortSha(str string) string {
 func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// Don't take longer than 3 minutes to execute
-	// TODO update internal/argocd to use ctx to gracefully handle timeouts
 	// TODO figure out how to call github.Status() with an error status when there's a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -61,13 +61,13 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
 		return // we're done due to a processing error
 	}
-	log.Trace().Msgf("argocd.GetApplicationChanges() returned %d results", len(appResList))
+	log.Debug().Msgf("argocd.GetApplicationChanges() returned %d results", len(appResList))
+	log.Trace().Msgf("argocd.GetApplicationChanges() returned: %+v", appResList)
 
 	errorCount := 0   // keep track of the number of errors
 	changeCount := 0  // how many apps have changes
 	unknownCount := 0 // how many apps we can't determine if there's changes (usually when we can new manifests but not current ones)
 	firstError := ""  // string of the first error we receive - used in commit status message
-	markdown := ""    // markdown for pull request comment
 	cMarkdown := github.CommentMarkdown{}
 	for _, a := range appResList {
 		appName := a.ArgoApp.ObjectMeta.Name
@@ -78,8 +78,6 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		if a.WarnStr != "" {
 			log.Trace().Msgf("%s has WarnStr %s", appName, a.WarnStr)
 			errorCount++
-			markdown += github.AppMarkdownStart(appName, "Error: "+a.WarnStr, appSyncStatus, appHealthStatus, appHealthMsg)
-			markdown += github.AppMarkdownEnd()
 			_ = cMarkdown.AppMarkdown(appName, "Error: "+a.WarnStr, appSyncStatus, appHealthStatus, appHealthMsg)
 			if firstError == "" {
 				firstError = a.WarnStr
@@ -88,14 +86,10 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 			log.Trace().Msgf("%s has %d Changed Resources", appName, len(a.ChangedResources))
 			if len(a.ChangedResources) > 0 {
 				changeCount++
-				markdown += github.AppMarkdownStart(appName, "", appSyncStatus, appHealthStatus, appHealthMsg)
 				appMarkdown := cMarkdown.AppMarkdown(appName, "", appSyncStatus, appHealthStatus, appHealthMsg)
 				for _, ar := range a.ChangedResources {
-					diffStr := gendiff.UnifiedDiff("live.yaml", fmt.Sprintf("%s.yaml", shortSha(eventInfo.Sha)), ar.YamlCur, ar.YamlNew)
-					markdown += github.ResourceDiffMarkdown(ar.ApiVersion, ar.Kind, ar.Name, ar.Namespace, diffStr)
-					appMarkdown.AddResourceDiff(ar.ApiVersion, ar.Kind, ar.Name, ar.Namespace, diffStr)
+					appMarkdown.AddResourceDiff(ar.Group, ar.Kind, ar.Name, ar.Namespace, ar.DiffStr)
 				}
-				markdown += github.AppMarkdownEnd()
 			}
 		}
 	}

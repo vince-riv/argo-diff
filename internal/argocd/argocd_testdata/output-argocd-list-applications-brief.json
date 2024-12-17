@@ -1,0 +1,938 @@
+[
+  {
+    "metadata": {
+      "name": "argo-diff",
+      "namespace": "argocd",
+      "uid": "0ddd6462-a212-49f6-bd69-6903cd4b5d18",
+      "resourceVersion": "744432266",
+      "generation": 180058,
+      "creationTimestamp": "2023-11-29T02:25:58Z",
+      "labels": {
+        "argocd.argoproj.io/instance": "argo-apps"
+      },
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"argoproj.io/v1alpha1\",\"kind\":\"Application\",\"metadata\":{\"annotations\":{},\"labels\":{\"argocd.argoproj.io/instance\":\"argo-apps\"},\"name\":\"argo-diff\",\"namespace\":\"argocd\"},\"spec\":{\"destination\":{\"namespace\":\"argocd\",\"server\":\"https://kubernetes.default.svc\"},\"project\":\"argocd-extras\",\"source\":{\"path\":\"k8s\",\"repoURL\":\"ssh://git@github.com/vince-riv/argo-diff-config.git\",\"targetRevision\":\"HEAD\"},\"syncPolicy\":{\"automated\":{\"prune\":true,\"selfHeal\":true},\"syncOptions\":[\"ServerSideApply=true\"]}}}\n"
+      },
+      "managedFields": [
+        {
+          "manager": "argocd-controller",
+          "operation": "Update",
+          "apiVersion": "argoproj.io/v1alpha1",
+          "time": "2024-01-17T20:16:30Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:metadata": {
+              "f:annotations": {
+                ".": {},
+                "f:kubectl.kubernetes.io/last-applied-configuration": {}
+              },
+              "f:labels": {
+                ".": {},
+                "f:argocd.argoproj.io/instance": {}
+              }
+            },
+            "f:spec": {
+              ".": {},
+              "f:destination": {
+                ".": {},
+                "f:namespace": {},
+                "f:server": {}
+              },
+              "f:project": {},
+              "f:source": {
+                ".": {},
+                "f:path": {},
+                "f:repoURL": {},
+                "f:targetRevision": {}
+              },
+              "f:syncPolicy": {
+                ".": {},
+                "f:automated": {
+                  ".": {},
+                  "f:prune": {},
+                  "f:selfHeal": {}
+                },
+                "f:syncOptions": {}
+              }
+            }
+          }
+        },
+        {
+          "manager": "argocd-application-controller",
+          "operation": "Update",
+          "apiVersion": "argoproj.io/v1alpha1",
+          "time": "2024-12-12T00:45:27Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:status": {
+              ".": {},
+              "f:controllerNamespace": {},
+              "f:health": {
+                ".": {},
+                "f:status": {}
+              },
+              "f:history": {},
+              "f:operationState": {
+                ".": {},
+                "f:finishedAt": {},
+                "f:message": {},
+                "f:operation": {
+                  ".": {},
+                  "f:initiatedBy": {
+                    ".": {},
+                    "f:automated": {}
+                  },
+                  "f:retry": {
+                    ".": {},
+                    "f:limit": {}
+                  },
+                  "f:sync": {
+                    ".": {},
+                    "f:prune": {},
+                    "f:revision": {},
+                    "f:syncOptions": {}
+                  }
+                },
+                "f:phase": {},
+                "f:startedAt": {},
+                "f:syncResult": {
+                  ".": {},
+                  "f:resources": {},
+                  "f:revision": {},
+                  "f:source": {
+                    ".": {},
+                    "f:path": {},
+                    "f:repoURL": {},
+                    "f:targetRevision": {}
+                  }
+                }
+              },
+              "f:reconciledAt": {},
+              "f:resources": {},
+              "f:sourceType": {},
+              "f:summary": {
+                ".": {},
+                "f:images": {}
+              },
+              "f:sync": {
+                ".": {},
+                "f:comparedTo": {
+                  ".": {},
+                  "f:destination": {
+                    ".": {},
+                    "f:namespace": {},
+                    "f:server": {}
+                  },
+                  "f:source": {
+                    ".": {},
+                    "f:path": {},
+                    "f:repoURL": {},
+                    "f:targetRevision": {}
+                  }
+                },
+                "f:revision": {},
+                "f:status": {}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "spec": {
+      "source": {
+        "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+        "path": "k8s",
+        "targetRevision": "HEAD"
+      },
+      "destination": {
+        "server": "https://kubernetes.default.svc",
+        "namespace": "argocd"
+      },
+      "project": "argocd-extras",
+      "syncPolicy": {
+        "automated": {
+          "prune": true,
+          "selfHeal": true
+        },
+        "syncOptions": [
+          "ServerSideApply=true"
+        ]
+      }
+    },
+    "status": {
+      "resources": [
+        {
+          "version": "v1",
+          "kind": "Service",
+          "namespace": "argocd",
+          "name": "argo-diff",
+          "status": "Synced",
+          "health": {
+            "status": "Healthy"
+          }
+        },
+        {
+          "version": "v1",
+          "kind": "ServiceAccount",
+          "namespace": "argocd",
+          "name": "argo-diff",
+          "status": "Synced"
+        },
+        {
+          "group": "apps",
+          "version": "v1",
+          "kind": "Deployment",
+          "namespace": "argocd",
+          "name": "argo-diff",
+          "status": "Synced",
+          "health": {
+            "status": "Healthy"
+          }
+        },
+        {
+          "group": "bitnami.com",
+          "version": "v1alpha1",
+          "kind": "SealedSecret",
+          "namespace": "argocd",
+          "name": "argo-diff-env",
+          "status": "Synced",
+          "health": {
+            "status": "Healthy"
+          }
+        },
+        {
+          "group": "traefik.containo.us",
+          "version": "v1alpha1",
+          "kind": "IngressRoute",
+          "namespace": "argocd",
+          "name": "argocd-diff",
+          "status": "Synced"
+        }
+      ],
+      "sync": {
+        "status": "Synced",
+        "comparedTo": {
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "destination": {
+            "server": "https://kubernetes.default.svc",
+            "namespace": "argocd"
+          }
+        },
+        "revision": "61f1e1b44af7096552d0ddc2f50fcdea2997e90b"
+      },
+      "health": {
+        "status": "Healthy"
+      },
+      "history": [
+        {
+          "revision": "555ea0ee409f83225b9af107d5381cb9fe86d7a8",
+          "deployedAt": "2024-01-26T19:42:55Z",
+          "id": 44,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-01-26T19:42:54Z",
+          "initiatedBy": {}
+        },
+        {
+          "revision": "6c2a59ee5c38380993d61b41e8f96a6786889fdb",
+          "deployedAt": "2024-01-26T21:29:03Z",
+          "id": 45,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-01-26T21:29:02Z",
+          "initiatedBy": {}
+        },
+        {
+          "revision": "2ec594468e766d1c5bb95f5d705a23b7562e4dc0",
+          "deployedAt": "2024-01-26T21:42:15Z",
+          "id": 46,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-01-26T21:42:14Z",
+          "initiatedBy": {}
+        },
+        {
+          "revision": "f62990774358f779bc4a3c8b49ff31e669dc241c",
+          "deployedAt": "2024-01-29T22:28:49Z",
+          "id": 47,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-01-29T22:28:48Z",
+          "initiatedBy": {}
+        },
+        {
+          "revision": "35620f4cabbd0c53b9cf3b9dd4d9b40bc5f628fa",
+          "deployedAt": "2024-01-31T12:50:43Z",
+          "id": 48,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-01-31T12:50:43Z",
+          "initiatedBy": {}
+        },
+        {
+          "revision": "701a179d939d758d0c886d49a1dd1f9ee7c6e7ba",
+          "deployedAt": "2024-01-31T13:05:02Z",
+          "id": 49,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-01-31T13:05:01Z",
+          "initiatedBy": {}
+        },
+        {
+          "revision": "c8a53197556e4cd9000d8c845814fd2ea825d421",
+          "deployedAt": "2024-01-31T13:32:01Z",
+          "id": 50,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-01-31T13:32:00Z",
+          "initiatedBy": {}
+        },
+        {
+          "revision": "f01d388e6301ffd659446e0d79a912d728fedcf4",
+          "deployedAt": "2024-03-21T21:01:12Z",
+          "id": 51,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-03-21T21:01:11Z",
+          "initiatedBy": {}
+        },
+        {
+          "revision": "ccd50a1c8f6a429101d5f9bafe3f9122efa452f5",
+          "deployedAt": "2024-10-29T15:03:32Z",
+          "id": 52,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-10-29T15:03:31Z",
+          "initiatedBy": {
+            "automated": true
+          }
+        },
+        {
+          "revision": "61f1e1b44af7096552d0ddc2f50fcdea2997e90b",
+          "deployedAt": "2024-10-29T17:53:49Z",
+          "id": 53,
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          },
+          "deployStartedAt": "2024-10-29T17:53:48Z",
+          "initiatedBy": {
+            "automated": true
+          }
+        }
+      ],
+      "reconciledAt": "2024-12-12T00:45:27Z",
+      "operationState": {
+        "operation": {
+          "sync": {
+            "revision": "61f1e1b44af7096552d0ddc2f50fcdea2997e90b",
+            "prune": true,
+            "syncOptions": [
+              "ServerSideApply=true"
+            ]
+          },
+          "initiatedBy": {
+            "automated": true
+          },
+          "retry": {
+            "limit": 5
+          }
+        },
+        "phase": "Succeeded",
+        "message": "successfully synced (all tasks run)",
+        "syncResult": {
+          "resources": [
+            {
+              "group": "",
+              "version": "v1",
+              "kind": "ServiceAccount",
+              "namespace": "argocd",
+              "name": "argo-diff",
+              "status": "Synced",
+              "message": "serviceaccount/argo-diff serverside-applied",
+              "hookPhase": "Running",
+              "syncPhase": "Sync"
+            },
+            {
+              "group": "",
+              "version": "v1",
+              "kind": "Service",
+              "namespace": "argocd",
+              "name": "argo-diff",
+              "status": "Synced",
+              "message": "service/argo-diff serverside-applied",
+              "hookPhase": "Running",
+              "syncPhase": "Sync"
+            },
+            {
+              "group": "apps",
+              "version": "v1",
+              "kind": "Deployment",
+              "namespace": "argocd",
+              "name": "argo-diff",
+              "status": "Synced",
+              "message": "deployment.apps/argo-diff serverside-applied",
+              "hookPhase": "Running",
+              "syncPhase": "Sync"
+            },
+            {
+              "group": "bitnami.com",
+              "version": "v1alpha1",
+              "kind": "SealedSecret",
+              "namespace": "argocd",
+              "name": "argo-diff-env",
+              "status": "Synced",
+              "message": "sealedsecret.bitnami.com/argo-diff-env serverside-applied",
+              "hookPhase": "Running",
+              "syncPhase": "Sync"
+            },
+            {
+              "group": "traefik.containo.us",
+              "version": "v1alpha1",
+              "kind": "IngressRoute",
+              "namespace": "argocd",
+              "name": "argocd-diff",
+              "status": "Synced",
+              "message": "ingressroute.traefik.containo.us/argocd-diff serverside-applied",
+              "hookPhase": "Running",
+              "syncPhase": "Sync"
+            }
+          ],
+          "revision": "61f1e1b44af7096552d0ddc2f50fcdea2997e90b",
+          "source": {
+            "repoURL": "ssh://git@github.com/vince-riv/argo-diff-config.git",
+            "path": "k8s",
+            "targetRevision": "HEAD"
+          }
+        },
+        "startedAt": "2024-10-29T17:53:48Z",
+        "finishedAt": "2024-10-29T17:53:49Z"
+      },
+      "sourceType": "Kustomize",
+      "summary": {
+        "images": [
+          "ghcr.io/vince-riv/argo-diff:0.12.0"
+        ]
+      },
+      "controllerNamespace": "argocd"
+    }
+  },
+  {
+    "metadata": {
+      "name": "argo-diff-testing",
+      "namespace": "argocd",
+      "uid": "cf731116-b9a9-4b01-844e-524ac2cf90d6",
+      "resourceVersion": "744432267",
+      "generation": 150336,
+      "creationTimestamp": "2024-01-26T18:42:17Z",
+      "labels": {
+        "argocd.argoproj.io/instance": "argo-apps"
+      },
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"argoproj.io/v1alpha1\",\"kind\":\"Application\",\"metadata\":{\"annotations\":{},\"labels\":{\"argocd.argoproj.io/instance\":\"argo-apps\"},\"name\":\"argo-diff-testing\",\"namespace\":\"argocd\"},\"spec\":{\"destination\":{\"namespace\":\"argo-diff-testing\",\"server\":\"https://kubernetes.default.svc\"},\"project\":\"argo-diff-testing\",\"sources\":[{\"ref\":\"values\",\"repoURL\":\"ssh://git@github.com/vince-riv/argo-diff-testing.git\",\"targetRevision\":\"main\"},{\"chart\":\"argo-diff\",\"helm\":{\"valueFiles\":[\"$values/conf/argo-diff-values.yaml\"]},\"repoURL\":\"ghcr.io/vince-riv/chart\",\"targetRevision\":\"0.7.0\"}],\"syncPolicy\":{\"syncOptions\":[\"ServerSideApply=true\"]}}}\n"
+      },
+      "managedFields": [
+        {
+          "manager": "argocd-controller",
+          "operation": "Update",
+          "apiVersion": "argoproj.io/v1alpha1",
+          "time": "2024-02-06T22:07:27Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:metadata": {
+              "f:annotations": {
+                ".": {},
+                "f:kubectl.kubernetes.io/last-applied-configuration": {}
+              },
+              "f:labels": {
+                ".": {},
+                "f:argocd.argoproj.io/instance": {}
+              }
+            },
+            "f:spec": {
+              ".": {},
+              "f:destination": {
+                ".": {},
+                "f:namespace": {},
+                "f:server": {}
+              },
+              "f:project": {},
+              "f:sources": {},
+              "f:syncPolicy": {
+                ".": {},
+                "f:syncOptions": {}
+              }
+            }
+          }
+        },
+        {
+          "manager": "argocd-server",
+          "operation": "Update",
+          "apiVersion": "argoproj.io/v1alpha1",
+          "time": "2024-09-20T15:22:26Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:status": {
+              "f:summary": {}
+            }
+          }
+        },
+        {
+          "manager": "argocd-application-controller",
+          "operation": "Update",
+          "apiVersion": "argoproj.io/v1alpha1",
+          "time": "2024-12-12T00:45:27Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:status": {
+              ".": {},
+              "f:controllerNamespace": {},
+              "f:health": {
+                ".": {},
+                "f:status": {}
+              },
+              "f:history": {},
+              "f:operationState": {
+                ".": {},
+                "f:finishedAt": {},
+                "f:message": {},
+                "f:operation": {
+                  ".": {},
+                  "f:initiatedBy": {
+                    ".": {},
+                    "f:username": {}
+                  },
+                  "f:retry": {},
+                  "f:sync": {
+                    ".": {},
+                    "f:prune": {},
+                    "f:revision": {},
+                    "f:syncOptions": {},
+                    "f:syncStrategy": {
+                      ".": {},
+                      "f:hook": {}
+                    }
+                  }
+                },
+                "f:phase": {},
+                "f:startedAt": {},
+                "f:syncResult": {
+                  ".": {},
+                  "f:resources": {},
+                  "f:revision": {},
+                  "f:revisions": {},
+                  "f:source": {
+                    ".": {},
+                    "f:repoURL": {}
+                  },
+                  "f:sources": {}
+                }
+              },
+              "f:reconciledAt": {},
+              "f:resources": {},
+              "f:sourceTypes": {},
+              "f:summary": {
+                "f:images": {}
+              },
+              "f:sync": {
+                ".": {},
+                "f:comparedTo": {
+                  ".": {},
+                  "f:destination": {
+                    ".": {},
+                    "f:namespace": {},
+                    "f:server": {}
+                  },
+                  "f:source": {
+                    ".": {},
+                    "f:repoURL": {}
+                  },
+                  "f:sources": {}
+                },
+                "f:revisions": {},
+                "f:status": {}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "spec": {
+      "destination": {
+        "server": "https://kubernetes.default.svc",
+        "namespace": "argo-diff-testing"
+      },
+      "project": "argo-diff-testing",
+      "syncPolicy": {
+        "syncOptions": [
+          "ServerSideApply=true"
+        ]
+      },
+      "sources": [
+        {
+          "repoURL": "ssh://git@github.com/vince-riv/argo-diff-testing.git",
+          "targetRevision": "main",
+          "ref": "values"
+        },
+        {
+          "repoURL": "ghcr.io/vince-riv/chart",
+          "targetRevision": "0.7.0",
+          "helm": {
+            "valueFiles": [
+              "$values/conf/argo-diff-values.yaml"
+            ]
+          },
+          "chart": "argo-diff"
+        }
+      ]
+    },
+    "status": {
+      "resources": [
+        {
+          "version": "v1",
+          "kind": "Service",
+          "namespace": "argo-diff-testing",
+          "name": "argo-diff-testing",
+          "status": "Synced",
+          "health": {
+            "status": "Healthy"
+          }
+        },
+        {
+          "version": "v1",
+          "kind": "ServiceAccount",
+          "namespace": "argo-diff-testing",
+          "name": "argo-diff-testing",
+          "status": "Synced"
+        },
+        {
+          "group": "apps",
+          "version": "v1",
+          "kind": "Deployment",
+          "namespace": "argo-diff-testing",
+          "name": "argo-diff-testing",
+          "status": "Synced",
+          "health": {
+            "status": "Healthy"
+          }
+        }
+      ],
+      "sync": {
+        "status": "Synced",
+        "comparedTo": {
+          "source": {
+            "repoURL": ""
+          },
+          "destination": {
+            "server": "https://kubernetes.default.svc",
+            "namespace": "argo-diff-testing"
+          },
+          "sources": [
+            {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-diff-testing.git",
+              "targetRevision": "main",
+              "ref": "values"
+            },
+            {
+              "repoURL": "ghcr.io/vince-riv/chart",
+              "targetRevision": "0.7.0",
+              "helm": {
+                "valueFiles": [
+                  "$values/conf/argo-diff-values.yaml"
+                ]
+              },
+              "chart": "argo-diff"
+            }
+          ]
+        },
+        "revisions": [
+          "5a8d703478b234260ffc8902311906e2ffbc2802",
+          "0.7.0"
+        ]
+      },
+      "health": {
+        "status": "Healthy"
+      },
+      "history": [
+        {
+          "deployedAt": "2024-01-26T19:46:18Z",
+          "id": 0,
+          "source": {
+            "repoURL": ""
+          },
+          "deployStartedAt": "2024-01-26T19:46:16Z",
+          "sources": [
+            {
+              "repoURL": "ghcr.io/vince-riv/chart",
+              "targetRevision": "0.5.1",
+              "helm": {
+                "valueFiles": [
+                  "$values/conf/argo-diff-values.yaml"
+                ]
+              },
+              "chart": "argo-diff"
+            },
+            {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-diff-testing.git",
+              "targetRevision": "main",
+              "ref": "values"
+            }
+          ],
+          "revisions": [
+            "0.5.1",
+            "3b6b8b40beeb9fa9cb0c84d95be6847a430074c1"
+          ],
+          "initiatedBy": {}
+        },
+        {
+          "deployedAt": "2024-02-06T22:04:14Z",
+          "id": 1,
+          "source": {
+            "repoURL": ""
+          },
+          "deployStartedAt": "2024-02-06T22:04:13Z",
+          "sources": [
+            {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-diff-testing.git",
+              "targetRevision": "main",
+              "ref": "values"
+            },
+            {
+              "repoURL": "ghcr.io/vince-riv/chart",
+              "targetRevision": "0.5.1",
+              "helm": {
+                "valueFiles": [
+                  "$values/conf/argo-diff-values.yaml"
+                ]
+              },
+              "chart": "argo-diff"
+            }
+          ],
+          "revisions": [
+            "3b6b8b40beeb9fa9cb0c84d95be6847a430074c1",
+            "0.5.1"
+          ],
+          "initiatedBy": {}
+        },
+        {
+          "deployedAt": "2024-02-06T22:05:36Z",
+          "id": 2,
+          "source": {
+            "repoURL": ""
+          },
+          "deployStartedAt": "2024-02-06T22:05:35Z",
+          "sources": [
+            {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-diff-testing.git",
+              "targetRevision": "main",
+              "ref": "values"
+            },
+            {
+              "repoURL": "ghcr.io/vince-riv/chart",
+              "targetRevision": "0.5.1",
+              "helm": {
+                "valueFiles": [
+                  "$values/conf/argo-diff-values.yaml"
+                ]
+              },
+              "chart": "argo-diff"
+            }
+          ],
+          "revisions": [
+            "3b6b8b40beeb9fa9cb0c84d95be6847a430074c1",
+            "0.5.1"
+          ],
+          "initiatedBy": {}
+        },
+        {
+          "deployedAt": "2024-02-06T22:07:35Z",
+          "id": 3,
+          "source": {
+            "repoURL": ""
+          },
+          "deployStartedAt": "2024-02-06T22:07:33Z",
+          "sources": [
+            {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-diff-testing.git",
+              "targetRevision": "main",
+              "ref": "values"
+            },
+            {
+              "repoURL": "ghcr.io/vince-riv/chart",
+              "targetRevision": "0.7.0",
+              "helm": {
+                "valueFiles": [
+                  "$values/conf/argo-diff-values.yaml"
+                ]
+              },
+              "chart": "argo-diff"
+            }
+          ],
+          "revisions": [
+            "3b6b8b40beeb9fa9cb0c84d95be6847a430074c1",
+            "0.7.0"
+          ],
+          "initiatedBy": {}
+        },
+        {
+          "deployedAt": "2024-02-06T22:12:00Z",
+          "id": 4,
+          "source": {
+            "repoURL": ""
+          },
+          "deployStartedAt": "2024-02-06T22:11:58Z",
+          "sources": [
+            {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-diff-testing.git",
+              "targetRevision": "main",
+              "ref": "values"
+            },
+            {
+              "repoURL": "ghcr.io/vince-riv/chart",
+              "targetRevision": "0.7.0",
+              "helm": {
+                "valueFiles": [
+                  "$values/conf/argo-diff-values.yaml"
+                ]
+              },
+              "chart": "argo-diff"
+            }
+          ],
+          "revisions": [
+            "5a8d703478b234260ffc8902311906e2ffbc2802",
+            "0.7.0"
+          ],
+          "initiatedBy": {}
+        }
+      ],
+      "reconciledAt": "2024-12-12T00:45:27Z",
+      "operationState": {
+        "operation": {
+          "sync": {
+            "revision": "5a8d703478b234260ffc8902311906e2ffbc2802",
+            "prune": true,
+            "syncStrategy": {
+              "hook": {}
+            },
+            "syncOptions": [
+              "ServerSideApply=true",
+              "PruneLast=true"
+            ]
+          },
+          "initiatedBy": {
+            "username": "github@vince-riv.io"
+          },
+          "retry": {}
+        },
+        "phase": "Succeeded",
+        "message": "successfully synced (all tasks run)",
+        "syncResult": {
+          "resources": [
+            {
+              "group": "",
+              "version": "v1",
+              "kind": "ServiceAccount",
+              "namespace": "argo-diff-testing",
+              "name": "argo-diff-testing",
+              "status": "Synced",
+              "message": "serviceaccount/argo-diff-testing serverside-applied",
+              "hookPhase": "Running",
+              "syncPhase": "Sync"
+            },
+            {
+              "group": "",
+              "version": "v1",
+              "kind": "Service",
+              "namespace": "argo-diff-testing",
+              "name": "argo-diff-testing",
+              "status": "Synced",
+              "message": "service/argo-diff-testing serverside-applied",
+              "hookPhase": "Running",
+              "syncPhase": "Sync"
+            },
+            {
+              "group": "apps",
+              "version": "v1",
+              "kind": "Deployment",
+              "namespace": "argo-diff-testing",
+              "name": "argo-diff-testing",
+              "status": "Synced",
+              "message": "deployment.apps/argo-diff-testing serverside-applied",
+              "hookPhase": "Running",
+              "syncPhase": "Sync"
+            }
+          ],
+          "revision": "",
+          "source": {
+            "repoURL": ""
+          },
+          "sources": [
+            {
+              "repoURL": "ssh://git@github.com/vince-riv/argo-diff-testing.git",
+              "targetRevision": "main",
+              "ref": "values"
+            },
+            {
+              "repoURL": "ghcr.io/vince-riv/chart",
+              "targetRevision": "0.7.0",
+              "helm": {
+                "valueFiles": [
+                  "$values/conf/argo-diff-values.yaml"
+                ]
+              },
+              "chart": "argo-diff"
+            }
+          ],
+          "revisions": [
+            "5a8d703478b234260ffc8902311906e2ffbc2802",
+            "0.7.0"
+          ]
+        },
+        "startedAt": "2024-02-06T22:11:58Z",
+        "finishedAt": "2024-02-06T22:12:00Z"
+      },
+      "summary": {
+        "images": [
+          "ghcr.io/vince-riv/argo-diff:0.11.0"
+        ]
+      },
+      "sourceTypes": [
+        "",
+        "Helm"
+      ],
+      "controllerNamespace": "argocd"
+    }
+  }
+]
