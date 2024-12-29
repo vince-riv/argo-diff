@@ -101,3 +101,18 @@ func TestFilterApplications(t *testing.T) {
 		t.Error("Push to main should NOT have matched (targetRev main) (auto-sync ENABLED)")
 	}
 }
+
+func TestVersionCheck(t *testing.T) {
+	if !versionCheck("2.12.1") {
+		t.Error("v2.12.1 should pass")
+	}
+	if versionCheck("2.11.100") {
+		t.Error("v2.12.100 should not pass")
+	}
+	if !versionCheck("2.13.0") {
+		t.Error("v2.13.0 should pass")
+	}
+	if versionCheck("1.150.0") {
+		t.Error("v1.150.0 should not pass")
+	}
+}
