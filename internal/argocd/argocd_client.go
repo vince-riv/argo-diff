@@ -8,10 +8,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
@@ -64,14 +64,6 @@ var execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 	return out, nil
 }
 
-func ConnectivityCheck() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	log.Info().Msg("Calling ArgoCD to list applications for a connectivity test")
-	_, err := listApplications(ctx)
-	return err
-}
-
 func listApplications(ctx context.Context) (*v1alpha1.ApplicationList, error) {
 	var appList []v1alpha1.Application
 	var apps v1alpha1.ApplicationList
@@ -89,6 +81,44 @@ func listApplications(ctx context.Context) (*v1alpha1.ApplicationList, error) {
 	}
 	apps.Items = appList
 	return &apps, nil
+}
+
+// ParseArgoCDVersion extracts the client and server version from the output of "argocd version".
+// It trims everything after the '+' sign, including the sign itself.
+func parseArgoCDVersion(output []byte) (clientVersion, serverVersion string, err error) {
+	lines := bytes.Split(output, []byte("\n"))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(string(line))
+		if strings.HasPrefix(trimmed, "argocd:") {
+			// Extract client version
+			parts := strings.SplitN(trimmed, " ", 2)
+			if len(parts) == 2 {
+				clientVersion = strings.TrimSpace(parts[1])
+				clientVersion = strings.Split(clientVersion, "+")[0]
+			}
+		} else if strings.HasPrefix(trimmed, "argocd-server:") {
+			// Extract server version
+			parts := strings.SplitN(trimmed, " ", 2)
+			if len(parts) == 2 {
+				serverVersion = strings.TrimSpace(parts[1])
+				serverVersion = strings.Split(serverVersion, "+")[0]
+			}
+		}
+	}
+	if clientVersion == "" || serverVersion == "" {
+		return "", "", fmt.Errorf("failed to parse client or server version from output")
+	}
+	return clientVersion, serverVersion, nil
+}
+
+func argocdVersion(ctx context.Context) (string, string, error) {
+	// argocd version
+	output, err := execArgoCdCli(ctx, []string{"version"})
+	if err != nil {
+		log.Error().Err(err).Msg("argocd version failed")
+		return "", "", err
+	}
+	return parseArgoCDVersion(output)
 }
 
 /*

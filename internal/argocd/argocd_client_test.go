@@ -21,6 +21,43 @@ var lokiClusterRoleDiff = `===== rbac.authorization.k8s.io/ClusterRoleBinding /l
      fieldsType: FieldsV1
 `
 
+var argocdCliVersionOutput = `argocd: v2.13.1+dc12345
+  BuildDate: 2024-12-11T19:59:16Z
+  GitCommit: dc43124058130db9a747d141d86d7c2f4aac7bf9
+  GitTreeState: clean
+  GoVersion: go1.23.4
+  Compiler: gc
+  Platform: darwin/arm64
+argocd-server: v2.13.2+dc43124
+  BuildDate: 2024-12-11T18:37:15Z
+  GitCommit: dc43124058130db9a747d141d86d7c2f4aac7bf9
+  GitTreeState: clean
+  GoVersion: go1.23.1
+  Compiler: gc
+  Platform: linux/amd64
+  Kustomize Version: v5.4.3 2024-07-19T16:40:33Z
+  Helm Version: v3.15.4+gfa9efb0
+  Kubectl Version: v0.31.0
+  Jsonnet Version: v0.20.0
+`
+
+func TestParseArgoCDVersion(t *testing.T) {
+	_, _, err := parseArgoCDVersion([]byte("garbage"))
+	if err == nil {
+		t.Error("Expected an error from garbage test string")
+	}
+	clientV, serverV, err := parseArgoCDVersion([]byte(argocdCliVersionOutput))
+	if err != nil {
+		t.Error("Unexpected an error from valid test string")
+	}
+	if clientV != "v2.13.1" {
+		t.Errorf("Client version %s is not expected (%s)", clientV, "v2.13.1")
+	}
+	if serverV != "v2.13.2" {
+		t.Errorf("Server version %s is not expected (%s)", clientV, "v2.13.2")
+	}
+}
+
 func TestExtractFirstLin(t *testing.T) {
 	firstLine, remaining := extractFirstLine(lokiClusterRoleDiff)
 	expectedFirstLine := "===== rbac.authorization.k8s.io/ClusterRoleBinding /loki-clusterrolebinding ======"

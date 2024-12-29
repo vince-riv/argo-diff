@@ -3,11 +3,55 @@ package argocd
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
 )
+
+const minVersion = "2.12.0"
+
+// checks if a given version is greater than or equal to required version
+func versionCheck(version string) bool {
+
+	// Remove 'v' prefix if present
+	version = strings.TrimPrefix(version, "v")
+	minVersionParts := strings.Split(minVersion, ".")
+	versionParts := strings.Split(version, ".")
+
+	// Compare major, minor, and patch versions
+	for i := 0; i < 3; i++ {
+		v1, err1 := strconv.Atoi(versionParts[i])
+		v2, err2 := strconv.Atoi(minVersionParts[i])
+		// Handle parsing errors
+		if err1 != nil || err2 != nil {
+			return false
+		}
+		if v1 > v2 {
+			return true
+		} else if v1 < v2 {
+			return false
+		}
+	}
+	// All parts are equal
+	return true
+}
+
+func ConnectivityCheck() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	log.Info().Msg("Calling ArgoCD to check client and server versions")
+	clientV, serverV, err := argocdVersion(ctx)
+	if err != nil {
+		return err
+	}
+	if versionCheck(clientV) && versionCheck(serverV) {
+		return nil
+	}
+	return fmt.Errorf("client (%s) or Server (%s) version is not %s or greater", clientV, serverV, minVersion)
+}
 
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
 // and return their manifests.
