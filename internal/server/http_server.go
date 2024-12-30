@@ -151,9 +151,8 @@ func (wp *WebhookProcessor) printWebHook(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func StartWebhookProcessor(host string, port int, webhook_secret string, devMode bool) {
-	addr := fmt.Sprintf("%s:%d", host, port)
-	log.Info().Msgf("Setting up listener on port %s", addr)
+func StartWebhookProcessor(addr string, webhook_secret string, devMode bool) {
+	log.Info().Msgf("Setting up listener on %s", addr)
 	if devMode {
 		log.Warn().Msg("Dev Mode is enabled - signature validations are disabled!")
 		log.Warn().Msg("Dev Mode is enabled - commit status updates are disabled!")
