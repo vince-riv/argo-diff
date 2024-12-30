@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 
+	flag "github.com/spf13/pflag"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -14,6 +16,10 @@ import (
 )
 
 const gitRevTxt = "git-rev.txt"
+
+var serverListenHost string
+var serverListenPort int
+var serverDevMode bool
 
 func init() {
 	// Load GitHub secrets from env and setup logger
@@ -53,19 +59,26 @@ func init() {
 	}
 
 	log.Logger = log.With().Str("service", "argo-diff").Str("version", gitRev).Caller().Logger()
+
+	flag.StringVarP(&serverListenHost, "host", "H", "", "Listen ip/host for server")
+	flag.IntVarP(&serverListenPort, "port", "p", 8080, "Listen port for server")
+	flag.BoolVarP(&serverDevMode, "dev-mode", "D", false, "Enable dev mode for local development")
+}
+
+func startServer(listenHost string, listenPort int, githubWebhookSecret string, devMode bool) {
+	addr := fmt.Sprintf("%s:%d", listenHost, listenPort)
+	if addr == ":0" {
+		addr = ":8080"
+	}
+	server.StartWebhookProcessor(addr, githubWebhookSecret, devMode)
 }
 
 func main() {
-	// TODO add support for command line arguments
+	flag.Parse()
 
 	githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if githubWebhookSecret == "" {
 		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
-	}
-
-	devMode := false
-	if os.Getenv("APP_ENV") == "dev" {
-		devMode = true
 	}
 
 	// make sure critical secrets are set in the environment
@@ -84,6 +97,10 @@ func main() {
 		}
 	}
 
+	if os.Getenv("APP_ENV") == "dev" {
+		serverDevMode = true
+	}
+
 	if err := argocd.ConnectivityCheck(); err != nil {
 		log.Fatal().Err(err).Msg("Connectivity check to ArgoCD failed")
 	}
@@ -91,6 +108,5 @@ func main() {
 	if err := github.ConnectivityCheck(); err != nil {
 		log.Fatal().Err(err).Msg("Connectivity check to Github API failed")
 	}
-
-	server.StartWebhookProcessor("", 8080, githubWebhookSecret, devMode)
+	startServer(serverListenHost, serverListenPort, githubWebhookSecret, serverDevMode)
 }
