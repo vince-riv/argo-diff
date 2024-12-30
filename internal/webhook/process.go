@@ -20,7 +20,7 @@ type EventInfo struct {
 	PrNum          int    `json:"pr"`
 	ChangeRef      string `json:"change_ref"`
 	BaseRef        string `json:"base_ref"`
-	Refresh        bool   `json:"ignore"`
+	Refresh        bool   `json:"refresh"`
 }
 
 func NewEventInfo() EventInfo {
