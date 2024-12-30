@@ -52,13 +52,16 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 
 	// set commit status to PENDING
-	github.Status(ctx, isPr, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	err := github.Status(ctx, isPr, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	if err != nil {
+		log.Warn().Err(err).Msgf("Failed to set commit status %s for %s/%s@%s", github.StatusPending, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
+	}
 
 	// get a list of ArgoCD applications and their manifests whose git URLs match the webhook event
 	appResList, err := argocd.GetApplicationChanges(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef, eventInfo.BaseRef)
 	if err != nil {
-		github.Status(ctx, isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
+		_ = github.Status(ctx, isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 		return // we're done due to a processing error
 	}
 	log.Debug().Msgf("argocd.GetApplicationChanges() returned %d results", len(appResList))
@@ -94,8 +97,9 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		}
 	}
 
-	newStatus := github.StatusError // commit status is currently pending, newStatus will be the updated status (default to error)
-	statusDescription := "Unknown"
+	// commit status is currently pending, newStatus will be the updated status (default to error)
+	newStatus := github.StatusError //nolint:ineffassign
+	statusDescription := "Unknown"  //nolint:ineffassign
 	changeCountStr := fmt.Sprintf("%d of %d apps with changes", changeCount, len(appResList))
 	if unknownCount > 0 {
 		changeCountStr += fmt.Sprintf(" [%d apps unknown]", unknownCount)
@@ -116,7 +120,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		statusDescription = fmt.Sprintf("%s - no errors", changeCountStr)
 	}
 	// send the commit status
-	github.Status(ctx, isPr, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	_ = github.Status(ctx, isPr, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
 	if isPr {
 		// if it's a pull-request event, only comment when something has happened

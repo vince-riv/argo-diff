@@ -182,7 +182,10 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		log.Error().Msg("Cannot call github API - I don't have a client set")
 		return nil, fmt.Errorf("no github commenter client")
 	}
-	getCommentUser(ctx)
+	err := getCommentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for i, checkComments := 0, true; checkComments; i++ {
 		checkComments = false
 		comments, resp, err := commentClient.Issues.ListComments(ctx, owner, repo, prNum, &issueListCommentsOpts)
