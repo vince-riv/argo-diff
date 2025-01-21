@@ -115,38 +115,43 @@ func filterApplications(a []v1alpha1.Application, repoOwner, repoName, repoDefau
 			continue
 		}
 		appSpecSource := app.Spec.GetSource()
-
-		if !strings.HasSuffix(appSpecSource.RepoURL, ghMatch1) && !strings.HasSuffix(appSpecSource.RepoURL, ghMatch2) {
-			log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", app.ObjectMeta.Name, appSpecSource.RepoURL, ghMatch1, ghMatch2)
-			continue
+		if checkSource(appSpecSource, app.ObjectMeta.Name, ghMatch1, ghMatch2, baseRef, changeRef, repoDefaultRef, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
+			appList = append(appList, app)
 		}
-		if baseRef != "" {
-			// Processing a PR ...
-			if appSpecSource.TargetRevision == "HEAD" && baseRef != repoDefaultRef {
-				// filter application if argo targets repo default (eg: main) and PR is not targetting main
-				log.Debug().Msgf("Filtering application %s: Target Rev is HEAD; baseRef %s != repoDefaultRef %s", app.ObjectMeta.Name, baseRef, repoDefaultRef)
-				continue
-			}
-			if appSpecSource.TargetRevision != "HEAD" && baseRef != appSpecSource.TargetRevision {
-				// filter application if argo doesn't target repo default (eg: main)  and PR is not targetting that branch
-				log.Debug().Msgf("Filtering application %s: baseRef %s != Target Rev %s", app.ObjectMeta.Name, baseRef, appSpecSource.TargetRevision)
-				continue
-			}
-		} else {
-			// processing a push
-			// eg: refs/heads/main -> main
-			changeRef = strings.TrimPrefix(changeRef, "refs/heads/")
-			// filter out apps where auto-sync is enabled for the branch of the push
-			if appSpecSource.TargetRevision == "HEAD" && changeRef == repoDefaultRef && app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil {
-				log.Debug().Msgf("Filtering auto-sync application %s: Target Rev is HEAD; changeRef %s == repoDefaultRef %s", app.ObjectMeta.Name, changeRef, repoDefaultRef)
-				continue
-			}
-			if appSpecSource.TargetRevision != "HEAD" && changeRef == appSpecSource.TargetRevision && app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil {
-				log.Debug().Msgf("Filtering auto-sync application %s: changeRef %s = Target Rev %s", app.ObjectMeta.Name, changeRef, appSpecSource.TargetRevision)
-				continue
-			}
-		}
-		appList = append(appList, app)
 	}
 	return appList, nil
+}
+
+func checkSource(appSpecSource v1alpha1.ApplicationSource, appName, ghMatch1, ghMatch2, baseRef, changeRef, repoDefaultRef string, automatedSync bool) bool {
+	if !strings.HasSuffix(appSpecSource.RepoURL, ghMatch1) && !strings.HasSuffix(appSpecSource.RepoURL, ghMatch2) {
+		log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", appName, appSpecSource.RepoURL, ghMatch1, ghMatch2)
+		return false
+	}
+	if baseRef != "" {
+		// Processing a PR ...
+		if appSpecSource.TargetRevision == "HEAD" && baseRef != repoDefaultRef {
+			// filter application if argo targets repo default (eg: main) and PR is not targetting main
+			log.Debug().Msgf("Filtering application %s: Target Rev is HEAD; baseRef %s != repoDefaultRef %s", appName, baseRef, repoDefaultRef)
+			return false
+		}
+		if appSpecSource.TargetRevision != "HEAD" && baseRef != appSpecSource.TargetRevision {
+			// filter application if argo doesn't target repo default (eg: main)  and PR is not targetting that branch
+			log.Debug().Msgf("Filtering application %s: baseRef %s != Target Rev %s", appName, baseRef, appSpecSource.TargetRevision)
+			return false
+		}
+	} else {
+		// processing a push
+		// eg: refs/heads/main -> main
+		changeRef = strings.TrimPrefix(changeRef, "refs/heads/")
+		// filter out apps where auto-sync is enabled for the branch of the push
+		if appSpecSource.TargetRevision == "HEAD" && changeRef == repoDefaultRef && automatedSync {
+			log.Debug().Msgf("Filtering auto-sync application %s: Target Rev is HEAD; changeRef %s == repoDefaultRef %s", appName, changeRef, repoDefaultRef)
+			return false
+		}
+		if appSpecSource.TargetRevision != "HEAD" && changeRef == appSpecSource.TargetRevision && automatedSync {
+			log.Debug().Msgf("Filtering auto-sync application %s: changeRef %s = Target Rev %s", appName, changeRef, appSpecSource.TargetRevision)
+			return false
+		}
+	}
+	return true
 }
