@@ -20,6 +20,7 @@ const gitRevTxt = "git-rev.txt"
 var serverListenHost string
 var serverListenPort int
 var serverDevMode bool
+var eventFile string
 
 func init() {
 	// Load GitHub secrets from env and setup logger
@@ -62,7 +63,7 @@ func init() {
 
 	flag.StringVarP(&serverListenHost, "host", "H", "", "Listen ip/host for server")
 	flag.IntVarP(&serverListenPort, "port", "p", 8080, "Listen port for server")
-	flag.BoolVarP(&serverDevMode, "dev-mode", "D", false, "Enable dev mode for local development")
+	flag.StringVarP(&eventFile, "event-file", "f", "", "Run once and read event data from file")
 }
 
 func startServer(listenHost string, listenPort int, githubWebhookSecret string, devMode bool) {
@@ -77,7 +78,7 @@ func main() {
 	flag.Parse()
 
 	githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
-	if githubWebhookSecret == "" {
+	if githubWebhookSecret == "" && eventFile == "" {
 		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
 	}
 
@@ -108,5 +109,10 @@ func main() {
 	if err := github.ConnectivityCheck(); err != nil {
 		log.Fatal().Err(err).Msg("Connectivity check to Github API failed")
 	}
-	startServer(serverListenHost, serverListenPort, githubWebhookSecret, serverDevMode)
+
+	if eventFile != "" {
+		server.ProcessFileEvent(eventFile, serverDevMode) // nolint:errcheck
+	} else {
+		startServer(serverListenHost, serverListenPort, githubWebhookSecret, serverDevMode)
+	}
 }
