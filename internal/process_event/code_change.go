@@ -58,7 +58,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 
 	// get a list of ArgoCD applications and their manifests whose git URLs match the webhook event
-	appResList, err := argocd.GetApplicationChanges(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.Sha, eventInfo.ChangeRef, eventInfo.BaseRef)
+	appResList, err := argocd.GetApplicationChanges(ctx, eventInfo)
 	if err != nil {
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
 		_ = github.Status(ctx, isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)

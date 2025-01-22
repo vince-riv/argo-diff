@@ -9,6 +9,8 @@ import (
 
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
+
+	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
 const minVersion = "2.12.0"
@@ -55,8 +57,8 @@ func ConnectivityCheck() error {
 
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
 // and return their manifests.
-func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefaultRef, revision, changeRef, baseRef string) ([]ApplicationResourcesWithChanges, error) {
-	log.Trace().Msgf("GetApplicationChanges(%s, %s, %s, %s, %s, %s)", repoOwner, repoName, repoDefaultRef, revision, changeRef, baseRef)
+func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]ApplicationResourcesWithChanges, error) {
+	log.Trace().Msgf("GetApplicationChanges(%+v)", eventInfo)
 	var appResList []ApplicationResourcesWithChanges
 	argoApps, err := listApplications(ctx)
 	if err != nil {
@@ -66,7 +68,7 @@ func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefault
 	if len(argoApps.Items) == 0 {
 		return appResList, fmt.Errorf("empty ArgoCD app list")
 	}
-	apps, err := filterApplications(argoApps.Items, repoOwner, repoName, repoDefaultRef, changeRef, baseRef)
+	apps, err := filterApplications(argoApps.Items, eventInfo)
 	if err != nil {
 		return appResList, err
 	}
@@ -82,18 +84,19 @@ func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefault
 	}())
 
 	for _, app := range apps {
-		log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, revision)
+		log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, eventInfo.Sha)
 		var appResChanges ApplicationResourcesWithChanges
 		//appResChanges.ArgoApp, err = getApplication(ctx, app.ObjectMeta.Name)
 		appResChanges.ArgoApp = &app
 		if err != nil {
 			appResChanges.WarnStr = fmt.Sprintf("Failed to refresh application %s: %s", app.ObjectMeta.Name, err.Error())
 		} else {
-			appResChanges.ChangedResources, err = diffApplication(ctx, app.ObjectMeta.Name, revision)
+			appResChanges.ChangedResources, err = diffApplication(ctx, app.ObjectMeta.Name, eventInfo.Sha)
 			if err != nil {
 				appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
 			} else {
 				if len(appResChanges.ChangedResources) > 0 {
+					// MULTI-SRC: look for Application changes
 					appResList = append(appResList, appResChanges)
 				}
 			}
@@ -103,26 +106,32 @@ func GetApplicationChanges(ctx context.Context, repoOwner, repoName, repoDefault
 }
 
 // Returns a list of Applications whose git URLs match repo owner & name
-func filterApplications(a []v1alpha1.Application, repoOwner, repoName, repoDefaultRef, changeRef, baseRef string) ([]v1alpha1.Application, error) {
-	log.Trace().Msgf("filterApplications([%d apps], %s, %s, %s, %s, %s)", len(a), repoOwner, repoName, repoDefaultRef, changeRef, baseRef)
+// eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.ChangeRef, eventInfo.BaseRef string
+func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo) ([]v1alpha1.Application, error) {
+	log.Trace().Msgf("filterApplications([%d apps], %+v)", len(a), eventInfo)
 	var appList []v1alpha1.Application
-	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", repoOwner, repoName)
-	ghMatch2 := fmt.Sprintf("github.com/%s/%s", repoOwner, repoName)
+	// var srcIdxs []int
+	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", eventInfo.RepoOwner, eventInfo.RepoName)
+	ghMatch2 := fmt.Sprintf("github.com/%s/%s", eventInfo.RepoOwner, eventInfo.RepoName)
 	log.Debug().Msgf("filterApplications() - matching candidates against '%s' and '%s'", ghMatch1, ghMatch2)
 	for _, app := range a {
+		// idx := -1
 		if len(app.Spec.Sources) > 0 {
 			log.Info().Msgf("Application %s has multiple sources - skipping as it is not supported", app.ObjectMeta.Name)
 			continue
 		}
 		appSpecSource := app.Spec.GetSource()
-		if checkSource(appSpecSource, app.ObjectMeta.Name, ghMatch1, ghMatch2, baseRef, changeRef, repoDefaultRef, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
+		if checkSource(appSpecSource, app.ObjectMeta.Name, ghMatch1, ghMatch2, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
 			appList = append(appList, app)
 		}
 	}
 	return appList, nil
 }
 
-func checkSource(appSpecSource v1alpha1.ApplicationSource, appName, ghMatch1, ghMatch2, baseRef, changeRef, repoDefaultRef string, automatedSync bool) bool {
+func checkSource(appSpecSource v1alpha1.ApplicationSource, appName, ghMatch1, ghMatch2 string, eventInfo webhook.EventInfo, automatedSync bool) bool {
+	baseRef := eventInfo.BaseRef
+	changeRef := eventInfo.ChangeRef
+	repoDefaultRef := eventInfo.RepoDefaultRef
 	if !strings.HasSuffix(appSpecSource.RepoURL, ghMatch1) && !strings.HasSuffix(appSpecSource.RepoURL, ghMatch2) {
 		log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", appName, appSpecSource.RepoURL, ghMatch1, ghMatch2)
 		return false

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
+
+	wh "github.com/vince-riv/argo-diff/internal/webhook"
 )
 
 const testDataDir = "argocd_testdata"
@@ -40,7 +42,9 @@ func readFileToByteArray(fileName string) ([]byte, string, error) {
 func TestFilterApplications(t *testing.T) {
 	var a []v1alpha1.Application
 
-	result, _ := filterApplications(a, "o", "r", "m", "m", "")
+	// (argoApps.Items, repoOwner, repoName, repoDefaultRef, changeRef, baseRef
+	evtInfo := wh.EventInfo{RepoOwner: "o", RepoName: "r", RepoDefaultRef: "m", ChangeRef: "m", BaseRef: ""}
+	result, _ := filterApplications(a, evtInfo)
 	if len(result) != 0 {
 		t.Error("Empty param didn't lead to empty result")
 	}
@@ -57,46 +61,54 @@ func TestFilterApplications(t *testing.T) {
 		t.Errorf("decodeApplicationListPayload() failed: %s", err)
 	}
 
-	result, _ = filterApplications(a, "o", "r", "m", "m", "")
+	evtInfo = wh.EventInfo{RepoOwner: "o", RepoName: "r", RepoDefaultRef: "m", ChangeRef: "m", BaseRef: ""}
+	result, _ = filterApplications(a, evtInfo)
 	if len(result) != 0 {
 		t.Error("Unmatchable params didn't lead to empty result")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
+	result, _ = filterApplications(a, evtInfo)
 	if len(result) != 1 {
 		t.Error("Push to main should have matched 1 (auto-sync off)")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "main")
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "main"}
+	result, _ = filterApplications(a, evtInfo)
 	if len(result) != 1 {
 		t.Error("Push to dev should have matched")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "not_main")
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "not_main"}
+	result, _ = filterApplications(a, evtInfo)
 	if len(result) != 0 {
 		t.Error("Non-main baseRef should not have matched")
 	}
 
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
 	a[0].Spec.Source.TargetRevision = "main"
 	a[1].Spec.Source.TargetRevision = "main"
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	result, _ = filterApplications(a, evtInfo)
 	if len(result) != 1 {
 		t.Error("Push to main should have matched (targetRev main) (auto-sync off)")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "main")
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "main"}
+	result, _ = filterApplications(a, evtInfo)
 	if len(result) != 1 {
 		t.Error("Push to dev should have matched (targetRev main)")
 	}
 
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
 	a[1].Spec.SyncPolicy = &v1alpha1.SyncPolicy{}
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	result, _ = filterApplications(a, evtInfo)
 	if len(result) != 1 {
 		t.Error("Push to main should have matched (targetRev main) (auto-sync still off)")
 	}
 
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
 	a[1].Spec.SyncPolicy.Automated = &v1alpha1.SyncPolicyAutomated{}
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	result, _ = filterApplications(a, evtInfo)
 	if len(result) != 0 {
 		t.Error("Push to main should NOT have matched (targetRev main) (auto-sync ENABLED)")
 	}
