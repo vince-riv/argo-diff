@@ -68,7 +68,7 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	if len(argoApps.Items) == 0 {
 		return appResList, fmt.Errorf("empty ArgoCD app list")
 	}
-	apps, err := filterApplications(argoApps.Items, eventInfo)
+	apps, err := filterApplications(argoApps.Items, eventInfo, false)
 	if err != nil {
 		return appResList, err
 	}
@@ -107,22 +107,29 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 
 // Returns a list of Applications whose git URLs match repo owner & name
 // eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.ChangeRef, eventInfo.BaseRef string
-func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo) ([]v1alpha1.Application, error) {
+func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, multiSource bool) ([]v1alpha1.Application, error) {
 	log.Trace().Msgf("filterApplications([%d apps], %+v)", len(a), eventInfo)
 	var appList []v1alpha1.Application
-	// var srcIdxs []int
 	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", eventInfo.RepoOwner, eventInfo.RepoName)
 	ghMatch2 := fmt.Sprintf("github.com/%s/%s", eventInfo.RepoOwner, eventInfo.RepoName)
 	log.Debug().Msgf("filterApplications() - matching candidates against '%s' and '%s'", ghMatch1, ghMatch2)
 	for _, app := range a {
-		// idx := -1
-		if len(app.Spec.Sources) > 0 {
-			log.Info().Msgf("Application %s has multiple sources - skipping as it is not supported", app.ObjectMeta.Name)
-			continue
+		var sources []v1alpha1.ApplicationSource
+		singleSrc := app.Spec.GetSource()
+		pluralSrc := app.Spec.GetSources()
+		// GetSources() helper always returns a source, so check length of Sources slice
+		if multiSource && len(app.Spec.Sources) > 0 {
+			sources = pluralSrc
 		}
-		appSpecSource := app.Spec.GetSource()
-		if checkSource(appSpecSource, app.ObjectMeta.Name, ghMatch1, ghMatch2, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
-			appList = append(appList, app)
+		// GetSource() helper always returns a source, so check Source pointer
+		if !multiSource && app.Spec.Source != nil {
+			sources = []v1alpha1.ApplicationSource{singleSrc}
+		}
+		for _, appSpecSource := range sources {
+			if checkSource(appSpecSource, app.ObjectMeta.Name, ghMatch1, ghMatch2, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
+				appList = append(appList, app)
+				continue
+			}
 		}
 	}
 	return appList, nil
@@ -132,6 +139,9 @@ func checkSource(appSpecSource v1alpha1.ApplicationSource, appName, ghMatch1, gh
 	baseRef := eventInfo.BaseRef
 	changeRef := eventInfo.ChangeRef
 	repoDefaultRef := eventInfo.RepoDefaultRef
+	log.Trace().Msgf("checkSource() - appname: %s (autosync %t); github match %s, %s", appName, automatedSync, ghMatch1, ghMatch2)
+	log.Trace().Msgf("checkSource() - appSpecSource: %+v", appSpecSource)
+	log.Trace().Msgf("checkSource() - eventInfo: %+v", eventInfo)
 	if !strings.HasSuffix(appSpecSource.RepoURL, ghMatch1) && !strings.HasSuffix(appSpecSource.RepoURL, ghMatch2) {
 		log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", appName, appSpecSource.RepoURL, ghMatch1, ghMatch2)
 		return false
@@ -158,9 +168,10 @@ func checkSource(appSpecSource v1alpha1.ApplicationSource, appName, ghMatch1, gh
 			return false
 		}
 		if appSpecSource.TargetRevision != "HEAD" && changeRef == appSpecSource.TargetRevision && automatedSync {
-			log.Debug().Msgf("Filtering auto-sync application %s: changeRef %s = Target Rev %s", appName, changeRef, appSpecSource.TargetRevision)
+			log.Debug().Msgf("checkSource() - Filtering auto-sync application %s: changeRef %s = Target Rev %s", appName, changeRef, appSpecSource.TargetRevision)
 			return false
 		}
 	}
+	log.Debug().Msgf("checkSource() MATCH! application %s: changeRef %s = Target Rev %s", appName, changeRef, appSpecSource.TargetRevision)
 	return true
 }
