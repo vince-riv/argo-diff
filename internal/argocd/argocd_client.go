@@ -15,6 +15,7 @@ import (
 
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -138,6 +139,38 @@ func getApplication(ctx context.Context, appName string) (*v1alpha1.Application,
 	return &app, nil
 }
 */
+
+func appManifestHelper(input []byte) ([]map[string]interface{}, error) {
+	var manifests []map[string]interface{}
+	yamlDocs := strings.Split(string(input), "\n---")
+	for _, doc := range yamlDocs {
+		if strings.TrimSpace(doc) == "" {
+			continue // Skip empty documents
+		}
+		var manifest map[string]interface{}
+		err := yaml.Unmarshal([]byte(doc), &manifest)
+		if err != nil {
+			return manifests, err
+		}
+		manifests = append(manifests, manifest)
+	}
+	return manifests, nil
+}
+
+func getApplicationManifests(ctx context.Context, appName, revision string) ([]map[string]interface{}, error) {
+	// argocd app manifests argo-diff --revision HEAD
+	output, err := execArgoCdCli(ctx, []string{"app", "manifests", appName, "--revision", revision})
+	if err != nil {
+		log.Error().Err(err).Msgf("Get Argo application manifests for %s failed", appName)
+		return nil, err
+	}
+	manifests, err := appManifestHelper(output)
+	if err != nil {
+		log.Error().Err(err).Msgf("Decoding yaml output failed for %s at revision %s", appName, revision)
+		return manifests, err
+	}
+	return manifests, nil
+}
 
 func diffApplication(ctx context.Context, appName string, revision string) ([]AppResource, error) {
 	var appResList []AppResource

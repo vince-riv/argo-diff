@@ -1,6 +1,7 @@
 package argocd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,6 +16,8 @@ import (
 const testDataDir = "argocd_testdata"
 
 const payloadAppList = "payload-GET-applications-brief.json"
+const appManifestsOutput1 = "output-argocd-app-manifests-argoapps-namespace-only.txt"
+const appManifestsOutputArgoApps = "output-argocd-app-manifests-argoapps.txt"
 
 // const payloadAppRefresh = "payload-GET-application-refresh.json"
 
@@ -160,5 +163,45 @@ func TestVersionCheck(t *testing.T) {
 	}
 	if versionCheck("1.150.0") {
 		t.Error("v1.150.0 should not pass")
+	}
+}
+
+func TestArgoAppsWithChanges(t *testing.T) {
+	ctx := context.Background()
+	appResources := []AppResource{
+		AppResource{ApiVersion: "v1", Group: "apps", Kind: "Deployment", Namespace: "test", Name: "testdeploy"},
+		AppResource{ApiVersion: "v1", Group: "", Kind: "ConfigMap", Namespace: "test", Name: "testcm"},
+	}
+	result, err := argoAppsWithChanges(ctx, "testapp", appResources, "abcdef")
+	if err != nil {
+		t.Errorf("argoAppsWithChanges() erroed: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("Expected no results, got %d", len(result))
+	}
+}
+
+func TestManifestIsArgoApplication(t *testing.T) {
+	output, filepath, err := readFileToByteArray(appManifestsOutputArgoApps)
+	if err != nil {
+		t.Errorf("Failed to read %s: %v", filepath, err)
+	}
+	manifests, err := appManifestHelper(output)
+	if err != nil {
+		t.Errorf("Decoding yaml in %s failed: %v", filepath, err)
+	}
+	for i, manifest := range manifests {
+		isArgoApp := manifestIsArgoApplication(manifest)
+		if i == 0 || i == 1 {
+			if isArgoApp {
+				t.Errorf("Manifest index %d in %s marked as Argo Application, but isn't", i, filepath)
+			}
+		} else if i == 2 || i == 3 {
+			if !isArgoApp {
+				t.Errorf("Manifest index %d in %s not marked as Argo Application, but is", i, filepath)
+			}
+		} else {
+			t.Errorf("Expected 4 manifests in %s", filepath)
+		}
 	}
 }

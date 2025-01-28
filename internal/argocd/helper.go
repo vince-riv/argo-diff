@@ -3,16 +3,20 @@ package argocd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/yaml.v2"
 
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
+const argoApplicationApiGroup = "argoproj.io"
+const argoApplicationApiKind = "Application"
 const minVersion = "2.12.0"
 
 // checks if a given version is greater than or equal to required version
@@ -55,6 +59,40 @@ func ConnectivityCheck() error {
 	return fmt.Errorf("client (%s) or Server (%s) version is not %s or greater", clientV, serverV, minVersion)
 }
 
+func appListToMap(appList []v1alpha1.Application) map[string]v1alpha1.Application {
+	argoAppMap := make(map[string]v1alpha1.Application)
+	for _, app := range appList {
+		argoAppMap[app.ObjectMeta.Name] = app
+	}
+	return argoAppMap
+}
+
+func getApplicationChanges(ctx context.Context, app *v1alpha1.Application, revision string, revs []string, pos []int) (ApplicationResourcesWithChanges, error) {
+	var appResChanges ApplicationResourcesWithChanges
+	var err error
+	appResChanges.ArgoApp = app
+	if revision != "" {
+		appResChanges.ChangedResources, err = diffApplication(ctx, app.ObjectMeta.Name, revision)
+	} else {
+		if len(revs) < 1 || len(revs) != len(pos) {
+			return appResChanges, fmt.Errorf("getApplicationChanges() called as multie-src with bad revs/pos count [%d/%d]", len(revs), len(pos))
+		}
+		//appResChanges.ChangedResources, err = diffApplicationMultiSrc(ctx, app.ObjectMeta.Name, revs, pos)
+		log.Warn().Msg("MULTI-SRC DIFF NEEDS TO BE WRITTEN")
+	}
+	return appResChanges, err
+}
+
+func getMultiSrcAppChanges(ctx context.Context, appCur *v1alpha1.Application, appNew *v1alpha1.Application, revision string) (ApplicationResourcesWithChanges, error) {
+	var appResChanges ApplicationResourcesWithChanges
+	var err error
+	return appResChanges, err
+	// for each source, verify that source URL matches; append source revision from appNew
+	//   if source URLs don't match, return empty change list
+	//   if source URL matches github event, append source revision from event
+	// return getApplicationChanges()
+}
+
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
 // and return their manifests.
 func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]ApplicationResourcesWithChanges, error) {
@@ -68,6 +106,7 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	if len(argoApps.Items) == 0 {
 		return appResList, fmt.Errorf("empty ArgoCD app list")
 	}
+	appLookup := appListToMap(argoApps.Items)
 	apps, err := filterApplications(argoApps.Items, eventInfo, false)
 	if err != nil {
 		return appResList, err
@@ -83,25 +122,43 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		return
 	}())
 
+	multiSrcAppNamesDiffed := []string{}
 	for _, app := range apps {
 		log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, eventInfo.Sha)
-		var appResChanges ApplicationResourcesWithChanges
-		//appResChanges.ArgoApp, err = getApplication(ctx, app.ObjectMeta.Name)
-		appResChanges.ArgoApp = &app
+		//app, err = getApplication(ctx, app.ObjectMeta.Name)
+		//if err != nil {
+		//	appResChanges.WarnStr = fmt.Sprintf("Failed to refresh application %s: %s", app.ObjectMeta.Name, err.Error())
+		//	continue
+		//}
+		appResChanges, err := getApplicationChanges(ctx, &app, eventInfo.Sha, []string{}, []int{})
 		if err != nil {
-			appResChanges.WarnStr = fmt.Sprintf("Failed to refresh application %s: %s", app.ObjectMeta.Name, err.Error())
-		} else {
-			appResChanges.ChangedResources, err = diffApplication(ctx, app.ObjectMeta.Name, eventInfo.Sha)
+			// TODO why set WarnStr when appResChanges isn't appended?
+			appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
+		} else if len(appResChanges.ChangedResources) > 0 {
+			appResList = append(appResList, appResChanges)
+			appsWithChanges, err := argoAppsWithChanges(ctx, app.ObjectMeta.Name, appResChanges.ChangedResources, eventInfo.Sha)
 			if err != nil {
-				appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
+				log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.ObjectMeta.Name)
 			} else {
-				if len(appResChanges.ChangedResources) > 0 {
-					// MULTI-SRC: look for Application changes
-					appResList = append(appResList, appResChanges)
+				// diff matching multi-source application
+				log.Info().Msgf("%d Argo applications detected to have changes via %s", len(appsWithChanges), app.ObjectMeta.Name)
+				for _, subApp := range appsWithChanges {
+					if subAppCur, ok := appLookup[subApp.ObjectMeta.Name]; ok {
+						multiSrcAppNamesDiffed = append(multiSrcAppNamesDiffed, subApp.ObjectMeta.Name)
+						subAppResChanges, err := getMultiSrcAppChanges(ctx, &subAppCur, &subApp, eventInfo.Sha)
+						if err != nil {
+							subAppResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", subApp.ObjectMeta.Name, err.Error())
+						} else if len(subAppResChanges.ChangedResources) > 0 {
+							appResList = append(appResList, appResChanges)
+						}
+					} else {
+						log.Info().Msgf("Application %s not found in current ArgoCD app list", subApp.ObjectMeta.Name)
+					}
 				}
 			}
 		}
 	}
+	// TODO call filter multi-src applications, diff each not in multiSrcAppNamesDiffed
 	return appResList, nil
 }
 
@@ -110,9 +167,6 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, multiSource bool) ([]v1alpha1.Application, error) {
 	log.Trace().Msgf("filterApplications([%d apps], %+v)", len(a), eventInfo)
 	var appList []v1alpha1.Application
-	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", eventInfo.RepoOwner, eventInfo.RepoName)
-	ghMatch2 := fmt.Sprintf("github.com/%s/%s", eventInfo.RepoOwner, eventInfo.RepoName)
-	log.Debug().Msgf("filterApplications() - matching candidates against '%s' and '%s'", ghMatch1, ghMatch2)
 	for _, app := range a {
 		var sources []v1alpha1.ApplicationSource
 		singleSrc := app.Spec.GetSource()
@@ -126,7 +180,7 @@ func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, m
 			sources = []v1alpha1.ApplicationSource{singleSrc}
 		}
 		for _, appSpecSource := range sources {
-			if checkSource(appSpecSource, app.ObjectMeta.Name, ghMatch1, ghMatch2, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
+			if checkSource(appSpecSource, app.ObjectMeta.Name, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
 				appList = append(appList, app)
 				continue
 			}
@@ -135,15 +189,25 @@ func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, m
 	return appList, nil
 }
 
-func checkSource(appSpecSource v1alpha1.ApplicationSource, appName, ghMatch1, ghMatch2 string, eventInfo webhook.EventInfo, automatedSync bool) bool {
+func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
+	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", repoOwner, repoName)
+	ghMatch2 := fmt.Sprintf("github.com/%s/%s", repoOwner, repoName)
+	log.Debug().Msgf("gitRepoMatch() - matching candidates against '%s' and '%s'", ghMatch1, ghMatch2)
+	if !strings.HasSuffix(repoUrl, ghMatch1) && !strings.HasSuffix(repoUrl, ghMatch2) {
+		return false
+	}
+	return true
+}
+
+func checkSource(appSpecSource v1alpha1.ApplicationSource, appName string, eventInfo webhook.EventInfo, automatedSync bool) bool {
 	baseRef := eventInfo.BaseRef
 	changeRef := eventInfo.ChangeRef
 	repoDefaultRef := eventInfo.RepoDefaultRef
-	log.Trace().Msgf("checkSource() - appname: %s (autosync %t); github match %s, %s", appName, automatedSync, ghMatch1, ghMatch2)
+	log.Trace().Msgf("checkSource() - appname: %s (autosync %t)", appName, automatedSync)
 	log.Trace().Msgf("checkSource() - appSpecSource: %+v", appSpecSource)
 	log.Trace().Msgf("checkSource() - eventInfo: %+v", eventInfo)
-	if !strings.HasSuffix(appSpecSource.RepoURL, ghMatch1) && !strings.HasSuffix(appSpecSource.RepoURL, ghMatch2) {
-		log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't much %s or %s", appName, appSpecSource.RepoURL, ghMatch1, ghMatch2)
+	if !gitRepoMatch(appSpecSource.RepoURL, eventInfo.RepoOwner, eventInfo.RepoName) {
+		log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't mach owner/repo %s/%s", appName, appSpecSource.RepoURL, eventInfo.RepoOwner, eventInfo.RepoName)
 		return false
 	}
 	if baseRef != "" {
@@ -174,4 +238,65 @@ func checkSource(appSpecSource v1alpha1.ApplicationSource, appName, ghMatch1, gh
 	}
 	log.Debug().Msgf("checkSource() MATCH! application %s: changeRef %s = Target Rev %s", appName, changeRef, appSpecSource.TargetRevision)
 	return true
+}
+
+func manifestIsArgoApplication(manifest map[string]interface{}) bool {
+	if kind, ok := manifest["kind"].(string); ok && kind == argoApplicationApiKind {
+		if apiVersion, ok := manifest["apiVersion"].(string); ok {
+			apiVersionSplit := strings.Split(apiVersion, "/")
+			if apiVersionSplit[0] == argoApplicationApiGroup {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func genericManifestToArgoApplication(manifest map[string]interface{}) (v1alpha1.Application, error) {
+	var app v1alpha1.Application
+	yamlData, err := yaml.Marshal(manifest)
+	if err != nil {
+		return app, err
+	}
+	err = yaml.Unmarshal(yamlData, &app)
+	if err != nil {
+		return app, err
+	}
+	return app, nil
+}
+
+func argoAppsWithChanges(ctx context.Context, appName string, appResources []AppResource, revision string) ([]v1alpha1.Application, error) {
+	argoAppNamesFound := []string{}
+	argoApps := []v1alpha1.Application{}
+	// look through app resource changes for argoproj.io Applications
+	for _, appRes := range appResources {
+		if appRes.Group == argoApplicationApiGroup && appRes.Kind == argoApplicationApiKind {
+			argoAppNamesFound = append(argoAppNamesFound, appRes.Name)
+		}
+	}
+	if len(argoAppNamesFound) == 0 {
+		// bail out if no applications have been found
+		return argoApps, nil
+	}
+	// generate full manifests for our application at the specified revision
+	manifests, err := getApplicationManifests(ctx, appName, revision)
+	if err != nil {
+		return argoApps, err
+	}
+	// look through resulting manifests for the argo apps found above
+	for _, manifest := range manifests {
+		if !manifestIsArgoApplication(manifest) {
+			continue
+		}
+		app, err := genericManifestToArgoApplication(manifest)
+		if err != nil {
+			log.Error().Err(err).Msg("Detected an argo application, but Unable to convert")
+		} else {
+			if name := app.ObjectMeta.Name; slices.Contains(argoAppNamesFound, name) && len(app.Spec.Sources) > 0 {
+				// only return multi-source apps that have changes
+				argoApps = append(argoApps, app)
+			}
+		}
+	}
+	return argoApps, nil
 }
