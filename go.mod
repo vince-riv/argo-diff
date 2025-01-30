@@ -3,8 +3,8 @@ module github.com/vince-riv/argo-diff
 go 1.22.8
 
 require (
-	github.com/argoproj/argo-cd/v2 v2.13.2
-	github.com/argoproj/gitops-engine v0.7.1-0.20240905010810-bd7681ae3f8b
+	github.com/argoproj/argo-cd/v2 v2.13.4
+	github.com/argoproj/gitops-engine v0.7.1-0.20250129155113-4c6e03c46314
 	github.com/bradleyfalzon/ghinstallation/v2 v2.11.0
 	github.com/google/go-github/v66 v66.0.0
 	github.com/hexops/gotextdiff v1.0.3
@@ -109,7 +109,7 @@ require (
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.starlark.net v0.0.0-20230525235612-a134d8f9ddca // indirect
 	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/mod v0.17.0 // indirect
+	golang.org/x/mod v0.19.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
@@ -117,7 +117,7 @@ require (
 	golang.org/x/term v0.27.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
-	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
+	golang.org/x/tools v0.23.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	google.golang.org/grpc v1.66.2 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
