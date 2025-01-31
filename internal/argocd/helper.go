@@ -148,8 +148,8 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		//}
 		appResChanges, err := getApplicationChanges(ctx, &app, eventInfo.Sha, nil, nil)
 		if err != nil {
-			// TODO why set WarnStr when appResChanges isn't appended?
 			appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
+			appResList = append(appResList, appResChanges)
 		} else if len(appResChanges.ChangedResources) > 0 {
 			appResList = append(appResList, appResChanges)
 			appsWithChanges, err := argoAppsWithChanges(ctx, app.ObjectMeta.Name, appResChanges.ChangedResources, eventInfo.Sha)
@@ -205,8 +205,8 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		}
 		appResChanges, err := getApplicationChanges(ctx, &app, "", revList, srcPos)
 		if err != nil {
-			// TODO why set WarnStr when appResChanges isn't appended?
 			appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
+			appResList = append(appResList, appResChanges)
 		} else if len(appResChanges.ChangedResources) > 0 {
 			appResList = append(appResList, appResChanges)
 		}
