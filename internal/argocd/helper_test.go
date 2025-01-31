@@ -1,6 +1,7 @@
 package argocd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,11 +9,15 @@ import (
 	"testing"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
+
+	wh "github.com/vince-riv/argo-diff/internal/webhook"
 )
 
 const testDataDir = "argocd_testdata"
 
 const payloadAppList = "payload-GET-applications-brief.json"
+const appManifestsOutput1 = "output-argocd-app-manifests-argoapps-namespace-only.txt"
+const appManifestsOutputArgoApps = "output-argocd-app-manifests-argoapps.txt"
 
 // const payloadAppRefresh = "payload-GET-application-refresh.json"
 
@@ -40,7 +45,8 @@ func readFileToByteArray(fileName string) ([]byte, string, error) {
 func TestFilterApplications(t *testing.T) {
 	var a []v1alpha1.Application
 
-	result, _ := filterApplications(a, "o", "r", "m", "m", "")
+	evtInfo := wh.EventInfo{RepoOwner: "o", RepoName: "r", RepoDefaultRef: "m", ChangeRef: "m", BaseRef: ""}
+	result, _ := filterApplications(a, evtInfo, false)
 	if len(result) != 0 {
 		t.Error("Empty param didn't lead to empty result")
 	}
@@ -57,48 +63,91 @@ func TestFilterApplications(t *testing.T) {
 		t.Errorf("decodeApplicationListPayload() failed: %s", err)
 	}
 
-	result, _ = filterApplications(a, "o", "r", "m", "m", "")
+	evtInfo = wh.EventInfo{RepoOwner: "o", RepoName: "r", RepoDefaultRef: "m", ChangeRef: "m", BaseRef: ""}
+	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 0 {
 		t.Error("Unmatchable params didn't lead to empty result")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
+	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 1 {
 		t.Error("Push to main should have matched 1 (auto-sync off)")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "main")
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "main"}
+	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 1 {
 		t.Error("Push to dev should have matched")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "not_main")
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "not_main"}
+	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 0 {
 		t.Error("Non-main baseRef should not have matched")
 	}
 
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
 	a[0].Spec.Source.TargetRevision = "main"
 	a[1].Spec.Source.TargetRevision = "main"
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 1 {
 		t.Error("Push to main should have matched (targetRev main) (auto-sync off)")
 	}
 
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "dev", "main")
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "main"}
+	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 1 {
 		t.Error("Push to dev should have matched (targetRev main)")
 	}
 
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
 	a[1].Spec.SyncPolicy = &v1alpha1.SyncPolicy{}
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 1 {
 		t.Error("Push to main should have matched (targetRev main) (auto-sync still off)")
 	}
 
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
 	a[1].Spec.SyncPolicy.Automated = &v1alpha1.SyncPolicyAutomated{}
-	result, _ = filterApplications(a, "vince-riv", "argo-diff", "main", "refs/heads/main", "")
+	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 0 {
 		t.Error("Push to main should NOT have matched (targetRev main) (auto-sync ENABLED)")
+	}
+}
+
+func TestFilterApplicationsMultiSource(t *testing.T) {
+	var a []v1alpha1.Application
+
+	evtInfo := wh.EventInfo{RepoOwner: "o", RepoName: "r", RepoDefaultRef: "m", ChangeRef: "m", BaseRef: ""}
+	result, _ := filterApplications(a, evtInfo, true)
+	if len(result) != 0 {
+		t.Error("Empty param didn't lead to empty result")
+	}
+
+	payload, _, err := readFileToByteArray(payloadAppList)
+	if err != nil {
+		t.Errorf("Failed to read %s: %v", payloadAppList, err)
+	}
+	var appList v1alpha1.ApplicationList
+	if err := json.Unmarshal(payload, &appList); err != nil {
+		t.Errorf("Error decoding ApplicationList payload: %v", err)
+	}
+	a = appList.Items
+	if err != nil {
+		t.Errorf("decodeApplicationListPayload() failed: %s", err)
+	}
+
+	evtInfo = wh.EventInfo{RepoOwner: "o", RepoName: "r", RepoDefaultRef: "m", ChangeRef: "m", BaseRef: ""}
+	result, _ = filterApplications(a, evtInfo, true)
+	if len(result) != 0 {
+		t.Error("Unmatchable params didn't lead to empty result")
+	}
+
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
+	result, _ = filterApplications(a, evtInfo, true)
+	if len(result) != 1 {
+		t.Errorf("Push to main should have matched 1 (auto-sync off); got %d", len(result))
 	}
 }
 
@@ -114,5 +163,45 @@ func TestVersionCheck(t *testing.T) {
 	}
 	if versionCheck("1.150.0") {
 		t.Error("v1.150.0 should not pass")
+	}
+}
+
+func TestArgoAppsWithChanges(t *testing.T) {
+	ctx := context.Background()
+	appResources := []AppResource{
+		AppResource{ApiVersion: "v1", Group: "apps", Kind: "Deployment", Namespace: "test", Name: "testdeploy"},
+		AppResource{ApiVersion: "v1", Group: "", Kind: "ConfigMap", Namespace: "test", Name: "testcm"},
+	}
+	result, err := argoAppsWithChanges(ctx, "testapp", appResources, "abcdef")
+	if err != nil {
+		t.Errorf("argoAppsWithChanges() erroed: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("Expected no results, got %d", len(result))
+	}
+}
+
+func TestManifestIsArgoApplication(t *testing.T) {
+	output, filepath, err := readFileToByteArray(appManifestsOutputArgoApps)
+	if err != nil {
+		t.Errorf("Failed to read %s: %v", filepath, err)
+	}
+	manifests, err := appManifestHelper(output)
+	if err != nil {
+		t.Errorf("Decoding yaml in %s failed: %v", filepath, err)
+	}
+	for i, manifest := range manifests {
+		isArgoApp := manifestIsArgoApplication(manifest)
+		if i == 0 || i == 1 {
+			if isArgoApp {
+				t.Errorf("Manifest index %d in %s marked as Argo Application, but isn't", i, filepath)
+			}
+		} else if i == 2 || i == 3 {
+			if !isArgoApp {
+				t.Errorf("Manifest index %d in %s not marked as Argo Application, but is", i, filepath)
+			}
+		} else {
+			t.Errorf("Expected 4 manifests in %s", filepath)
+		}
 	}
 }

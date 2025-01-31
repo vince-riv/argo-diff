@@ -1,0 +1,80 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    argocd.argoproj.io/instance: argo-apps
+  name: argo-diff-testing
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+  labels:
+    argocd.argoproj.io/instance: argo-apps
+  name: argo-diff-testing
+  namespace: argocd
+spec:
+  description: Apps related to ArgoCD
+  destinations:
+  - namespace: argo-diff-testing
+    server: https://kubernetes.default.svc
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+  sourceRepos:
+  - ssh://git@github.com/vince-riv/argo-diff-testing.git
+  - ghcr.io/vince-riv/chart
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  labels:
+    argocd.argoproj.io/instance: argo-apps
+  name: argo-diff
+  namespace: argocd
+spec:
+  destination:
+    namespace: argocd
+    server: https://kubernetes.default.svc
+  project: argocd-extras
+  source:
+    path: k8s
+    repoURL: ssh://git@github.com/vince-riv/argo-diff.git
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=true
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  labels:
+    argocd.argoproj.io/instance: argo-apps
+  name: argo-diff-testing
+  namespace: argocd
+spec:
+  destination:
+    namespace: argo-diff-testing
+    server: https://kubernetes.default.svc
+  project: argo-diff-testing
+  sources:
+  - ref: values
+    repoURL: ssh://git@github.com/vince-riv/argo-diff-testing.git
+    targetRevision: main
+  - chart: argo-diff
+    helm:
+      valueFiles:
+      - $values/conf/argo-diff-values.yaml
+    repoURL: ghcr.io/vince-riv/chart
+    targetRevision: 0.7.0
+  syncPolicy:
+    syncOptions:
+    - ServerSideApply=true

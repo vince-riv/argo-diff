@@ -156,3 +156,29 @@ func TestExtractKubernetesFields(t *testing.T) {
 		t.Errorf("Expected name 'loki-clusterrole', got %s", name)
 	}
 }
+
+func TestAppManifestHelper(t *testing.T) {
+	output, filepath, err := readFileToByteArray(appManifestsOutput1)
+	if err != nil {
+		t.Errorf("Failed to read %s: %v", filepath, err)
+	}
+	manifests, err := appManifestHelper(output)
+	if err != nil {
+		t.Errorf("appManifestHelper() failed on contents of %s: %v", filepath, err)
+	}
+	if len(manifests) != 1 {
+		t.Errorf("appManifestHelper() - expected 1 manifest, got %d", len(manifests))
+	}
+
+	output, filepath, err = readFileToByteArray(appManifestsOutputArgoApps)
+	if err != nil {
+		t.Errorf("Failed to read %s: %v", filepath, err)
+	}
+	manifests, err = appManifestHelper(output)
+	if err != nil {
+		t.Errorf("appManifestHelper() failed on contents of %s: %v", filepath, err)
+	}
+	if len(manifests) != 4 {
+		t.Errorf("appManifestHelper() - expected 4 manifests, got %d", len(manifests))
+	}
+}

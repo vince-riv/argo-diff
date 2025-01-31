@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
+	"sigs.k8s.io/yaml"
 )
 
 var (
@@ -139,17 +141,57 @@ func getApplication(ctx context.Context, appName string) (*v1alpha1.Application,
 }
 */
 
-func diffApplication(ctx context.Context, appName string, revision string) ([]AppResource, error) {
+func appManifestHelper(input []byte) ([]K8sManifest, error) {
+	var manifests []K8sManifest
+	yamlDocs := strings.Split(string(input), "\n---")
+	for _, doc := range yamlDocs {
+		if strings.TrimSpace(doc) == "" {
+			continue // Skip empty documents
+		}
+		var manifest K8sManifest
+		manifest.YamlSrc = []byte(doc)
+		err := yaml.Unmarshal([]byte(doc), &manifest.Unstruct.Object)
+		if err != nil {
+			return manifests, err
+		}
+		manifests = append(manifests, manifest)
+	}
+	return manifests, nil
+}
+
+func getApplicationManifests(ctx context.Context, appName, revision string) ([]K8sManifest, error) {
+	// argocd app manifests argo-diff --revision HEAD
+	output, err := execArgoCdCli(ctx, []string{"app", "manifests", appName, "--revision", revision})
+	if err != nil {
+		log.Error().Err(err).Msgf("Get Argo application manifests for %s failed", appName)
+		return nil, err
+	}
+	manifests, err := appManifestHelper(output)
+	if err != nil {
+		log.Error().Err(err).Msgf("Decoding yaml output failed for %s at revision %s", appName, revision)
+		return manifests, err
+	}
+	return manifests, nil
+}
+
+func diffApplication(ctx context.Context, appName string, revision string, revisions []string, srcPos []int) ([]AppResource, error) {
 	var appResList []AppResource
 	log.Trace().Msg("diffApplication() called")
 	// argocd app diff argo-diff --revision XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX [--refresh]
-	output, err := execArgoCdCli(ctx, []string{
-		"app",
-		"diff",
-		appName,
-		"--revision",
-		revision,
-	})
+	// argocd app diff argo-diff --revisions XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX --source-positions 1 --revisions a.b.c --source-positions 2
+	args := []string{"app", "diff", appName, "--revision", revision}
+	if len(revisions) > 0 {
+		args = []string{"app", "diff", appName}
+		for _, rev := range revisions {
+			args = append(args, "--revisions")
+			args = append(args, rev)
+		}
+		for _, pos := range srcPos {
+			args = append(args, "--source-positions")
+			args = append(args, strconv.Itoa(pos))
+		}
+	}
+	output, err := execArgoCdCli(ctx, args)
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			if exitErr.ExitCode() == 1 {
