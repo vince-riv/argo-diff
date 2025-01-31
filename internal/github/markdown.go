@@ -217,7 +217,7 @@ func (a ArgoAppMarkdown) OverviewStr(continued bool) string {
 	md += syncString(a.SyncStatus) + "\n"
 	md += healthString(a.HealthStatus, a.HealthMsg) + "\n\n"
 	if a.WarnStr != "" {
-		md += a.WarnStr + "\n\n"
+		md += "```\n" + a.WarnStr + "```\n\n"
 	}
 	return md
 }

@@ -29,6 +29,8 @@ func init() {
 	httpBearerToken = os.Getenv("ARGOCD_AUTH_TOKEN")
 	insecure := strings.ToLower(os.Getenv("ARGOCD_SERVER_INSECURE")) == "true"
 	plaintext := strings.ToLower(os.Getenv("ARGOCD_SERVER_PLAINTEXT")) == "true"
+	grpcWeb := strings.ToLower(os.Getenv("ARGOCD_GRPC_WEB")) == "true"
+	grpcWebRoot := os.Getenv("ARGOCD_GRPC_WEB_ROOT_PATH")
 	if serverAddr == "" || httpBearerToken == "" {
 		log.Warn().Msg("Initialized with incomplete ArgoCD server config")
 	}
@@ -39,6 +41,12 @@ func init() {
 	}
 	if plaintext {
 		commonCliArgv = append(commonCliArgv, "--plaintext")
+	}
+	if grpcWeb {
+		commonCliArgv = append(commonCliArgv, "--grpc-web")
+	}
+	if grpcWebRoot != "" {
+		commonCliArgv = append(commonCliArgv, "--grpc-web-root-path", grpcWebRoot)
 	}
 }
 
@@ -207,10 +215,16 @@ func diffApplication(ctx context.Context, appName string, revision string, revis
 					appResList = append(appResList, appRes)
 				}
 				return appResList, nil
+			} else {
+				execError := fmt.Errorf("%s: %s: %s", strings.Join(args, " "), err.Error(), exitErr.Stderr)
+				log.Error().Err(err).Msgf("Application diff for %s, revision %s, failed", appName, revision)
+				return nil, execError
 			}
+		} else {
+			log.Error().Err(err).Msgf("Application diff for %s, revision %s, had an unknown failure", appName, revision)
+			execError := fmt.Errorf("%s: %s", strings.Join(args, " "), err.Error())
+			return nil, execError
 		}
-		log.Error().Err(err).Msgf("Application diff for %s, revision %s, failed", appName, revision)
-		return nil, err
 	}
 	log.Trace().Msgf("Application %s revision %s has no changes", appName, revision)
 	return appResList, nil
