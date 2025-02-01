@@ -1,0 +1,34 @@
+## "Build" (but it was pre-built)
+FROM alpine:latest AS build
+
+# TARGETPLATFORM is set automatically by BuildKit (e.g., "linux/amd64" or "linux/arm64")
+ARG TARGETPLATFORM
+
+WORKDIR /src
+
+COPY . .
+
+RUN ls -l temp/ ; cp temp/argo-diff-`echo ${TARGETPLATFORM} | tr / -` argo-diff
+
+## ArgoCD
+FROM quay.io/argoproj/argocd:v2.13.2 AS argocd
+
+## Final image
+FROM alpine:latest
+
+# add new user
+RUN adduser -D argo-diff
+
+# install diff
+RUN apk add --no-cache diffutils
+
+USER argo-diff
+WORKDIR /app
+
+COPY --from=build --chown=argo-diff /src/argo-diff argo-diff
+COPY --from=build --chown=argo-diff /src/git-rev.txt git-rev.txt
+COPY --from=argocd --chmod=755 /usr/local/bin/argocd /usr/local/bin/argocd
+
+EXPOSE 8080
+
+CMD ["./argo-diff"]
