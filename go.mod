@@ -10,6 +10,8 @@ require (
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/pflag v1.0.5
+	k8s.io/apimachinery v0.31.0
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
@@ -128,7 +130,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.31.0 // indirect
 	k8s.io/apiextensions-apiserver v0.31.2 // indirect
-	k8s.io/apimachinery v0.31.0 // indirect
 	k8s.io/apiserver v0.31.0 // indirect
 	k8s.io/cli-runtime v0.31.0 // indirect
 	k8s.io/client-go v11.0.1-0.20190816222228-6d55c1b1f1ca+incompatible // indirect
@@ -145,7 +146,6 @@ require (
 	sigs.k8s.io/kustomize/api v0.17.2 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.17.1 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 replace (
