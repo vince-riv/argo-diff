@@ -122,13 +122,33 @@ func getCommentUser(ctx context.Context) error {
 func GetPullRequest(ctx context.Context, owner, repo string, prNum int) (*github.PullRequest, error) {
 	pr, resp, err := commentClient.PullRequests.Get(ctx, owner, repo, prNum)
 	if resp != nil {
-		log.Info().Msgf("%s received when calling client.Users.Get() via go-github", resp.Status)
+		log.Info().Msgf("%s received when calling commentClient.PullRequests.Get() via go-github", resp.Status)
 	}
 	if err != nil {
 		log.Error().Err(err).Msgf("Unable to fetch pull request %s/%s#%d", owner, repo, prNum)
 		return nil, err
 	}
 	return pr, nil
+}
+
+// Returns list of files in a pull request
+func ListPullRequestFiles(ctx context.Context, owner, repo string, prNum int) ([]string, error) {
+	var fileList []string
+	cfs, resp, err := commentClient.PullRequests.ListFiles(ctx, owner, repo, prNum, nil)
+	if resp != nil {
+		log.Info().Msgf("%s received when calling commentClient.PullRequests.ListFiles() via go-github", resp.Status)
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, cf := range cfs {
+		if cf != nil && cf.Filename != nil {
+			fileList = append(fileList, *cf.Filename)
+		} else {
+			log.Warn().Msgf("nil value found in call to list files in pull request %s/%s#%d", owner, repo, prNum)
+		}
+	}
+	return fileList, nil
 }
 
 // Returns true if sha is HEAD of the pull request

@@ -239,6 +239,11 @@ func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, m
 			}
 		}
 	}
+	if len(eventInfo.ChangedFiles) > 0 {
+		log.Debug().Msg("Attempting to filter applications based on manifest-generate-paths annotation")
+		return FilterApplicationsByPath(appList, eventInfo.ChangedFiles), nil
+	}
+	log.Debug().Msg("No changed files in event info; skipping check for manifest-generate-paths")
 	return appList, nil
 }
 
