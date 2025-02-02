@@ -21,7 +21,6 @@ RUN adduser -D argo-diff
 # install diff
 RUN apk add --no-cache diffutils
 
-USER argo-diff
 WORKDIR /app
 
 COPY --from=build --chown=argo-diff /src/argo-diff argo-diff
@@ -30,4 +29,5 @@ COPY --from=argocd --chmod=755 /usr/local/bin/argocd /usr/local/bin/argocd
 
 EXPOSE 8080
 
+USER argo-diff
 CMD ["./argo-diff"]
