@@ -34,7 +34,7 @@ env:
 
 jobs:
 
-  docker-build-and-push:
+  go-build-and-docker-buildx:
     runs-on: ubuntu-latest
     #runs-on: [self-hosted]
     permissions:
@@ -46,6 +46,32 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build linux/amd64
+        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
+        env:
+          GOOS: linux
+          GOARCH: amd64
+      - name: Build linux/arm64
+        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
+        env:
+          GOOS: linux
+          GOARCH: arm64
+      - name: Build linux/s390x
+        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
+        env:
+          GOOS: linux
+          GOARCH: s390x
+      - name: Build linux/ppc64le
+        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
+        env:
+          GOOS: linux
+          GOARCH: ppc64le
+
       - name: Prepare git-rev.txt
         run: |
           set -x
@@ -55,13 +81,11 @@ jobs:
             echo ${GITHUB_SHA::8} > git-rev.txt
           fi
       -
-        name: Set up Docker Context for Buildx
-        run: docker context create builders
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          endpoint: builders
       -
         name: Log in to container register
         id: login-ghcr
@@ -88,6 +112,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile.ghaction
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
