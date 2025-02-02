@@ -1,0 +1,14 @@
+## argo-diff
+FROM ghcr.io/vince-riv/argo-diff:pr-83 AS argo-diff
+
+## ArgoCD
+#ARG  ARGOCD_VERSION
+FROM quay.io/argoproj/argocd:v2.13.2 AS argocd
+
+## github action
+FROM alpine:latest
+
+COPY --from=argo-diff --chmod=755 /app/argo-diff /usr/local/bin/argo-diff
+COPY --from=argocd --chmod=755 /usr/local/bin/argocd /usr/local/bin/argocd
+
+CMD ["/usr/local/bin/argo-diff"]

@@ -1,0 +1,51 @@
+---
+name: 'argo-diff'
+description: 'Preview k8s manifest changes using argocd diff'
+inputs:
+  argocd_auth_token:
+    description: 'Bearer token for ArgoCD (value passed to --auth-token)'
+    required: true
+  argocd_grpc_web:
+    description: 'Set --grpc-web flag for argocd cli (true/false)'
+    required: false
+    default: 'false'
+  argocd_grpc_web_root_path:
+    description: 'Value for --grpc-web-root-path for argocd cli'
+    required: false
+    default: ''
+  argocd_server:
+    description: 'ArgoCD server name (value passed to --server)'
+    required: true
+  argocd_server_insecure:
+    description: 'Set --insecure flag for argocd cli (true/false)'
+    required: false
+    default: 'false'
+  argocd_server_plaintext:
+    description: 'Set --plaintext flag for argocd cli (true/false)'
+    required: false
+    default: 'false'
+  argocd_ui_base_url:
+    description: 'Base URL of ArgoCD UI (usually server name prefixed with https://)'
+    required: false
+    default: ''
+  #argocd_version:
+  #  description: 'Version of argocd cli to use'
+  #  required: false
+  #  default: 'v2.13.2'
+  github_token:
+    description: 'Bearer token for github API calls (usually secrets.GITHUB_TOKEN)'
+    required: true
+
+runs:
+  using: 'docker'
+  image: 'actions/Dockerfile.actions'
+  env:
+    ARGOCD_AUTH_TOKEN: ${{ inputs.argocd_auth_token }}
+    ARGOCD_GRPC_WEB: ${{ inputs.argocd_grpc_web }}
+    ARGOCD_GRPC_WEB_ROOT_PATH: ${{ inputs.argocd_grpc_web_root_path }}
+    ARGOCD_SERVER_ADDR: ${{ inputs.argocd_server }}
+    ARGOCD_SERVER_INSECURE: ${{ inputs.argocd_server_insecure }}
+    ARGOCD_SERVER_PLAINTEXT: ${{ inputs.argocd_server_plaintext }}
+    ARGOCD_UI_BASE_URL: ${{ inputs.argocd_ui_base_url }}
+    #ARGOCD_VERSION: ${{ inputs.argocd_version }}
+    GITHUB_TOKEN: ${{ inputs.github_token }}
