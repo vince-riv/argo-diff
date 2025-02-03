@@ -75,12 +75,10 @@ func startServer(listenHost string, listenPort int, githubWebhookSecret string, 
 }
 
 func main() {
+	var err error
 	flag.Parse()
 
 	githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
-	if githubWebhookSecret == "" && eventFile == "" {
-		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
-	}
 
 	// make sure critical secrets are set in the environment
 	if os.Getenv("ARGOCD_AUTH_TOKEN") == "" {
@@ -89,8 +87,8 @@ func main() {
 	if os.Getenv("ARGOCD_SERVER_ADDR") == "" {
 		log.Fatal().Msg("ARGOCD_SERVER_ADDR environment variable not set")
 	}
-	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" {
-		log.Info().Msg("GITHUB_PERSONAL_ACCESS_TOKEN environment variable not set - assuming Github App installation")
+	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" && os.Getenv("GITHUB_TOKEN") == "" {
+		log.Info().Msg("GITHUB_PERSONAL_ACCESS_TOKEN or GITHUB_TOKEN environment variable not set - assuming Github App installation")
 		for _, e := range []string{"GITHUB_APP_ID", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY"} {
 			if os.Getenv(e) == "" {
 				log.Fatal().Msgf("%s environment variable is not set for Github App installations", e)
@@ -102,17 +100,27 @@ func main() {
 		serverDevMode = true
 	}
 
-	if err := argocd.ConnectivityCheck(); err != nil {
+	if err = argocd.ConnectivityCheck(); err != nil {
 		log.Fatal().Err(err).Msg("Connectivity check to ArgoCD failed")
 	}
 
-	if err := github.ConnectivityCheck(); err != nil {
+	if err = github.ConnectivityCheck(); err != nil {
 		log.Fatal().Err(err).Msg("Connectivity check to Github API failed")
 	}
 
-	if eventFile != "" {
-		server.ProcessFileEvent(eventFile, serverDevMode) // nolint:errcheck
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		log.Info().Msg("GITHUB_ACTIONS set in the environemtn - running once with event data from environment")
+		err = server.ProcessGithubAction()
+	} else if eventFile != "" {
+		err = server.ProcessFileEvent(eventFile, serverDevMode)
 	} else {
+		if githubWebhookSecret == "" {
+			log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
+		}
 		startServer(serverListenHost, serverListenPort, githubWebhookSecret, serverDevMode)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 }

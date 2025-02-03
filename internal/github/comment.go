@@ -32,6 +32,8 @@ func init() {
 	// Create Github API client
 	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
 		commentClient = github.NewClient(nil).WithAuthToken(githubPAT)
+	} else if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+		commentClient = github.NewClient(nil).WithAuthToken(githubToken)
 	} else {
 		tr := http.DefaultTransport
 		appId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)

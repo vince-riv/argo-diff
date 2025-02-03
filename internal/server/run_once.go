@@ -5,12 +5,39 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/rs/zerolog/log"
 	"github.com/vince-riv/argo-diff/internal/process_event"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
+
+func eventInfoFromEnv() (*webhook.EventInfo, error) {
+	if ghEvent := os.Getenv("GITHUB_EVENT_NAME"); ghEvent != "pull_request" {
+		return nil, fmt.Errorf("unexpected value for GITHUB_EVENT_NAME: %s (expecting pull_request)", ghEvent)
+	}
+	prRef := os.Getenv("GITHUB_REF")
+	prRefParts := strings.Split(prRef, "/")
+	if len(prRefParts) < 3 {
+		return nil, fmt.Errorf("env var GITHUB_REF (%s) expected to be in format refs/pull/<NUM>/merge", prRef)
+	}
+	prNum, err := strconv.Atoi(prRefParts[2])
+	if err != nil {
+		return nil, fmt.Errorf("failed extract pull request number from GITHUB_REF %s: %s", prRef, err.Error())
+	}
+	evt := webhook.EventInfo{
+		RepoOwner: os.Getenv("GITHUB_REPOSITORY_OWNER"),
+		RepoName:  os.Getenv("GITHUB_REPOSITORY"),
+		PrNum:     prNum,
+		ChangeRef: os.Getenv("GITHUB_HEAD_REF"),
+		BaseRef:   os.Getenv("GITHUB_BASE_REF"),
+		Refresh:   true, // have argo-diff refresh sha, change-ref, and base-ref
+	}
+
+	return &evt, nil
+}
 
 func eventInfoFromFile(filePath string) (*webhook.EventInfo, error) {
 	var reader io.Reader
@@ -48,6 +75,19 @@ func ProcessFileEvent(filePath string, devMode bool) error {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go process_event.ProcessCodeChange(*evtp, devMode, &wg)
+	wg.Wait()
+	return nil
+}
+
+func ProcessGithubAction() error {
+	log.Debug().Msg("ProcessGithubAction()")
+	evtp, err := eventInfoFromEnv()
+	if err != nil {
+		return err
+	}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go process_event.ProcessCodeChange(*evtp, true, &wg)
 	wg.Wait()
 	return nil
 }
