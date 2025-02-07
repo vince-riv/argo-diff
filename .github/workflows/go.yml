@@ -27,6 +27,9 @@ permissions:
   # Optional: allow write access to checks to allow the action to annotate code in the PR.
   checks: write
 
+env:
+  ARGO_DIFF_CI: 'true'
+
 jobs:
   build:
     runs-on: ubuntu-latest

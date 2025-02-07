@@ -20,15 +20,21 @@ var (
 	commentClient      *github.Client
 	appsClient         *github.Client
 	commentClientIsApp bool
+	commentIdentifier  string
 	commentLogin       string
+	isGithubAction     bool
 	mux                *sync.RWMutex
 )
-
-const commentIdentifier = "<!-- comment produced by argo-diff -->"
 
 func init() {
 	commentClientIsApp = false
 	mux = &sync.RWMutex{}
+	isGithubAction := os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
+	if isGithubAction {
+		commentIdentifier = fmt.Sprintf("<!-- comment produced by argo-diff - %s -->", os.Getenv("GITHUB_REF"))
+	} else {
+		commentIdentifier = "<!-- comment produced by argo-diff -->"
+	}
 	// Create Github API client
 	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
 		commentClient = github.NewClient(nil).WithAuthToken(githubPAT)
@@ -65,6 +71,10 @@ func ConnectivityCheck() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	if isGithubAction {
+		log.Info().Msg("Running in github actions - skipping connectivity test")
+		return nil
+	}
 	log.Info().Msg("Calling Github API for a connectivity test")
 	return getCommentUser(ctx)
 }
@@ -204,9 +214,11 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		log.Error().Msg("Cannot call github API - I don't have a client set")
 		return nil, fmt.Errorf("no github commenter client")
 	}
-	err := getCommentUser(ctx)
-	if err != nil {
-		return nil, err
+	if !isGithubAction {
+		err := getCommentUser(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for i, checkComments := 0, true; checkComments; i++ {
 		checkComments = false
@@ -223,8 +235,10 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		}
 		log.Debug().Msgf("Checking %d comments in %s/%s#%d", len(comments), owner, repo, prNum)
 		for _, c := range comments {
-			if *c.User.Login == commentLogin && strings.Contains(*c.Body, commentIdentifier) {
-				res = append(res, c)
+			if strings.Contains(*c.Body, commentIdentifier) {
+				if isGithubAction || *c.User.Login == commentLogin {
+					res = append(res, c)
+				}
 			}
 		}
 		if resp.NextPage > 0 {
