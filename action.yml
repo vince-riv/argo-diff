@@ -35,6 +35,14 @@ inputs:
   github_token:
     description: 'Bearer token for github API calls (usually secrets.GITHUB_TOKEN)'
     required: true
+  log_level:
+    description: 'Log level of argo-diff'
+    required: false
+    default: debug
+  repo_default_ref:
+    decription: 'Default branch of repository (eg: "main"); only needed when `HEAD` is specified as target revision in ArgoCD application source'
+    required: false
+    default: ''
 
 runs:
   using: 'docker'
@@ -48,4 +56,7 @@ runs:
     ARGOCD_SERVER_PLAINTEXT: ${{ inputs.argocd_server_plaintext }}
     ARGOCD_UI_BASE_URL: ${{ inputs.argocd_ui_base_url }}
     #ARGOCD_VERSION: ${{ inputs.argocd_version }}
+    GITHUB_ACTIONS: "true"
     GITHUB_TOKEN: ${{ inputs.github_token }}
+    LOG_LEVEL: ${{ inputs.log_level }}
+    REPO_DEFAULT_REF: ${{ inputs.repo_default_ref }}

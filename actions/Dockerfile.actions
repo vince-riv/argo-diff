@@ -12,3 +12,4 @@ FROM ghcr.io/vince-riv/argo-diff:pr-83 AS argo-diff
 #COPY --from=argocd --chmod=755 /usr/local/bin/argocd /usr/local/bin/argocd
 
 #CMD ["/usr/local/bin/argo-diff"]
+CMD ["/app/argo-diff"]
