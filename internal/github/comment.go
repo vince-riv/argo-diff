@@ -31,6 +31,7 @@ func init() {
 	mux = &sync.RWMutex{}
 	isGithubAction := os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
 	if isGithubAction {
+		log.Debug().Msg("Running in github actions")
 		commentIdentifier = fmt.Sprintf("<!-- comment produced by argo-diff - %s -->", os.Getenv("GITHUB_REF"))
 	} else {
 		commentIdentifier = "<!-- comment produced by argo-diff -->"
@@ -69,12 +70,12 @@ func ConnectivityCheck() error {
 	if commentClient == nil {
 		return errors.New("github client is not initialized")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	if isGithubAction {
 		log.Info().Msg("Running in github actions - skipping connectivity test")
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	log.Info().Msg("Calling Github API for a connectivity test")
 	return getCommentUser(ctx)
 }
