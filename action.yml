@@ -1,5 +1,5 @@
 ---
-name: 'argo-diff'
+
 description: 'Preview k8s manifest changes using argocd diff'
 inputs:
   argocd_auth_token:
@@ -46,7 +46,7 @@ inputs:
 
 runs:
   using: 'docker'
-  image: 'actions/Dockerfile.actions'
+  image: 'Dockerfile.actions'
   env:
     ARGOCD_AUTH_TOKEN: ${{ inputs.argocd_auth_token }}
     ARGOCD_GRPC_WEB: ${{ inputs.argocd_grpc_web }}
