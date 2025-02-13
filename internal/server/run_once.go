@@ -19,21 +19,20 @@ func eventInfoFromEnv() (*webhook.EventInfo, error) {
 		return nil, fmt.Errorf("unexpected value for GITHUB_EVENT_NAME: %s (expecting pull_request)", ghEvent)
 	}
 	prRef := os.Getenv("GITHUB_REF")
-	prRefParts := strings.Split(prRef, "/")
-	if len(prRefParts) < 3 {
-		return nil, fmt.Errorf("env var GITHUB_REF (%s) expected to be in format refs/pull/<NUM>/merge", prRef)
-	}
+	prRefParts := strings.SplitN(prRef, "/", 4)
 	prNum, err := strconv.Atoi(prRefParts[2])
 	if err != nil {
 		return nil, fmt.Errorf("failed extract pull request number from GITHUB_REF %s: %s", prRef, err.Error())
 	}
+	repoParts := strings.SplitN(os.Getenv("GITHUB_REPOSITORY"), "/", 2)
 	evt := webhook.EventInfo{
-		RepoOwner: os.Getenv("GITHUB_REPOSITORY_OWNER"),
-		RepoName:  os.Getenv("GITHUB_REPOSITORY"),
-		PrNum:     prNum,
-		ChangeRef: os.Getenv("GITHUB_HEAD_REF"),
-		BaseRef:   os.Getenv("GITHUB_BASE_REF"),
-		Refresh:   true, // have argo-diff refresh sha, change-ref, and base-ref
+		RepoOwner:      repoParts[0],
+		RepoName:       repoParts[1],
+		RepoDefaultRef: os.Getenv("REPO_DEFAULT_REF"),
+		PrNum:          prNum,
+		ChangeRef:      os.Getenv("GITHUB_HEAD_REF"),
+		BaseRef:        os.Getenv("GITHUB_BASE_REF"),
+		Refresh:        true, // have argo-diff refresh sha, change-ref, and base-ref
 	}
 
 	return &evt, nil

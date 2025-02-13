@@ -29,7 +29,7 @@ var (
 func init() {
 	commentClientIsApp = false
 	mux = &sync.RWMutex{}
-	isGithubAction := os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
+	isGithubAction = os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
 	if isGithubAction {
 		log.Debug().Msg("Running in github actions")
 		commentIdentifier = fmt.Sprintf("<!-- comment produced by argo-diff - %s -->", os.Getenv("GITHUB_REF"))

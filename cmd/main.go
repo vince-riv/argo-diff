@@ -104,23 +104,35 @@ func main() {
 		log.Fatal().Err(err).Msg("Connectivity check to ArgoCD failed")
 	}
 
+	// if running under Github Actions, skip github connectivity check
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		log.Info().Msg("GITHUB_ACTIONS set in the environemtn - running once with event data from environment")
+		err = server.ProcessGithubAction()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// check github connectivity for run-once and server modes
 	if err = github.ConnectivityCheck(); err != nil {
 		log.Fatal().Err(err).Msg("Connectivity check to Github API failed")
 	}
 
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
-		log.Info().Msg("GITHUB_ACTIONS set in the environemtn - running once with event data from environment")
-		err = server.ProcessGithubAction()
-	} else if eventFile != "" {
+	// if event file is defined, process it and exit
+	if eventFile != "" {
 		err = server.ProcessFileEvent(eventFile, serverDevMode)
-	} else {
-		if githubWebhookSecret == "" {
-			log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
 		}
-		startServer(serverListenHost, serverListenPort, githubWebhookSecret, serverDevMode)
+		return
 	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+
+	// other assume we're running as a web server
+	if githubWebhookSecret == "" {
+		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
 	}
+	startServer(serverListenHost, serverListenPort, githubWebhookSecret, serverDevMode)
 }
