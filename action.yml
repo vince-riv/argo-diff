@@ -38,7 +38,7 @@ inputs:
   log_level:
     description: 'Log level of argo-diff'
     required: false
-    default: debug
+    default: info
   repo_default_ref:
     decription: 'Default branch of repository (eg: "main"); only needed when `HEAD` is specified as target revision in ArgoCD application source'
     required: false
