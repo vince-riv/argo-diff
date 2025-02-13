@@ -34,6 +34,10 @@ func init() {
 		statusClient = github.NewClient(nil).WithAuthToken(githubPAT)
 		return
 	}
+	if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+		statusClient = github.NewClient(nil).WithAuthToken(githubToken)
+		return
+	}
 	tr := http.DefaultTransport
 	appId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)
 	if err != nil {
