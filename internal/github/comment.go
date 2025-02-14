@@ -21,6 +21,7 @@ var (
 	appsClient         *github.Client
 	commentClientIsApp bool
 	commentPreamble    string
+	contextStr         string
 	commentIdentifier  string
 	commentLogin       string
 	isGithubAction     bool
@@ -31,7 +32,7 @@ func init() {
 	commentClientIsApp = false
 	mux = &sync.RWMutex{}
 	isGithubAction = os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
-	contextStr := strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
+	contextStr = strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
 	commentPreamble = strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE"))
 	if commentPreamble == "" {
 		commentPreamble = contextStr
@@ -84,6 +85,20 @@ func ConnectivityCheck() error {
 	defer cancel()
 	log.Info().Msg("Calling Github API for a connectivity test")
 	return getCommentUser(ctx)
+}
+
+func IsRefreshComment(comment string) bool {
+	input := strings.ToLower(strings.TrimSpace(comment))
+	if input == "argo diff" || input == "argo-diff" {
+		return true
+	}
+	if input == "argo diff "+strings.ToLower(contextStr) {
+		return true
+	}
+	if input == "argo-diff "+strings.ToLower(contextStr) {
+		return true
+	}
+	return false
 }
 
 // Populates commentLogin singleton with the Github user associated with our github client
