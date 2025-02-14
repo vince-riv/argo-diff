@@ -20,6 +20,7 @@ var (
 	commentClient      *github.Client
 	appsClient         *github.Client
 	commentClientIsApp bool
+	commentPreamble    string
 	commentIdentifier  string
 	commentLogin       string
 	isGithubAction     bool
@@ -30,11 +31,16 @@ func init() {
 	commentClientIsApp = false
 	mux = &sync.RWMutex{}
 	isGithubAction = os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
+	contextStr := strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
+	commentPreamble = strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE"))
+	if commentPreamble == "" {
+		commentPreamble = contextStr
+	}
 	if isGithubAction {
 		log.Debug().Msg("Running in github actions")
-		commentIdentifier = fmt.Sprintf("<!-- comment produced by argo-diff - %s -->", os.Getenv("GITHUB_REF"))
+		commentIdentifier = fmt.Sprintf("<!-- comment produced by argo-diff[%s] - %s -->", contextStr, os.Getenv("GITHUB_REF"))
 	} else {
-		commentIdentifier = "<!-- comment produced by argo-diff -->"
+		commentIdentifier = fmt.Sprintf("<!-- comment produced by argo-diff[%s] -->", contextStr)
 	}
 	// Create Github API client
 	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
@@ -263,10 +269,15 @@ func Comment(ctx context.Context, owner, repo string, prNum int, sha string, com
 	}
 	nextExistingCommentIdx := 0
 	for i, commentBody := range commentBodies {
-		commentBody += "\n\n"
-		commentBody += commentIdentifier
-		commentBody += "\n"
-		newComment := github.IssueComment{Body: &commentBody}
+		newCommentBody := commentPreamble
+		if newCommentBody != "" {
+			newCommentBody += "\n\n"
+		}
+		newCommentBody += commentBody
+		newCommentBody += "\n\n"
+		newCommentBody += commentIdentifier
+		newCommentBody += "\n"
+		newComment := github.IssueComment{Body: &newCommentBody}
 		var existingComment *github.IssueComment
 		var issueComment *github.IssueComment
 		var resp *github.Response

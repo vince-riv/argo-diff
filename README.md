@@ -162,6 +162,8 @@ jobs:
 | argocd_server_insecure    | no       | `false`  | Set --insecure flag for argocd cli (true/false) |
 | argocd_server_plaintext   | no       | `false`  | Set --plaintext flag for argocd cli (true/false) |
 | argocd_ui_base_url        | no       |          | Base URL of ArgoCD UI (usually server name prefixed with https://) |
+| comment_preamble          | no       |          | String/markdown prefixed to comments. Keep to 150 chars or less in length |
+| context_str               | no       |          | Unique identifier of argo-diff instance. Use when deploying multiple instances (eg: one per cluster). Recommended to be a brief cluster nickname |
 | github_token              | yes      |          | Bearer token for github API calls (usually secrets.GITHUB_TOKEN) |
 | log_level                 | no       | `info`   | Log level of argo-diff |
 | repo_default_ref          | no       |          | Default branch of repository (eg: "main"). NOTE: only needed when `HEAD` is specified as target revision in ArgoCD application source |

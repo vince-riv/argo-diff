@@ -3,7 +3,7 @@
     "node_id": "IC_kwDOKoDcU85s_DGy",
     "url": "https://api.github.com/repos/vince-riv/argo-diff/issues/comments/1111111111",
     "html_url": "https://github.com/vince-riv/argo-diff/pull/1#issuecomment-1111111111",
-    "body": "argo-diff test comment\r\n\r\n<!-- comment produced by argo-diff -->",
+    "body": "argo-diff test comment\r\n\r\n<!-- comment produced by argo-diff[] -->",
     "user": {
         "login": "testuser",
         "id": 1234567,
