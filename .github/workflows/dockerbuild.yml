@@ -57,16 +57,19 @@ jobs:
           GOOS: linux
           GOARCH: amd64
       - name: Build linux/arm64
+        if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
         run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
         env:
           GOOS: linux
           GOARCH: arm64
       - name: Build linux/s390x
+        if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
         run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
         env:
           GOOS: linux
           GOARCH: s390x
       - name: Build linux/ppc64le
+        if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
         run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
         env:
           GOOS: linux
@@ -108,7 +111,8 @@ jobs:
             type=ref,event=pr
             type=sha,event=pr
       -
-        name: Build and push
+        name: Build and push linux/amd64
+        if: ${{ github.event_name == 'pull_request' }} ## only push amd64 on PRs
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -116,4 +120,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+          platforms: linux/amd64
+      -
+        name: Build and push multi-arch
+        if: ${{ github.event_name != 'pull_request' }} ## don't push multi-arch on PRs
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.no-build
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
