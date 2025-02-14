@@ -32,6 +32,14 @@ inputs:
   #  description: 'Version of argocd cli to use'
   #  required: false
   #  default: 'v2.13.2'
+  comment_preamble:
+    description: 'String/markdown prefixed to comments. Keep to 150 chars or less in length'
+    required: false
+    default: ''
+  context_str:
+    description: 'Unique identifier of argo-diff instance. Use when deploying multiple instances (eg: one per cluster). Recommended to be a brief cluster nickname'
+    required: false
+    default: ''
   github_token:
     description: 'Bearer token for github API calls (usually secrets.GITHUB_TOKEN)'
     required: true
@@ -48,6 +56,8 @@ runs:
   using: 'docker'
   image: 'Dockerfile.actions'
   env:
+    ARGO_DIFF_COMMENT_PREAMBLE: ${{ inputs.comment_preamble }}
+    ARGO_DIFF_CONTEXT_STR: ${{ inputs.context_str }}
     ARGOCD_AUTH_TOKEN: ${{ inputs.argocd_auth_token }}
     ARGOCD_GRPC_WEB: ${{ inputs.argocd_grpc_web }}
     ARGOCD_GRPC_WEB_ROOT_PATH: ${{ inputs.argocd_grpc_web_root_path }}

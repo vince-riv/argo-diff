@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v66/github"
@@ -25,9 +26,9 @@ const StatusFailure = "failure"
 const StatusError = "error"
 
 func init() {
-	statusContextEnv := os.Getenv("GITHUB_STATUS_CONTEXT_STR")
-	if statusContextEnv != "" {
-		statusContextStr = statusContextEnv
+	contextStr := strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
+	if contextStr != "" {
+		statusContextStr = "argo-diff/" + contextStr
 	}
 	// Create Github API client
 	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {

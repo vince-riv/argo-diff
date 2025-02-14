@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/go-github/v66/github"
 	"github.com/rs/zerolog/log"
+
+	argoDiffGh "github.com/vince-riv/argo-diff/internal/github"
 )
 
 // Data structure for information passed by github webhook events
@@ -144,8 +146,7 @@ func ProcessComment(payload []byte) (EventInfo, error) {
 	prInfo.RepoOwner = *repo.Owner.Login
 	prInfo.RepoName = *repo.Name
 	prInfo.RepoDefaultRef = *repo.DefaultBranch
-	// TODO ToLower() and look at context string
-	if issueComment.Body == nil || strings.TrimSpace(*issueComment.Body) != "argo diff" {
+	if issueComment.Body == nil || !argoDiffGh.IsRefreshComment(*issueComment.Body) {
 		log.Info().Msg("Ignoring pull request comment")
 		return prInfo, nil
 	}
