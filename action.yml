@@ -32,6 +32,10 @@ inputs:
   #  description: 'Version of argocd cli to use'
   #  required: false
   #  default: 'v2.13.2'
+  comment_line_max_chars:
+    description: 'Any individual line in Pull Request comments by argo-diff longer than this are truncated.'
+    required: false
+    default: ''
   comment_preamble:
     description: 'String/markdown prefixed to comments. Keep to 150 chars or less in length'
     required: false
@@ -66,6 +70,7 @@ runs:
     ARGOCD_SERVER_PLAINTEXT: ${{ inputs.argocd_server_plaintext }}
     ARGOCD_UI_BASE_URL: ${{ inputs.argocd_ui_base_url }}
     #ARGOCD_VERSION: ${{ inputs.argocd_version }}
+    COMMENT_LINE_MAX_CHARS: ${{ inputs.comment_line_max_chars }}
     GITHUB_ACTIONS: "true"
     GITHUB_TOKEN: ${{ inputs.github_token }}
     LOG_LEVEL: ${{ inputs.log_level }}
