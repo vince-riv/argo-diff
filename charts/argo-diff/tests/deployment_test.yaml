@@ -1,0 +1,107 @@
+---
+suite: deployment tests
+templates:
+  - deployment.yaml
+  - configmap.yaml
+  - secret.yaml
+tests:
+  - it: happy path
+    chart:
+      appVersion: 1.0.0
+    release:
+      name: argo-diff
+    template: deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 5
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: "[0-9a-z]+"
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: "[0-9a-z]+"
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/vince-riv/argo-diff:1.0.0"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: LOG_LEVEL, value: "info"}
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: argo-diff-env
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: argo-diff-env
+  - it: overrides
+    set:
+      logLevel: debug
+      deployment.annotations:
+        is_unittest: "yes"
+      deployment.podAnnotations:
+        pod_annotation: "set"
+      deployment.replicas: 3
+      deployment.revisionHistoryLimit: 9
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations.is_unittest
+          value: "yes"
+      - equal:
+          path: spec.template.metadata.annotations.pod_annotation
+          value: "set"
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 9
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: LOG_LEVEL, value: "debug"}
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: RELEASE-NAME-argo-diff-env
+  - it: non-helm-secret
+    set:
+      secret.create: false
+      secret.name: "test-argo-diff-env"
+    template: deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: "[0-9a-z]+"
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/secret"]
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: test-argo-diff-env
+  - it: non-helm-configMapName
+    set:
+      config.configMapCreate: false
+      config.configMapName: "testing-env"
+    template: deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/config"]
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: "[0-9a-z]+"
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: testing-env

@@ -183,27 +183,28 @@ following table describes accepted environment variables and their respective Gi
 **Important**: Valid Github API credentials are required to run. So either the `GITHUB_APP_*`
 variables must be set, or `GITHUB_TOKEN` or `GITHUB_PERSONAL_ACCESS_TOKEN` must be set.
 
-| Environment Variable         | Input Name                | Required    | Default  | Description |
-| ---------------------------- | ------------------------- | ----------- | -------- | ----------- |
-| APP_ENV                      | N/A                       | no          |          | Set to 'dev' during local development. |
-| ARGOCD_AUTH_TOKEN            | argocd_auth_token         | yes         |          | Bearer token for ArgoCD (value passed to --auth-token) |
-| ARGOCD_CLI_CMD_NAME          | N/A                       | no          | `argocd` | When set, specifies the argocd cli command name. (Can be used to override the version of argocd argo-diff but requires the user to make it available |
-| ARGOCD_GRPC_WEB              | argocd_grpc_web           | no          | `false`  | Set --grpc-web flag for argocd cli (true/false) |
-| ARGOCD_GRPC_WEB_ROOT_PATH    | argocd_grpc_web_root_path | no          |          | Value for --grpc-web-root-path for argocd cli |
-| ARGOCD_SERVER_ADDR           | argocd_server             | yes         |          | ArgoCD server name (value passed to --server) |
-| ARGOCD_SERVER_INSECURE       | argocd_server_insecure    | no          | `false`  | Set --insecure flag for argocd cli (true/false) |
-| ARGOCD_SERVER_PLAINTEXT      | argocd_server_plaintext   | no          | `false`  | Set --plaintext flag for argocd cli (true/false) |
-| ARGOCD_UI_BASE_URL           | argocd_ui_base_url        | no          |          | Base URL of ArgoCD UI (usually server name prefixed with https://) |
-| ARGO_DIFF_COMMENT_PREAMBLE   | comment_preamble          | no          |          | String/markdown prefixed to comments. Keep to 150 chars or less in length |
-| ARGO_DIFF_CONTEXT_STR        | context_str               | no          |          | Unique identifier of argo-diff instance. Use when deploying multiple instances (eg: one per cluster). Recommended to be a brief cluster nickname |
-| COMMENT_LINE_MAX_CHARS       | comment_line_max_chars    | no          | `175`    | Any individual line in Pull Request comments by argo-diff longer than this are truncated. |
-| GITHUB_APP_ID                | N/A                       | no          |          | Github Application Id (see deployment instructions)  |
-| GITHUB_APP_INSTALLATION_ID   | N/A                       | no          |          | Github Application Installation Id (see deployment instructions) |
-| GITHUB_APP_PRIVATE_KEY       | N/A                       | no          |          | Github Application Private Key (see deployment instructions) |
-| GITHUB_PERSONAL_ACCESS_TOKEN | N/A                       | no          |          | Bearer token for github API calls; same as `GITHUB_TOKEN` |
-| GITHUB_TOKEN                 | github_token              | yes for GHA |          | Bearer token for github API calls (in Github Actions workflow, usually `secrets.GITHUB_TOKEN`); Required in Github Actions |
-| LOG_LEVEL                    | log_level                 | no          | `info`   | Log level of argo-diff |
-| REPO_DEFAULT_REF             | repo_default_ref          | no          |          | Default branch of repository (eg: "main"). NOTE: only needed in Github Actions when `HEAD` is specified as target revision in ArgoCD application source |
+| Environment Variable         | Input Name                | Required         | Default  | Description |
+| ---------------------------- | ------------------------- | ---------------- | -------- | ----------- |
+| APP_ENV                      | N/A                       | no               |          | Set to 'dev' during local development. |
+| ARGOCD_AUTH_TOKEN            | argocd_auth_token         | yes              |          | Bearer token for ArgoCD (value passed to --auth-token) |
+| ARGOCD_CLI_CMD_NAME          | N/A                       | no               | `argocd` | When set, specifies the argocd cli command name. (Can be used to override the version of argocd argo-diff but requires the user to make it available |
+| ARGOCD_GRPC_WEB              | argocd_grpc_web           | no               | `false`  | Set --grpc-web flag for argocd cli (true/false) |
+| ARGOCD_GRPC_WEB_ROOT_PATH    | argocd_grpc_web_root_path | no               |          | Value for --grpc-web-root-path for argocd cli |
+| ARGOCD_SERVER_ADDR           | argocd_server             | yes              |          | ArgoCD server name (value passed to --server) |
+| ARGOCD_SERVER_INSECURE       | argocd_server_insecure    | no               | `false`  | Set --insecure flag for argocd cli (true/false) |
+| ARGOCD_SERVER_PLAINTEXT      | argocd_server_plaintext   | no               | `false`  | Set --plaintext flag for argocd cli (true/false) |
+| ARGOCD_UI_BASE_URL           | argocd_ui_base_url        | no               |          | Base URL of ArgoCD UI (usually server name prefixed with https://) |
+| ARGO_DIFF_COMMENT_PREAMBLE   | comment_preamble          | no               |          | String/markdown prefixed to comments. Keep to 150 chars or less in length |
+| ARGO_DIFF_CONTEXT_STR        | context_str               | no               |          | Unique identifier of argo-diff instance. Use when deploying multiple instances (eg: one per cluster). Recommended to be a brief cluster nickname |
+| COMMENT_LINE_MAX_CHARS       | comment_line_max_chars    | no               | `175`    | Any individual line in Pull Request comments by argo-diff longer than this are truncated. |
+| GITHUB_APP_ID                | N/A                       | no               |          | Github Application Id (see deployment instructions)  |
+| GITHUB_APP_INSTALLATION_ID   | N/A                       | no               |          | Github Application Installation Id (see deployment instructions) |
+| GITHUB_APP_PRIVATE_KEY       | N/A                       | no               |          | Github Application Private Key (see deployment instructions) |
+| GITHUB_PERSONAL_ACCESS_TOKEN | N/A                       | no               |          | Bearer token for github API calls; same as `GITHUB_TOKEN` |
+| GITHUB_TOKEN                 | github_token              | yes for GHA      |          | Bearer token for github API calls (in Github Actions workflow, usually `secrets.GITHUB_TOKEN`); Required in Github Actions |
+| GITHUB_WEBHOOK_SECRET        | N/A                       | yes for deployed |          | Shared secret for Github webhook validation; Required when deployed |
+| LOG_LEVEL                    | log_level                 | no               | `info`   | Log level of argo-diff |
+| REPO_DEFAULT_REF             | repo_default_ref          | no               |          | Default branch of repository (eg: "main"). NOTE: only needed in Github Actions when `HEAD` is specified as target revision in ArgoCD application source |
 
 NOTE: When running via Github Actions, argo-diff will use the following environment
 variables set by Github: GITHUB_ACTIONS, GITHUB_BASE_REF, GITHUB_EVENT_NAME,
