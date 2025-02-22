@@ -1,0 +1,55 @@
+---
+suite: ingress tests
+template:
+  - ingress.yaml
+tests:
+  - it: default ingress
+    set:
+      ingress.enabled: true
+    template: ingress.yaml
+    capabilities:
+      apiVersions:
+        - networking.k8s.io/v1
+    asserts:
+      - containsDocument:
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          name: RELEASE-NAME-argo-diff
+      - notExists:
+          path: spec.ingressClassName
+      - contains:
+          path: spec.rules
+          content:
+            host: "chart-example.local"
+            http:
+              paths:
+                - path: /
+                  pathType: ImplementationSpecific
+                  backend:
+                    service:
+                      name: RELEASE-NAME-argo-diff
+                      port:
+                        name: http
+  - it: ingress with options
+    release:
+      name: argo-diff
+    set:
+      ingress.enabled: true
+      ingress.className: testing
+      ingress.annotations:
+        is_unittest: "yes"
+    template: ingress.yaml
+    capabilities:
+      apiVersions:
+        - networking.k8s.io/v1
+    asserts:
+      - containsDocument:
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          name: argo-diff
+      - equal:
+          path: spec.ingressClassName
+          value: testing
+      - equal:
+          path: metadata.annotations.is_unittest
+          value: "yes"
