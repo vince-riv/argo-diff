@@ -1,0 +1,41 @@
+---
+suite: service tests
+template:
+  - service.yaml
+tests:
+  - it: default service
+    template: service.yaml
+    asserts:
+      - containsDocument:
+          apiVersion: v1
+          kind: Service
+          name: RELEASE-NAME-argo-diff
+      - equal:
+          path: spec.type
+          value: "ClusterIP"
+      - equal:
+          path: spec.ports
+          value:
+            - port: 8080
+              targetPort: http
+              protocol: TCP
+              name: http
+  - it: service with options
+    release:
+      name: argo-diff
+    set:
+      service.type: testing
+      service.annotations:
+        is_unittest: "yes"
+    template: service.yaml
+    asserts:
+      - containsDocument:
+          apiVersion: v1
+          kind: Service
+          name: argo-diff
+      - equal:
+          path: metadata.annotations.is_unittest
+          value: "yes"
+      - equal:
+          path: spec.type
+          value: "testing"

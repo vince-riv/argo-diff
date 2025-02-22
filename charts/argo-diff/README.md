@@ -20,20 +20,40 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| affinity | object | `{}` |  |
-| autoscaling.enabled | bool | `false` |  |
-| autoscaling.maxReplicas | int | `100` |  |
-| autoscaling.minReplicas | int | `1` |  |
-| autoscaling.targetCPUUtilizationPercentage | int | `80` |  |
 | command[0] | string | `"/app/argo-diff"` |  |
-| config.argocdServerAddr | string | `""` | REQUIRED: hostname and/or port of the ArgoCD server (eg: argocd.domain.tld or argocd.domain.tld:8080) |
-| config.argocdServerInsecure | string | `"false"` | flag to enable/disable TLS verification when communicating to the ArgoCD server |
-| config.argocdServerPlainText | string | `"false"` | flag to enable/disable TLS negotiation (ie: set to true when the ArgoCD server does not have TLS/SSL) |
-| config.argocdUIBaseURL | string | `""` | The base URL of the ArgoCD UI. Used for link generation in comments |
-| config.githubAppId | string | `""` | GitHub Application Id - ignored if GITHUB_PERSONAL_ACCESS_TOKEN is set |
-| config.githubAppInstallationId | string | `""` | GitHub App Installation Id - ignored if GITHUB_PERSONAL_ACCESS_TOKEN is set |
-| config.githubStatusContext | string | `""` | Context string uses in github commit statuses. Defaults to "argo-diff" |
-| config.secretName | string | `""` | REQUIRED: The name of the secret that contains the argocd credentials. Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_WEBHOOK_SECRET, and GITHUB_PERSONAL_ACCESS_TOKEN/GITHUB_APP_PRIVATE_KEY |
+| config.argocd.authToken | string | `""` |  |
+| config.argocd.grpcWeb | string | `""` |  |
+| config.argocd.grpcWebRoot | string | `""` |  |
+| config.argocd.serverAddr | string | `""` | REQUIRED: hostname and/or port of the ArgoCD server (eg: argocd.domain.tld or argocd.domain.tld:8080) |
+| config.argocd.serverInsecure | string | `""` |  |
+| config.argocd.serverPlainText | string | `""` |  |
+| config.argocd.uiBaseURL | string | `""` | The base URL of the ArgoCD UI. Used for link generation in comments |
+| config.commentLineMaxChars | string | `""` | Any individual line in Pull Request comments by argo-diff longer than this are truncated. Defaults to 175 |
+| config.commentPreamble | string | `""` | String/markdown prefixed to comments. Try to keep to 150 chars or less in length |
+| config.configMapAnnotations | object | `{}` |  |
+| config.configMapCreate | bool | `true` | Have Helm create ConfigMap from values. If disabled, you need to manage environment variables |
+| config.configMapName | string | `""` | Name of ConfigMap of environment variables. Defaults to release name |
+| config.contextStr | string | `""` | Unique identifier of argo-diff instance. Use when deploying multiple instances (eg: one per cluster). Recommended to be a brief cluster nickname |
+| config.github.application.id | string | `""` | GitHub Application Id. Ignored if github.auth.token (or GITHUB_TOKEN / GITHUB_PERSONAL_ACCESS_TOKEN) is set |
+| config.github.application.installationId | string | `""` | GitHub App Installation Id. Ignored if github.auth.token (or GITHUB_TOKEN / GITHUB_PERSONAL_ACCESS_TOKEN) is set |
+| config.github.application.privateKey | string | `""` | Value of Github application private key (contents of downloaded .pem file); Ignored if github.auth.token (or GITHUB_TOKEN / GITHUB_PERSONAL_ACCESS_TOKEN) is set |
+| config.github.auth.token | string | `""` | Value of Github Personal Access Token. Populates GITHUB_TOKEN |
+| config.github.webhook.sharedSecret | string | `""` | Shared secret key for Github webhook events |
+| deployment.affinity | object | `{}` |  |
+| deployment.annotations | object | `{}` |  |
+| deployment.livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"},"initialDelaySeconds":2,"periodSeconds":10}` | Configuration for liveness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
+| deployment.nodeSelector | object | `{}` |  |
+| deployment.podAnnotations | object | `{}` |  |
+| deployment.podSecurityContext | object | `{}` |  |
+| deployment.readinessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"},"initialDelaySeconds":2,"periodSeconds":10}` | Configuration for readiness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
+| deployment.replicas | int | `1` |  |
+| deployment.resources | object | `{}` |  |
+| deployment.revisionHistoryLimit | int | `5` |  |
+| deployment.securityContext | object | `{}` |  |
+| deployment.startupProbe | object | `{"failureThreshold":10,"httpGet":{"path":"/healthz","port":"http"},"periodSeconds":2}` | Configuration for startup check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
+| deployment.tolerations | list | `[]` |  |
+| deployment.volumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
+| deployment.volumes | list | `[]` | Additional volumes on the output Deployment definition. |
 | fullnameOverride | string | `""` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/vince-riv/argo-diff"` |  |
@@ -46,27 +66,20 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | ingress.hosts[0].paths[0].path | string | `"/"` |  |
 | ingress.hosts[0].paths[0].pathType | string | `"ImplementationSpecific"` |  |
 | ingress.tls | list | `[]` |  |
-| livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"},"initialDelaySeconds":2,"periodSeconds":10}` | Configuration for liveness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
+| labels | object | `{}` | Common labels to apply to resources |
 | logLevel | string | `"info"` |  |
 | nameOverride | string | `""` |  |
-| nodeSelector | object | `{}` |  |
-| podAnnotations | object | `{}` |  |
-| podLabels | object | `{}` |  |
-| podSecurityContext | object | `{}` |  |
-| readinessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"},"initialDelaySeconds":2,"periodSeconds":10}` | Configuration for readiness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
-| replicaCount | int | `1` |  |
-| resources | object | `{}` |  |
-| securityContext | object | `{}` |  |
+| namespaceOverride | string | `""` |  |
+| secret.annotations | object | `{}` |  |
+| secret.create | bool | `true` | Have Helm create Secret from values. If disabled, you need to manage sensitive environment variables |
+| secret.name | string | `""` | Override the name of the secret passed to deployment's envFrom. Defaults to release name. Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_WEBHOOK_SECRET, and GITHUB_PERSONAL_ACCESS_TOKEN/GITHUB_APP_PRIVATE_KEY |
+| service.annotations | object | `{}` |  |
 | service.port | int | `8080` |  |
 | service.type | string | `"ClusterIP"` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.automount | bool | `true` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
-| startupProbe | object | `{"failureThreshold":10,"httpGet":{"path":"/healthz","port":"http"},"periodSeconds":2}` | Configuration for startup check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
-| tolerations | list | `[]` |  |
-| volumeMounts | list | `[]` |  |
-| volumes | list | `[]` |  |
 
 ## Aids to navigation
 

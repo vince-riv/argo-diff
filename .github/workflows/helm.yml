@@ -16,6 +16,6 @@ jobs:
       - uses: d3adb5/helm-unittest-action@v2
         with:
           charts: charts/argo-diff
-          unittest-version: "0.3.4"
-          helm-version: "3.13.1"
+          unittest-version: "0.7.2"
+          helm-version: "3.16.4"
       - run: helm lint charts/argo-diff

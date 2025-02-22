@@ -24,6 +24,13 @@ If release name contains chart name it will be used as a full name.
 {{- end }}
 
 {{/*
+Expand the namespace of the release.
+*/}}
+{{- define "argo-diff.namespace" -}}
+{{- default .Release.Namespace .Values.namespaceOverride | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "argo-diff.chart" -}}
@@ -40,6 +47,9 @@ helm.sh/chart: {{ include "argo-diff.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- if .Values.labels }}
+{{- toYaml .Values.labels }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -58,5 +68,27 @@ Create the name of the service account to use
 {{- default (include "argo-diff.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+ConfigMap name
+*/}}
+{{- define "argo-diff.configMapName" -}}
+{{- if .Values.config.configMapName }}
+{{- print .Values.config.configMapName }}
+{{- else }}
+{{- printf "%s-env" (include "argo-diff.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
+Secret name
+*/}}
+{{- define "argo-diff.secretName" -}}
+{{- if .Values.secret.name }}
+{{- print .Values.secret.name }}
+{{- else }}
+{{- printf "%s-env" (include "argo-diff.fullname" .) }}
 {{- end }}
 {{- end }}

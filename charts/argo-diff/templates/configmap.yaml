@@ -1,0 +1,52 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argo-diff.configMapName" . }}
+  namespace: {{ include "argo-diff.namespace" . }}
+  labels:
+    {{- include "argo-diff.labels" . | nindent 4 }}
+  {{- with .Values.config.configMapAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- with .Values.config }}
+{{- if or .argocd.grpcWeb .argocd.grpcWebRoot .argocd.serverAddr .argocd.serverInsecure
+          .argocd.serverPlainText .argocd.uiBaseURL .commentPreamble .contextStr .commentLineMaxChars
+          .github.application.id .github.application.installationId }}
+data:
+  {{- with .argocd.grpcWeb }}
+  ARGOCD_GRPC_WEB: {{ . | quote }}
+  {{- end }}
+  {{- with .argocd.grpcWebRoot }}
+  ARGOCD_GRPC_WEB_ROOT_PATH: {{ . | quote }}
+  {{- end }}
+  {{- with .argocd.serverAddr }}
+  ARGOCD_SERVER_ADDR: {{ . | quote }}
+  {{- end }}
+  {{- with .argocd.serverInsecure }}
+  ARGOCD_SERVER_INSECURE: {{ . | quote }}
+  {{- end }}
+  {{- with .argocd.serverPlainText }}
+  ARGOCD_SERVER_PLAINTEXT: {{ . | quote }}
+  {{- end }}
+  {{- with .argocd.uiBaseURL }}
+  ARGOCD_UI_BASE_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .commentPreamble }}
+  ARGO_DIFF_COMMENT_PREAMBLE: {{ . | quote }}
+  {{- end }}
+  {{- with .contextStr }}
+  ARGO_DIFF_CONTEXT_STR: {{ . | quote }}
+  {{- end }}
+  {{- with .commentLineMaxChars }}
+  COMMENT_LINE_MAX_CHARS: {{ . | quote }}
+  {{- end }}
+  {{- with .github.application.id }}
+  GITHUB_APP_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .github.application.installationId }}
+  GITHUB_APP_INSTALLATION_ID: {{ . | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}

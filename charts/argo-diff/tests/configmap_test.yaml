@@ -1,0 +1,101 @@
+---
+suite: configmap tests
+templates:
+  - configmap.yaml
+tests:
+  - it: no config - no data
+    release:
+      name: argo-diff
+    template: configmap.yaml
+    asserts:
+      - containsDocument:
+          apiVersion: v1
+          kind: ConfigMap
+          name: argo-diff-env
+      - notExists:
+          path: data
+  - it: config annotations
+    set:
+      config.configMapAnnotations:
+        is_unittest: "yes"
+    asserts:
+      - equal:
+          path: metadata.annotations.is_unittest
+          value: "yes"
+  - it: config commentPreamble
+    set:
+      config.commentPreamble: testing
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_PREAMBLE
+          value: testing
+  - it: config contextStr
+    set:
+      config.contextStr: testing
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_CONTEXT_STR
+          value: testing
+  - it: config commentLineMaxChars
+    set:
+      config.commentLineMaxChars: 12345
+    asserts:
+      - equal:
+          path: data.COMMENT_LINE_MAX_CHARS
+          value: "12345"
+  - it: config argocd.grpcWeb
+    set:
+      config.argocd.grpcWeb: true
+    asserts:
+      - equal:
+          path: data.ARGOCD_GRPC_WEB
+          value: "true"
+  - it: config argocd.grpcWebRoot
+    set:
+      config.argocd.grpcWebRoot: testing
+    asserts:
+      - equal:
+          path: data.ARGOCD_GRPC_WEB_ROOT_PATH
+          value: testing
+  - it: config argocd.serverAddr
+    set:
+      config.argocd.serverAddr: testing
+    asserts:
+      - equal:
+          path: data.ARGOCD_SERVER_ADDR
+          value: testing
+  - it: config argocd.serverInsecure
+    set:
+      config.argocd.serverInsecure: true
+    asserts:
+      - equal:
+          path: data.ARGOCD_SERVER_INSECURE
+          value: "true"
+  - it: config argocd.serverPlainText
+    set:
+      config.argocd.serverPlainText: true
+    asserts:
+      - equal:
+          path: data.ARGOCD_SERVER_PLAINTEXT
+          value: "true"
+  - it: config argocd.uiBaseURL
+    set:
+      config.argocd.uiBaseURL: testing
+    asserts:
+      - equal:
+          path: data.ARGOCD_UI_BASE_URL
+          value: testing
+  - it: config github.application.id
+    set:
+      config.github.application.id: testing
+    asserts:
+      - equal:
+          path: data.GITHUB_APP_ID
+          value: testing
+  - it: config github.application.installationId
+    set:
+      config.github.application.installationId: testing
+    asserts:
+      - equal:
+          path: data.GITHUB_APP_INSTALLATION_ID
+          value: testing
