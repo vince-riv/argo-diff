@@ -73,9 +73,9 @@ func ProcessFileEvent(filePath string, devMode bool) error {
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go process_event.ProcessCodeChange(*evtp, devMode, &wg)
+	go process_event.ProcessCodeChange(*evtp, devMode, &wg, &err)
 	wg.Wait()
-	return nil
+	return err
 }
 
 func ProcessGithubAction() error {
@@ -86,7 +86,7 @@ func ProcessGithubAction() error {
 	}
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go process_event.ProcessCodeChange(*evtp, true, &wg)
+	go process_event.ProcessCodeChange(*evtp, true, &wg, &err)
 	wg.Wait()
-	return nil
+	return err
 }

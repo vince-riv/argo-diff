@@ -26,7 +26,7 @@ func shortSha(str string) string {
 // Processes github webhook event data by getting a list of matching argo applications & their manifests and generating diffs
 // Sets Github status checks for the relevant commit sha and posts a Github comment it is a pull-request event
 // Designed to run within a gorouting to decouple from the webhook response
-func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitGroup) {
+func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitGroup, callerErr *error) {
 	defer wg.Done()
 	// Don't take longer than 3 minutes to execute
 	// TODO figure out how to call github.Status() with an error status when there's a timeout
@@ -39,12 +39,14 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 			pull, err := github.GetPullRequest(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 			if err != nil {
 				log.Error().Err(err).Msgf("github.GetPullRequest(%s, %s, %d) failed", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+				*callerErr = err
 				return
 			}
 			base := pull.GetBase()
 			head := pull.GetHead()
 			if base == nil || head == nil {
 				log.Error().Msgf("Empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+				*callerErr = fmt.Errorf("empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 				return
 			}
 			eventInfo.Sha = *head.SHA
@@ -53,6 +55,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		}
 		changedFiles, err := github.ListPullRequestFiles(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 		if err != nil {
+			*callerErr = err
 			log.Error().Err(err).Msgf("Failed to list pull request files for %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 		} else {
 			eventInfo.ChangedFiles = changedFiles
@@ -70,6 +73,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	if err != nil {
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
 		_ = github.Status(ctx, isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+		*callerErr = err
 		return // we're done due to a processing error
 	}
 	log.Debug().Msgf("argocd.GetApplicationChanges() returned %d results", len(appResList))
