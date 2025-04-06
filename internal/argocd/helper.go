@@ -248,13 +248,20 @@ func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, m
 }
 
 func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
-	ghMatch1 := fmt.Sprintf("github.com/%s/%s.git", repoOwner, repoName)
-	ghMatch2 := fmt.Sprintf("github.com/%s/%s", repoOwner, repoName)
-	log.Debug().Msgf("gitRepoMatch() - matching candidates against '%s' and '%s'", ghMatch1, ghMatch2)
-	if !strings.HasSuffix(repoUrl, ghMatch1) && !strings.HasSuffix(repoUrl, ghMatch2) {
-		return false
-	}
-	return true
+    const githubHost = "github.com"
+    candidates := []string{
+        fmt.Sprintf("%s/%s/%s.git", githubHost, repoOwner, repoName),
+        fmt.Sprintf("%s:%s/%s.git", githubHost, repoOwner, repoName),
+        fmt.Sprintf("%s/%s/%s", githubHost, repoOwner, repoName),
+        fmt.Sprintf("%s:%s/%s", githubHost, repoOwner, repoName),
+    }
+    log.Debug().Msgf("gitRepoMatch() - matching candidates: %v", candidates)
+    for _, candidate := range candidates {
+        if strings.HasSuffix(repoUrl, candidate) {
+            return true
+        }
+    }
+    return false
 }
 
 func checkSource(appSpecSource v1alpha1.ApplicationSource, appName string, eventInfo webhook.EventInfo, automatedSync bool) bool {
