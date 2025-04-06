@@ -250,9 +250,9 @@ func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, m
 func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
 	ghMatchExtension := fmt.Sprintf("github.com/%s/%s.git", repoOwner, repoName)
 	ghMatchClean := fmt.Sprintf("github.com/%s/%s", repoOwner, repoName)
-	ghMatchColon := fmt.Sprintf("github.com/%s/%s", repoOwner, repoName)
+	ghMatchColon := fmt.Sprintf("github.com:%s/%s", repoOwner, repoName)
 	log.Debug().Msgf("gitRepoMatch() - matching candidates against '%s' and '%s'", ghMatchExtension, ghMatchClean)
-	if !strings.HasSuffix(repoUrl, ghMatchExtension) && !strings.HasSuffix(repoUrl, ghMatchClean && !strings.HasSuffix(repoUrl, ghMatchColon) {
+	if !strings.HasSuffix(repoUrl, ghMatchExtension) && !strings.HasSuffix(repoUrl, ghMatchClean) && !strings.HasSuffix(repoUrl, ghMatchColon) {
 		return false
 	}
 	return true
