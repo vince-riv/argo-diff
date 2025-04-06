@@ -16,6 +16,7 @@ import (
 var (
 	statusClient     *github.Client
 	statusContextStr = "argo-diff"
+	skipCommitStatus = false
 )
 
 const statusDescriptionMaxLen = 140
@@ -29,6 +30,10 @@ func init() {
 	contextStr := strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
 	if contextStr != "" {
 		statusContextStr = "argo-diff/" + contextStr
+	}
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		log.Info().Msg("GITHUB_ACTIONS env var is 'true' - will skip setting commit statuses")
+		skipCommitStatus = true
 	}
 	// Create Github API client
 	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
@@ -61,6 +66,10 @@ func init() {
 
 // Helper that sets commit status for the request commit sha
 func Status(ctx context.Context, isPr bool, status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
+	if skipCommitStatus {
+		log.Debug().Msg("Skipping commit status")
+		return nil
+	}
 	if status != StatusPending && status != StatusSuccess && status != StatusFailure && status != StatusError {
 		log.Fatal().Msgf("Cannot create github status with status string '%s'", status)
 		return fmt.Errorf("unknown status string '%s'", status)
