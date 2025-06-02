@@ -10,7 +10,7 @@ require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.16.0
 	github.com/google/go-github/v72 v72.0.0
 	github.com/hexops/gotextdiff v1.0.3
-	github.com/rs/zerolog v1.33.0
+	github.com/rs/zerolog v1.34.0
 	github.com/spf13/pflag v1.0.5
 	k8s.io/apimachinery v0.31.0
 	sigs.k8s.io/yaml v1.4.0
