@@ -11,7 +11,7 @@ COPY . .
 RUN ls -l temp/ ; cp temp/argo-diff-`echo ${TARGETPLATFORM} | tr / -` argo-diff
 
 ## ArgoCD
-FROM quay.io/argoproj/argocd:v2.13.2 AS argocd
+FROM quay.io/argoproj/argocd:v2.14.13 AS argocd
 
 ## Final image
 FROM alpine:latest
