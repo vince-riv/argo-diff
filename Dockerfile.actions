@@ -3,7 +3,7 @@ FROM ghcr.io/vince-riv/argo-diff:1.0.1 AS argo-diff
 
 ## ArgoCD
 #ARG  ARGOCD_VERSION
-#FROM quay.io/argoproj/argocd:v2.13.2 AS argocd
+#FROM quay.io/argoproj/argocd:v2.14.13 AS argocd
 
 #COPY --from=argocd --chmod=755 /usr/local/bin/argocd /usr/local/bin/argocd
 
