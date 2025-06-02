@@ -12,6 +12,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/dockerbuild.yml'
+      - 'Dockerfile'
+      - 'Dockerfile.no-build'
   pull_request:
     branches: [main]
     paths:
@@ -19,6 +21,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/dockerbuild.yml'
+      - 'Dockerfile'
+      - 'Dockerfile.no-build'
   workflow_dispatch:
     inputs:
       ref:
