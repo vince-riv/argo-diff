@@ -58,24 +58,28 @@ jobs:
       - name: Build linux/amd64
         run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
         env:
+          CGO_ENABLED: 0
           GOOS: linux
           GOARCH: amd64
       - name: Build linux/arm64
         if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
         run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
         env:
+          CGO_ENABLED: 0
           GOOS: linux
           GOARCH: arm64
       - name: Build linux/s390x
         if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
         run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
         env:
+          CGO_ENABLED: 0
           GOOS: linux
           GOARCH: s390x
       - name: Build linux/ppc64le
         if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
         run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
         env:
+          CGO_ENABLED: 0
           GOOS: linux
           GOARCH: ppc64le
 
