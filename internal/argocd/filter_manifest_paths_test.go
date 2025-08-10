@@ -3,18 +3,16 @@ package argocd
 import (
 	"encoding/json"
 	"testing"
-
-	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 )
 
 func TestFilterApplicationsByPath(t *testing.T) {
-	var a []v1alpha1.Application
+	var a []Application
 	annotationStr := "argocd.argoproj.io/manifest-generate-paths"
 	payload, _, err := readFileToByteArray(payloadAppList)
 	if err != nil {
 		t.Errorf("Failed to read %s: %v", payloadAppList, err)
 	}
-	var appList v1alpha1.ApplicationList
+	var appList ApplicationList
 	if err := json.Unmarshal(payload, &appList); err != nil {
 		t.Errorf("Error decoding ApplicationList payload: %v", err)
 	}
@@ -29,7 +27,7 @@ func TestFilterApplicationsByPath(t *testing.T) {
 		t.Error("passthrough failed for FilterApplicationByPath()")
 	}
 
-	a1 := []v1alpha1.Application{a[0]}
+	a1 := []Application{a[0]}
 	a1[0].SetAnnotations(map[string]string{
 		annotationStr: ".",
 	})

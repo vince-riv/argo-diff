@@ -7,8 +7,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
-	"github.com/argoproj/gitops-engine/pkg/health"
 	"github.com/rs/zerolog/log"
 )
 
@@ -52,19 +50,19 @@ func capitalizeWords(s string) string {
 	}, s)
 }
 
-func syncString(s v1alpha1.SyncStatusCode) string {
+func syncString(s string) string {
 	switch s {
-	case v1alpha1.SyncStatusCodeUnknown:
+	case "Unknown":
 		// status of a sync could not be reliably determined
-		return string(s) + " :question:"
-	case v1alpha1.SyncStatusCodeSynced:
+		return s + " :question:"
+	case "Synced":
 		// that desired and live states match
-		return string(s) + " :white_check_mark:"
-	case v1alpha1.SyncStatusCodeOutOfSync:
+		return s + " :white_check_mark:"
+	case "OutOfSync":
 		// there is a drift between desired and live states
-		return string(s) + " :warning:"
+		return s + " :warning:"
 	default:
-		return string(s) + " :interrobang:"
+		return s + " :interrobang:"
 	}
 }
 
@@ -82,40 +80,40 @@ func truncateLines(s string, maxLen int) string {
 	return result
 }
 
-func healthString(s health.HealthStatusCode, msg string) string {
+func healthString(s string, msg string) string {
 	emoji := ":interrobang:" // default to !?
 	switch s {
-	case health.HealthStatusUnknown:
+	case "Unknown":
 		// "Unknown": Indicates that health assessment failed and actual health status is unknown
 		emoji = " :question:"
-	case health.HealthStatusProgressing:
+	case "Progressing":
 		// "Progressing": Progressing health status means that resource is not healthy but still have a chance to reach healthy state
 		emoji = " :hourglass_flowing_sand:"
-	case health.HealthStatusHealthy:
+	case "Healthy":
 		// "Healthy": Resource is 100% healthy
 		emoji = " :green_heart:"
-	case health.HealthStatusSuspended:
+	case "Suspended":
 		// "Suspended": Assigned to resources that are suspended or paused. The typical example is a [suspended](https://kubernetes.io/docs/tasks/job/automated-tasks-with-cron-jobs/#suspend) CronJob.
 		emoji = " :no_entry_sign:"
-	case health.HealthStatusDegraded:
+	case "Degraded":
 		// "Degraded": Degraded status is used if resource status indicates failure or resource could not reach healthy state within some timeout.
 		emoji = " :x:"
-	case health.HealthStatusMissing:
+	case "Missing":
 		// Indicates that resource is missing in the cluster.
 		emoji = " :ghost:"
 	}
 	if msg == "" {
-		return string(s) + emoji
+		return s + emoji
 	} else {
-		return string(s) + emoji + " - " + msg
+		return s + emoji + " - " + msg
 	}
 }
 
 type ArgoAppMarkdown struct {
 	AppName      string
 	WarnStr      string
-	SyncStatus   v1alpha1.SyncStatusCode
-	HealthStatus health.HealthStatusCode
+	SyncStatus   string
+	HealthStatus string
 	HealthMsg    string
 	Preamble     string
 	Resources    []string
@@ -128,7 +126,7 @@ type CommentMarkdown struct {
 	Closing  string
 }
 
-func (c *CommentMarkdown) AppMarkdown(appName, warnStr string, syncStatus v1alpha1.SyncStatusCode, healthStatus health.HealthStatusCode, healthMsg string) *ArgoAppMarkdown {
+func (c *CommentMarkdown) AppMarkdown(appName, warnStr string, syncStatus string, healthStatus string, healthMsg string) *ArgoAppMarkdown {
 	a := ArgoAppMarkdown{
 		AppName:      appName,
 		WarnStr:      warnStr,

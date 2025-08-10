@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
-
 	wh "github.com/vince-riv/argo-diff/internal/webhook"
 )
 
@@ -43,7 +41,7 @@ func readFileToByteArray(fileName string) ([]byte, string, error) {
 }
 
 func TestFilterApplications(t *testing.T) {
-	var a []v1alpha1.Application
+	var a []Application
 
 	evtInfo := wh.EventInfo{RepoOwner: "o", RepoName: "r", RepoDefaultRef: "m", ChangeRef: "m", BaseRef: ""}
 	result, _ := filterApplications(a, evtInfo, false)
@@ -54,7 +52,7 @@ func TestFilterApplications(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to read %s: %v", payloadAppList, err)
 	}
-	var appList v1alpha1.ApplicationList
+	var appList ApplicationList
 	if err := json.Unmarshal(payload, &appList); err != nil {
 		t.Errorf("Error decoding ApplicationList payload: %v", err)
 	}
@@ -102,14 +100,14 @@ func TestFilterApplications(t *testing.T) {
 	}
 
 	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
-	a[1].Spec.SyncPolicy = &v1alpha1.SyncPolicy{}
+	a[1].Spec.SyncPolicy = &SyncPolicy{}
 	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 1 {
 		t.Error("Push to main should have matched (targetRev main) (auto-sync still off)")
 	}
 
 	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
-	a[1].Spec.SyncPolicy.Automated = &v1alpha1.SyncPolicyAutomated{}
+	a[1].Spec.SyncPolicy.Automated = &SyncPolicyAutomated{}
 	result, _ = filterApplications(a, evtInfo, false)
 	if len(result) != 0 {
 		t.Error("Push to main should NOT have matched (targetRev main) (auto-sync ENABLED)")
@@ -117,7 +115,7 @@ func TestFilterApplications(t *testing.T) {
 }
 
 func TestFilterApplicationsMultiSource(t *testing.T) {
-	var a []v1alpha1.Application
+	var a []Application
 
 	evtInfo := wh.EventInfo{RepoOwner: "o", RepoName: "r", RepoDefaultRef: "m", ChangeRef: "m", BaseRef: ""}
 	result, _ := filterApplications(a, evtInfo, true)
@@ -129,7 +127,7 @@ func TestFilterApplicationsMultiSource(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to read %s: %v", payloadAppList, err)
 	}
-	var appList v1alpha1.ApplicationList
+	var appList ApplicationList
 	if err := json.Unmarshal(payload, &appList); err != nil {
 		t.Errorf("Error decoding ApplicationList payload: %v", err)
 	}

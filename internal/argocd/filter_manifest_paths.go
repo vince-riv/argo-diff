@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
 )
 
@@ -51,8 +50,8 @@ func matchChangedFiles(changedFiles []string, patterns []string) bool {
 // FilterApplications returns a list of Application objects whose annotation-based manifest-generate-paths
 // or default source path (if the annotation is absent) match one or more of the changed files.
 // It iterates through each source returned by the built-in GetSources() method.
-func FilterApplicationsByPath(apps []v1alpha1.Application, changedFiles []string) []v1alpha1.Application {
-	var matchedApps []v1alpha1.Application
+func FilterApplicationsByPath(apps []Application, changedFiles []string) []Application {
+	var matchedApps []Application
 
 	for _, app := range apps {
 		annotations := app.GetAnnotations()
