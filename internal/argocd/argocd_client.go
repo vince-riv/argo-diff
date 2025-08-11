@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
 	"sigs.k8s.io/yaml"
 )
@@ -74,9 +73,9 @@ var execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 	return out, nil
 }
 
-func listApplications(ctx context.Context) (*v1alpha1.ApplicationList, error) {
-	var appList []v1alpha1.Application
-	var apps v1alpha1.ApplicationList
+func listApplications(ctx context.Context) (*ApplicationList, error) {
+	var appList []Application
+	var apps ApplicationList
 	log.Trace().Msg("listApplications() called")
 	// argocd app list
 	output, err := execArgoCdCli(ctx, []string{"app", "list", "-o", "json"})
@@ -132,8 +131,8 @@ func argocdVersion(ctx context.Context) (string, string, error) {
 }
 
 /*
-func getApplication(ctx context.Context, appName string) (*v1alpha1.Application, error) {
-	var app v1alpha1.Application
+func getApplication(ctx context.Context, appName string) (*Application, error) {
+	var app Application
 	// argocd app get argo-diff --refresh
 	output, err := execArgoCdCli(ctx, []string{"app", "get", appName, "--refresh", "-o", "json"})
 	if err != nil {

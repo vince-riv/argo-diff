@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/rs/zerolog/log"
 	"sigs.k8s.io/yaml"
 
@@ -59,15 +58,15 @@ func ConnectivityCheck() error {
 	return fmt.Errorf("client (%s) or Server (%s) version is not %s or greater", clientV, serverV, minVersion)
 }
 
-func appListToMap(appList []v1alpha1.Application) map[string]v1alpha1.Application {
-	argoAppMap := make(map[string]v1alpha1.Application)
+func appListToMap(appList []Application) map[string]Application {
+	argoAppMap := make(map[string]Application)
 	for _, app := range appList {
 		argoAppMap[app.ObjectMeta.Name] = app
 	}
 	return argoAppMap
 }
 
-func getApplicationChanges(ctx context.Context, app *v1alpha1.Application, revision string, revs []string, pos []int) (ApplicationResourcesWithChanges, error) {
+func getApplicationChanges(ctx context.Context, app *Application, revision string, revs []string, pos []int) (ApplicationResourcesWithChanges, error) {
 	var appResChanges ApplicationResourcesWithChanges
 	var err error
 	appResChanges.ArgoApp = app
@@ -82,7 +81,7 @@ func getApplicationChanges(ctx context.Context, app *v1alpha1.Application, revis
 	return appResChanges, err
 }
 
-func getMultiSrcAppChanges(ctx context.Context, appCur *v1alpha1.Application, appNew *v1alpha1.Application, repoOwner, repoName, revision string) (ApplicationResourcesWithChanges, error) {
+func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *Application, repoOwner, repoName, revision string) (ApplicationResourcesWithChanges, error) {
 	var appResChanges ApplicationResourcesWithChanges
 	appName := appCur.ObjectMeta.Name
 	curSources := appCur.Spec.GetSources()
@@ -217,11 +216,11 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 
 // Returns a list of Applications whose git URLs match repo owner & name
 // eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.ChangeRef, eventInfo.BaseRef string
-func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, multiSource bool) ([]v1alpha1.Application, error) {
+func filterApplications(a []Application, eventInfo webhook.EventInfo, multiSource bool) ([]Application, error) {
 	log.Trace().Msgf("filterApplications([%d apps], %+v)", len(a), eventInfo)
-	var appList []v1alpha1.Application
+	var appList []Application
 	for _, app := range a {
-		var sources []v1alpha1.ApplicationSource
+		var sources []ApplicationSource
 		singleSrc := app.Spec.GetSource()
 		pluralSrc := app.Spec.GetSources()
 		// GetSources() helper always returns a source, so check length of Sources slice
@@ -230,7 +229,7 @@ func filterApplications(a []v1alpha1.Application, eventInfo webhook.EventInfo, m
 		}
 		// GetSource() helper always returns a source, so check Source pointer
 		if !multiSource && app.Spec.Source != nil {
-			sources = []v1alpha1.ApplicationSource{singleSrc}
+			sources = []ApplicationSource{singleSrc}
 		}
 		for _, appSpecSource := range sources {
 			if checkSource(appSpecSource, app.ObjectMeta.Name, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
@@ -264,7 +263,7 @@ func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
     return false
 }
 
-func checkSource(appSpecSource v1alpha1.ApplicationSource, appName string, eventInfo webhook.EventInfo, automatedSync bool) bool {
+func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webhook.EventInfo, automatedSync bool) bool {
 	baseRef := eventInfo.BaseRef
 	changeRef := eventInfo.ChangeRef
 	repoDefaultRef := eventInfo.RepoDefaultRef
@@ -321,22 +320,22 @@ func manifestIsArgoApplication(manifest K8sManifest) bool {
 	return false
 }
 
-func genericManifestToArgoApplication(manifest K8sManifest) (v1alpha1.Application, error) {
+func genericManifestToArgoApplication(manifest K8sManifest) (Application, error) {
 	log.Trace().Msgf("genericManifestToArgoApplication() converting generic manifest: %+v", manifest.Unstruct)
 	log.Trace().Msgf("genericManifestToArgoApplication() converting yaml: %s", manifest.YamlSrc)
-	var app v1alpha1.Application
+	var app Application
 	err := yaml.Unmarshal(manifest.YamlSrc, &app)
 	if err != nil {
 		return app, err
 	}
-	log.Trace().Msgf("genericManifestToArgoApplication() returning v1alpha1.Application: %+v", app)
+	log.Trace().Msgf("genericManifestToArgoApplication() returning Application: %+v", app)
 	return app, nil
 }
 
-func argoAppsWithChanges(ctx context.Context, appName string, appResources []AppResource, revision string) ([]v1alpha1.Application, error) {
+func argoAppsWithChanges(ctx context.Context, appName string, appResources []AppResource, revision string) ([]Application, error) {
 	log.Trace().Msgf("argoAppsWithChanges() scanning %s at %s for argo apps", appName, revision)
 	argoAppNamesFound := []string{}
-	argoApps := []v1alpha1.Application{}
+	argoApps := []Application{}
 	// look through app resource changes for argoproj.io Applications
 	for _, appRes := range appResources {
 		log.Trace().Msgf("argoAppsWithChanges(%s) - checking changed resource +++ %s/%s %s +++", appName, appRes.Group, appRes.Kind, appRes.Name)
@@ -363,7 +362,7 @@ func argoAppsWithChanges(ctx context.Context, appName string, appResources []App
 			log.Trace().Msgf("argoAppsWithChanges(%s) - manifest at index %d is not an argo app", appName, i)
 			continue
 		}
-		log.Debug().Msgf("argoAppsWithChanges(%s) - converting manifest at index %d to a v1alpha1.Application", appName, i)
+		log.Debug().Msgf("argoAppsWithChanges(%s) - converting manifest at index %d to an Application", appName, i)
 		app, err := genericManifestToArgoApplication(manifest)
 		if err != nil {
 			log.Error().Err(err).Msg("Detected an argo application, but Unable to convert")
