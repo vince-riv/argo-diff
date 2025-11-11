@@ -1,5 +1,5 @@
 ## argo-diff
-FROM ghcr.io/vince-riv/argo-diff:1.1.0 AS argo-diff
+FROM ghcr.io/vince-riv/argo-diff:1.2.0@sha256:59c6ae1ed55a827ff8866d703f9e50c78520f9ff48668b00acda8b6a63f75a1f AS argo-diff
 
 ## ArgoCD
 #ARG  ARGOCD_VERSION
