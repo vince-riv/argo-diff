@@ -12,7 +12,7 @@ import (
 	"time"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v78/github"
 	"github.com/rs/zerolog/log"
 )
 
