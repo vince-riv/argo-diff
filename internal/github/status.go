@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/google/go-github/v72/github"
+	"github.com/google/go-github/v78/github"
 	"github.com/rs/zerolog/log"
 )
 
@@ -83,7 +83,7 @@ func Status(ctx context.Context, isPr bool, status, description, repoOwner, repo
 	}
 	// TODO add support for AvatarURL ?
 	// TODO add support for TargetURL ?
-	repoStatus := &github.RepoStatus{
+	repoStatus := github.RepoStatus{
 		State:       &status,
 		Description: &description,
 		Context:     github.String(contextStr),
