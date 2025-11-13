@@ -1,13 +1,15 @@
 ## Build
 FROM golang:1.25 AS build
 
+ARG VERSION=dev
+
 WORKDIR /src
 
 COPY . .
 
 RUN go mod download
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o argo-diff ./cmd/
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-X 'main.Version=${VERSION}'" -o argo-diff ./cmd/
 
 ## ArgoCD
 FROM quay.io/argoproj/argocd:v3.2.0@sha256:3c9b3b33a7e6c9c56a9d8417af1845afc516f714941962208b125017bbc1e4b1 AS argocd
@@ -24,7 +26,6 @@ RUN apk add --no-cache diffutils
 WORKDIR /app
 
 COPY --from=build --chown=argo-diff --chmod=755 /src/argo-diff argo-diff
-COPY --from=build --chown=argo-diff /src/git-rev.txt git-rev.txt
 COPY --from=argocd --chmod=755 /usr/local/bin/argocd /usr/local/bin/argocd
 
 EXPOSE 8080

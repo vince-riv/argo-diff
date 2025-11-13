@@ -21,7 +21,6 @@
 go.work
 
 # Project-specific ignores
-git-rev.txt
 /argo-diff
 /.env.sh
 *.pem

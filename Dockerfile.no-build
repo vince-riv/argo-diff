@@ -25,7 +25,6 @@ RUN apk add --no-cache diffutils
 WORKDIR /app
 
 COPY --from=build --chown=argo-diff --chmod=755 /src/argo-diff argo-diff
-COPY --from=build --chown=argo-diff /src/git-rev.txt git-rev.txt
 COPY --from=argocd --chmod=755 /usr/local/bin/argocd /usr/local/bin/argocd
 
 EXPOSE 8080

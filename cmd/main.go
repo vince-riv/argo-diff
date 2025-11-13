@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	flag "github.com/spf13/pflag"
@@ -15,7 +16,8 @@ import (
 	"github.com/vince-riv/argo-diff/internal/server"
 )
 
-const gitRevTxt = "git-rev.txt"
+// Version is set via -ldflags at build time
+var Version = "dev"
 
 var serverListenHost string
 var serverListenPort int
@@ -24,8 +26,6 @@ var eventFile string
 
 func init() {
 	// Load GitHub secrets from env and setup logger
-	gitRev := "UNKNOWN"
-
 	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
 	case "panic":
 		zerolog.SetGlobalLevel(zerolog.PanicLevel)
@@ -46,20 +46,18 @@ func init() {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	// git revision for logger - there's probably a better way to do this at build time
-	data, err := os.ReadFile(gitRevTxt)
-	if err != nil {
-		log.Info().Msg(fmt.Sprintf("Cannot open %s; assuming we're in local development", gitRevTxt))
-	} else {
-		lines := strings.Split(string(data), "\n")
-		gitRev = strings.TrimSpace(lines[0])
-		if gitRev == "" {
-			log.Warn().Msg(fmt.Sprintf("%s must be empty?", gitRevTxt))
-			gitRev = "EMPTY"
+	// Version is set via -ldflags at build time, fallback to git describe for local development
+	if Version == "dev" {
+		cmd := exec.Command("git", "describe", "--always", "--dirty", "--exclude", "chart-*", "--exclude", "actions-*")
+		output, err := cmd.Output()
+		if err != nil {
+			log.Info().Msg(fmt.Sprintf("Cannot run git describe; using default version: %s", Version))
+		} else {
+			Version = strings.TrimSpace(string(output))
 		}
 	}
 
-	log.Logger = log.With().Str("service", "argo-diff").Str("version", gitRev).Caller().Logger()
+	log.Logger = log.With().Str("service", "argo-diff").Str("version", Version).Caller().Logger()
 
 	flag.StringVarP(&serverListenHost, "host", "H", "", "Listen ip/host for server")
 	flag.IntVarP(&serverListenPort, "port", "p", 8080, "Listen port for server")

@@ -50,47 +50,46 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+          fetch-depth: '50'
+          fetch-tags: 'true'
       - name: Set up Go
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
         with:
           go-version-file: go.mod
+      - name: Get version from git describe
+        id: version
+        run: |
+          VERSION=$(git describe --always --dirty --exclude 'chart-*' --exclude 'actions-*')
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
       - name: Build linux/amd64
-        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
+        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags "-extldflags '-static' -X 'main.Version=${{ steps.version.outputs.VERSION }}'" -v ./cmd/
         env:
           CGO_ENABLED: 0
           GOOS: linux
           GOARCH: amd64
       - name: Build linux/arm64
         if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
-        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
+        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags "-extldflags '-static' -X 'main.Version=${{ steps.version.outputs.VERSION }}'" -v ./cmd/
         env:
           CGO_ENABLED: 0
           GOOS: linux
           GOARCH: arm64
       - name: Build linux/s390x
         if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
-        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
+        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags "-extldflags '-static' -X 'main.Version=${{ steps.version.outputs.VERSION }}'" -v ./cmd/
         env:
           CGO_ENABLED: 0
           GOOS: linux
           GOARCH: s390x
       - name: Build linux/ppc64le
         if: ${{ github.event_name != 'pull_request' }} ## don't build multi-arch on PRs
-        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags '-extldflags "-static"' -v ./cmd/
+        run: go build -o temp/argo-diff-$GOOS-$GOARCH -ldflags "-extldflags '-static' -X 'main.Version=${{ steps.version.outputs.VERSION }}'" -v ./cmd/
         env:
           CGO_ENABLED: 0
           GOOS: linux
           GOARCH: ppc64le
 
-      - name: Prepare git-rev.txt
-        run: |
-          set -x
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo ${GITHUB_REF#refs/tags/} > git-rev.txt
-          else
-            echo ${GITHUB_SHA::8} > git-rev.txt
-          fi
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -115,6 +114,7 @@ jobs:
             type=schedule
             type=ref,event=branch
             type=sha,event=branch
+            type=raw,event=branch,value=${{ steps.version.outputs.VERSION }}
             type=ref,event=tag
             type=ref,event=pr
             type=sha,event=pr
