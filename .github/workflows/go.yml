@@ -39,8 +39,14 @@ jobs:
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
         with:
           go-version-file: go.mod
+      - name: Get version from git describe
+        id: version
+        run: |
+          VERSION=$(git describe --always --dirty --exclude 'chart-*' --exclude 'actions-*')
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
       - name: Build
-        run: go build -v ./...
+        run: go build -ldflags "-X 'main.Version=${{ steps.version.outputs.VERSION }}'" -v ./...
   fmt:
     runs-on: ubuntu-latest
     steps:
