@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/go-github/v78/github"
+	"github.com/google/go-github/v79/github"
 	"github.com/rs/zerolog/log"
 
 	argoDiffGh "github.com/vince-riv/argo-diff/internal/github"
