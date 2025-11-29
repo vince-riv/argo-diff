@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"os"
@@ -97,7 +98,7 @@ func (wp *WebhookProcessor) handleWebhook(w http.ResponseWriter, r *http.Request
 	}
 	if eventInfo.Ignore {
 		log.Info().Msgf("Ignoring %s event. Event Info: %v", event, eventInfo)
-		_, err := io.WriteString(w, fmt.Sprintf("%s event ignored\n%v\n", event, eventInfo))
+		_, err := io.WriteString(w, fmt.Sprintf("%s event ignored\n%v\n", html.EscapeString(event), eventInfo))
 		if err != nil {
 			log.Error().Err(err).Msg("io.WriteString() failed")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
