@@ -1,4 +1,6 @@
 name: Helm Lint and Test
+permissions:
+  contents: read
 
 on:
   pull_request:
