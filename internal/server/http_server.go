@@ -80,12 +80,6 @@ func (wp *WebhookProcessor) handleWebhook(w http.ResponseWriter, r *http.Request
 			http.Error(w, "Could not process pull request event data", http.StatusInternalServerError)
 			return
 		}
-	case "push":
-		eventInfo, err = webhook.ProcessPush(payload)
-		if err != nil {
-			http.Error(w, "Could not process push event data", http.StatusInternalServerError)
-			return
-		}
 	case "issue_comment":
 		eventInfo, err = webhook.ProcessComment(payload)
 		if err != nil {

@@ -65,7 +65,7 @@ func init() {
 }
 
 // Helper that sets commit status for the request commit sha
-func Status(ctx context.Context, isPr bool, status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
+func Status(ctx context.Context, status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
 	if skipCommitStatus {
 		log.Debug().Msg("Skipping commit status")
 		return nil
@@ -74,10 +74,7 @@ func Status(ctx context.Context, isPr bool, status, description, repoOwner, repo
 		log.Fatal().Msgf("Cannot create github status with status string '%s'", status)
 		return fmt.Errorf("unknown status string '%s'", status)
 	}
-	contextStr := statusContextStr + " (push)"
-	if isPr {
-		contextStr = statusContextStr + " (pull_request)"
-	}
+	contextStr := statusContextStr
 	if len(description) > statusDescriptionMaxLen {
 		description = description[:137] + "..."
 	}
