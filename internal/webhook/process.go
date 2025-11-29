@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/go-github/v79/github"
 	"github.com/rs/zerolog/log"
@@ -86,37 +85,6 @@ func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	prInfo.ChangeRef = *prEvent.PullRequest.Head.Ref
 	log.Debug().Msgf("Returning EventInfo: %+v", prInfo)
 	return prInfo, validateEventInfo(prInfo)
-}
-
-// Processes a pull_request event received from github
-func ProcessPush(payload []byte) (EventInfo, error) {
-	pushInfo := NewEventInfo()
-	var pushEvent github.PushEvent
-	if err := json.Unmarshal(payload, &pushEvent); err != nil {
-		log.Error().Err(err).Msg("Error decoding JSON payload")
-		return pushInfo, err
-	}
-	if pushEvent.Ref == nil || pushEvent.Before == nil || pushEvent.After == nil {
-		err := errors.New("github.PushEvent missing key fields")
-		log.Error().Err(err).Msg("github.PushEvent missing key fields")
-		return pushInfo, err
-	}
-	pushInfo.RepoOwner = *pushEvent.Repo.Owner.Login
-	pushInfo.RepoName = *pushEvent.Repo.Name
-	pushInfo.ChangeRef = *pushEvent.Ref
-	if pushEvent.HeadCommit == nil {
-		log.Info().Msgf("Ignoring push event ref %s; before %s, after %s", *pushEvent.Ref, *pushEvent.Before, *pushEvent.After)
-		return pushInfo, nil
-	}
-	if !strings.HasPrefix(pushInfo.ChangeRef, "refs/heads/") {
-		log.Info().Msgf("Ignoring non-branch push event ref %s", pushInfo.ChangeRef)
-		return pushInfo, nil
-	}
-	pushInfo.Ignore = false
-	pushInfo.Sha = *pushEvent.HeadCommit.ID
-	pushInfo.RepoDefaultRef = *pushEvent.Repo.DefaultBranch
-	log.Debug().Msgf("Returning EventInfo: %+v", pushInfo)
-	return pushInfo, validateEventInfo(pushInfo)
 }
 
 // Processes a comment created event received from github

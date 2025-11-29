@@ -33,37 +33,44 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	isPr := eventInfo.PrNum > 0
-	if isPr {
-		if eventInfo.Refresh {
-			pull, err := github.GetPullRequest(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
-			if err != nil {
-				log.Error().Err(err).Msgf("github.GetPullRequest(%s, %s, %d) failed", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
-				*callerErr = err
-				return
-			}
-			base := pull.GetBase()
-			head := pull.GetHead()
-			if base == nil || head == nil {
-				log.Error().Msgf("Empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
-				*callerErr = fmt.Errorf("empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
-				return
-			}
-			eventInfo.Sha = *head.SHA
-			eventInfo.ChangeRef = *head.Ref
-			eventInfo.BaseRef = *base.Ref
-		}
-		changedFiles, err := github.ListPullRequestFiles(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+	// Validate this is a PR event (required for PR-only support)
+	if eventInfo.PrNum <= 0 {
+		log.Error().Msg("ProcessCodeChange called with non-PR event - this is not supported")
+		*callerErr = fmt.Errorf("only pull request events are supported")
+		return
+	}
+
+	// Get PR details if this is a refresh event
+	if eventInfo.Refresh {
+		pull, err := github.GetPullRequest(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 		if err != nil {
+			log.Error().Err(err).Msgf("github.GetPullRequest(%s, %s, %d) failed", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 			*callerErr = err
-			log.Error().Err(err).Msgf("Failed to list pull request files for %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
-		} else {
-			eventInfo.ChangedFiles = changedFiles
+			return
 		}
+		base := pull.GetBase()
+		head := pull.GetHead()
+		if base == nil || head == nil {
+			log.Error().Msgf("Empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+			*callerErr = fmt.Errorf("empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+			return
+		}
+		eventInfo.Sha = *head.SHA
+		eventInfo.ChangeRef = *head.Ref
+		eventInfo.BaseRef = *base.Ref
+	}
+
+	// Get list of changed files in the PR
+	changedFiles, err := github.ListPullRequestFiles(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+	if err != nil {
+		*callerErr = err
+		log.Error().Err(err).Msgf("Failed to list pull request files for %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+	} else {
+		eventInfo.ChangedFiles = changedFiles
 	}
 
 	// set commit status to PENDING
-	err := github.Status(ctx, isPr, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	err = github.Status(ctx, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 	if err != nil {
 		log.Warn().Err(err).Msgf("Failed to set commit status %s for %s/%s@%s", github.StatusPending, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
 	}
@@ -72,7 +79,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	appResList, err := argocd.GetApplicationChanges(ctx, eventInfo)
 	if err != nil {
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
-		_ = github.Status(ctx, isPr, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+		_ = github.Status(ctx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 		*callerErr = err
 		return // we're done due to a processing error
 	}
@@ -132,21 +139,18 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		statusDescription = fmt.Sprintf("%s - no errors", changeCountStr)
 	}
 	// send the commit status
-	_ = github.Status(ctx, isPr, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	_ = github.Status(ctx, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
-	if isPr {
-		// if it's a pull-request event, only comment when something has happened
-		t := time.Now()
-		tStr := t.Format("3:04PM MST, 2 Jan 2006")
-		markdownStart += " compared to live state\n"
-		markdownStart += "\n" + tStr + "\n"
-		cMarkdown.Preamble = markdownStart
-		if changeCount == 0 && firstError == "" {
-			// if there are no changes or warnings, don't comment (but clear out any existing comments)
-			_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, []string{})
-		} else {
-			_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
-		}
-		return
+	// Post PR comment when something has happened
+	t := time.Now()
+	tStr := t.Format("3:04PM MST, 2 Jan 2006")
+	markdownStart += " compared to live state\n"
+	markdownStart += "\n" + tStr + "\n"
+	cMarkdown.Preamble = markdownStart
+	if changeCount == 0 && firstError == "" {
+		// if there are no changes or warnings, don't comment (but clear out any existing comments)
+		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, []string{})
+	} else {
+		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
 	}
 }
