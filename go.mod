@@ -2,7 +2,7 @@ module github.com/vince-riv/argo-diff
 
 go 1.25.0
 
-toolchain go1.25.4
+toolchain go1.25.5
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
