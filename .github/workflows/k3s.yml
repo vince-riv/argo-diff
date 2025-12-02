@@ -1,0 +1,114 @@
+---
+name: K3s PoC
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      #- '**/**.go'
+      #- 'go.mod'
+      #- 'go.sum'
+      #- '**/_testdata/**'
+      - '.github/workflows/k3s.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      #- '**/**.go'
+      #- 'go.mod'
+      #- 'go.sum'
+      #- '**/_testdata/**'
+      - '.github/workflows/k3s.yml'
+
+permissions:
+  contents: read
+
+env:
+  ARGOCD_OPTS: '--port-forward --port-forward-namespace argocd --insecure --plaintext'
+
+jobs:
+  k3s:
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s: [v1.34]  # v1.33, v1.32, v1.31, v1.30]
+    name: K8s ${{ matrix.k8s }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: nolar/setup-k3d-k3s@v1
+        name: Setup k3d
+        with:
+          version: ${{ matrix.k8s }}
+          k3d-args: -p 8080:443@loadbalancer
+
+      - name: Verify cluster
+        run: kubectl version
+
+      - name: Create ArgoCD namespace
+        run: kubectl create namespace argocd
+
+      - name: Install ArgoCD via HelmChart CRD
+        run: |
+          kubectl apply -n kube-system -f - <<EOF
+          apiVersion: helm.cattle.io/v1
+          kind: HelmChart
+          metadata:
+            name: argocd
+          spec:
+            repo: https://argoproj.github.io/argo-helm
+            chart: argo-cd
+            targetNamespace: argocd
+            valuesContent: |-
+              configs:
+                params:
+                  server.insecure: "true"
+                  server.disable.auth: "true"
+              redis-ha:
+                enabled: false
+              controller:
+                replicas: 1
+              server:
+                replicas: 1
+              repoServer:
+                replicas: 1
+              applicationSet:
+                replicas: 1
+              dex:
+                enabled: false
+          EOF
+
+      - name: Wait for HelmChart to deploy
+        timeout-minutes: 2
+        run: |
+          echo "Waiting for HelmChart to be processed..."
+          sleep 2
+          job_name=$(kubectl -n kube-system get helmchart argocd -o jsonpath='{.status.jobName}')
+          test -n "$job_name" || exit 1
+          while sleep 1 ; do
+            kubectl -n kube-system wait --for=condition=complete job/$job_name --timeout=1s && exit 0 || true
+            kubectl -n kube-system wait --for=condition=failed job/$job_name --timeout=1s && exit 1 || true
+          done
+
+      - name: Wait for ArgoCD pods to be ready
+        timeout-minutes: 3
+        run: |
+          echo "Waiting for ArgoCD pods to launch..."
+          while [[ -z "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]]; do
+            sleep 1
+          done
+          echo "Waiting for argocd-server pods to be ready ..."
+          kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=180s
+
+      - name: Debug pods if installation fails
+        if: failure()
+        run: |
+          kubectl -n argocd get pods -o yaml
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /tmp/argocd
+          sudo mv /tmp/argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: List ArgoCD applications
+        run: argocd app list
