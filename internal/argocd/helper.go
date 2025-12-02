@@ -277,6 +277,7 @@ func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webh
 	}
 	if strings.ToLower(os.Getenv("ARGO_DIFF_SKIP_REF_CHECK")) == "true" {
 		log.Info().Msgf("checkSource() - ARGO_DIFF_SKIP_REF_CHECK is true, proceeding with application %s (changeRef %s = Target Rev %s)", appName, changeRef, appSpecSource.TargetRevision)
+		return true
 	}
 	if baseRef != "" {
 		// Processing a PR ...
