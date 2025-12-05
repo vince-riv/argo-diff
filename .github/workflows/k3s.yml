@@ -34,8 +34,11 @@ jobs:
     name: K8s ${{ matrix.k8s }}
     runs-on: ubuntu-latest
     steps:
-      - uses: nolar/setup-k3d-k3s@v1
-        name: Setup k3d
+      - name: Git Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6
+
+      - name: Setup k3d
+        uses: nolar/setup-k3d-k3s@v1
         with:
           version: ${{ matrix.k8s }}
           k3d-args: -p 8080:443@loadbalancer
@@ -48,33 +51,7 @@ jobs:
 
       - name: Install ArgoCD via HelmChart CRD
         run: |
-          kubectl apply -n kube-system -f - <<EOF
-          apiVersion: helm.cattle.io/v1
-          kind: HelmChart
-          metadata:
-            name: argocd
-          spec:
-            repo: https://argoproj.github.io/argo-helm
-            chart: argo-cd
-            targetNamespace: argocd
-            valuesContent: |-
-              configs:
-                params:
-                  server.insecure: "true"
-                  server.disable.auth: "true"
-              redis-ha:
-                enabled: false
-              controller:
-                replicas: 1
-              server:
-                replicas: 1
-              repoServer:
-                replicas: 1
-              applicationSet:
-                replicas: 1
-              dex:
-                enabled: false
-          EOF
+          kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=apply=true
 
       - name: Wait for HelmChart to deploy
         timeout-minutes: 2
