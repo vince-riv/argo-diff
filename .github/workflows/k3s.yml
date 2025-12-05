@@ -103,6 +103,9 @@ jobs:
         run: |
           kubectl -n argocd get pods -o yaml
 
+      - name: Create ArgoCD test applications
+        run: kubectl -n argocd apply -f test/argocd-applications.yaml --server-side=true
+
       - name: Install ArgoCD CLI
         run: |
           curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
