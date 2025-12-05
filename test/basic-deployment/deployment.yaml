@@ -1,0 +1,29 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      labels:
+        app: test
+    spec:
+      serviceAccountName: test-sa
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: test
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - while true ; do sleep 1; done
+          envFrom:
+            - configMapRef:
+                name: config-env
+            - secretRef:
+                name: test-secret
