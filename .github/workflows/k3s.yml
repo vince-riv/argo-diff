@@ -90,5 +90,8 @@ jobs:
           sudo mv /tmp/argocd /usr/local/bin/argocd
           argocd version --client
 
-      - name: List ArgoCD applications
-        run: argocd app list
+      - name: Get ArgoCD applications
+        run: |
+          argocd app get basic-deployment --refresh
+          sleep 1
+          argocd app get basic-deployment -o tree
