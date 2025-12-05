@@ -51,7 +51,7 @@ jobs:
 
       - name: Install ArgoCD via HelmChart CRD
         run: |
-          kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=apply=true
+          kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=true
 
       - name: Wait for HelmChart to deploy
         timeout-minutes: 2
