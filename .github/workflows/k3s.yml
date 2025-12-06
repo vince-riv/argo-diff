@@ -96,3 +96,50 @@ jobs:
           #sleep 1
           #k#ubectl -n basic-deployment wait --for=condition=ready pod -l app=test --timeout=60s
           argocd app get basic-deployment -o tree
+
+      - name: Run argo-diff as a standalone pod
+        run: |
+          pod_name=argo-diff-$(date +%s)
+          cat <<EOF | kubectl argocd apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: $pod_name
+          spec:
+            restartPolicy: Never
+            containers:
+              - name: argo-diff
+                command:
+                  - /app/argo-diff
+                image: ghcr.io/vince-riv/argo-diff:main  # update to use current branch's build
+                env:
+                  - name: ARGO_DIFF_COMMENT_PREAMBLE
+                    value: |
+                      ## Argo-Diff - Ephemeral Environment Test
+                      This argo-diff should have the same output every run
+                  - name: ARGO_DIFF_CONTEXT_STR
+                    value: ephemeral-environment-test
+                  - name: ARGOCD_SERVER_ADDR
+                    value: argocd-server.argocd.svc.cluster.local:80
+                  - name: ARGOCD_SERVER_INSECURE
+                    value: "true"
+                  - name: ARGOCD_SERVER_PLAINTEXT
+                    value: "true"
+                  - name: GITHUB_ACTIONS
+                    value: "true"
+                  - name: GITHUB_TOKEN
+                    value: ${{ secrets.GITHUB_TOKEN }}
+                  - name: GITHUB_REF
+                    value: ${{ github.sha }}
+                  - name: GITHUB_EVENT_NAME
+                    value: "pull_request"  # ${{ github.event_name }}
+                  - name: GITHUB_HEAD_REF
+                    value: ${{ github.ref_name }}  # should contain pr-num
+                  - name: GITHUB_BASE_REF
+                    value: "k3s-test"
+                  - name: REPO_DEFAULT_REF
+                    value: "k3s-test"
+                  - name: LOG_LEVEL
+                    value: "debug"
+          EOF
+          kubectl -n argocd logs -f $pod_name
