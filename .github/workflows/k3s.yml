@@ -142,4 +142,4 @@ jobs:
                   - name: LOG_LEVEL
                     value: "debug"
           EOF
-          kubectl -n argocd logs -f $pod_name
+          kubectl -n argocd logs -f $pod_name --pod-running-timeout=60s
