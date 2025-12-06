@@ -90,8 +90,9 @@ jobs:
           sudo mv /tmp/argocd /usr/local/bin/argocd
           argocd version --client
 
-      - name: Get ArgoCD applications
+      - name: Sync Application and wait for ready
         run: |
           argocd app get basic-deployment --refresh
           sleep 1
+          kubectl -n basic-deployment wait --for=condition=ready pod -l app=app --timeout=60s
           argocd app get basic-deployment -o tree
