@@ -1,0 +1,43 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: test
+  # Finalizer that ensures that project is not deleted until it is not referenced by any application
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Test project
+  sourceRepos:
+    - 'https://github.com/vince-riv/argo-diff.git'
+  destinations:
+    - namespace: 'basic-deployment'
+      server: https://kubernetes.default.svc
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  annotations:
+    argocd.argoproj.io/manifest-generate-paths: .
+  name: basic-deployment
+spec:
+  project: test
+  source:
+    repoURL: 'https://github.com/vince-riv/argo-diff.git'
+    targetRevision: k3s-test
+    path: test/basic-deployment
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: basic-deployment
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
