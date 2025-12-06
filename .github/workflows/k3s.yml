@@ -100,7 +100,7 @@ jobs:
       - name: Run argo-diff as a standalone pod
         run: |
           pod_name=argo-diff-$(date +%s)
-          cat <<EOF | kubectl argocd apply -f -
+          cat <<EOF | kubectl -n argocd apply -f -
           apiVersion: v1
           kind: Pod
           metadata:
