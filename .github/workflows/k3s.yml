@@ -94,5 +94,5 @@ jobs:
         run: |
           argocd app sync basic-deployment
           sleep 1
-          kubectl -n basic-deployment wait --for=condition=ready pod -l app=test --timeout=60
+          kubectl -n basic-deployment wait --for=condition=ready pod -l app=test --timeout=60s
           argocd app get basic-deployment -o tree
