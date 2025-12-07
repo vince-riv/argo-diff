@@ -7,12 +7,3 @@ clusterRole:
 
 clusterRoleBinding:
   name: helm-test-sa-rolebinding
-
-configMap:
-  data:
-    HELLO_WORLD: "another test string"
-
-secret:
-  name: test-secret
-  data:
-    TEST_SECRET: "TestSecret1234"
