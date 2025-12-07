@@ -62,6 +62,11 @@ func FilterApplicationsByPath(apps []Application, changedFiles []string) []Appli
 			matchedApps = append(matchedApps, app)
 			continue
 		}
+		// Treat "/" as "no annotation" - include the app without path filtering
+		if strings.TrimSpace(manifestPaths) == "/" {
+			matchedApps = append(matchedApps, app)
+			continue
+		}
 
 		// Get all sources from the Application.
 		sources := app.Spec.GetSources()
