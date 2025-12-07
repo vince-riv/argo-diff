@@ -1,0 +1,181 @@
+---
+name: K3s Argo-Diff Test
+
+on:
+  workflow_run:
+    workflows: ["Docker build"]
+    types:
+      - completed
+  #pull_request:
+  #  branches: ["main"]
+  #  paths:
+  #    #- '**/**.go'
+  #    #- 'go.mod'
+  #    #- 'go.sum'
+  #    #- '**/_testdata/**'
+  #    - '.github/workflows/k3s.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  ARGOCD_OPTS: '--port-forward --port-forward-namespace argocd --insecure --plaintext'
+
+jobs:
+  k3s:
+    # Only run on pull_request events or successful workflow_run from dockerbuild
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s: [v1.34]  # v1.33, v1.32, v1.31, v1.30]
+    name: K8s ${{ matrix.k8s }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git Checkout
+        id: git_checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Determine argo-diff image tag
+        id: image_tag
+        env:
+          PR_DATA: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+        run: |
+          # Default argo-diff image tag - use when not triggered by Docker build
+          IMAGE_TAG="main"
+          if [[ "${{ github.event_name }}" == "workflow_run" && "${{ github.event.workflow_run.event }}" == "pull_request" ]]; then
+            # Triggered by dockerbuild.yml workflow on a PR - use the PR tag
+            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.[0].number')
+            if [[ -n "$PR_NUMBER" && "$PR_NUMBER" != "null" ]]; then
+              IMAGE_TAG="pr-${PR_NUMBER}"
+            fi
+          fi
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Using argo-diff image tag: ${IMAGE_TAG}"
+
+      - name: K3d/K3s Setup
+        id: k3s_setup
+        uses: nolar/setup-k3d-k3s@v1
+        with:
+          version: ${{ matrix.k8s }}
+          k3d-args: -p 8080:443@loadbalancer
+
+      - name: K3s Cluster verification
+        id: k3s_verify
+        run: kubectl version
+
+      - name: Install ArgoCD via HelmChart CRD
+        id: argocd_install
+        run: |
+          kubectl create namespace argocd
+          kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=true
+
+      - name: Wait for HelmChart to deploy
+        id: argocd_helm_wait
+        timeout-minutes: 2
+        run: |
+          echo "Waiting for HelmChart to be processed..."
+          sleep 2
+          job_name=$(kubectl -n kube-system get helmchart argocd -o jsonpath='{.status.jobName}')
+          test -n "$job_name" || exit 1
+          while sleep 1 ; do
+            kubectl -n kube-system wait --for=condition=complete job/$job_name --timeout=1s && exit 0 || true
+            kubectl -n kube-system wait --for=condition=failed job/$job_name --timeout=1s && exit 1 || true
+          done
+
+      - name: Wait for ArgoCD pods to be ready
+        id: argocd_server_wait
+        timeout-minutes: 3
+        run: |
+          echo "Waiting for ArgoCD pods to launch..."
+          while [[ -z "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]]; do
+            sleep 1
+          done
+          echo "Waiting for argocd-server pods to be ready ..."
+          kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=180s
+
+      - name: Debug pods if installation fails
+        id: argocd_pod_debug
+        if: failure()
+        run: |
+          kubectl -n argocd get pods -o yaml
+
+      - name: Create ArgoCD test applications
+        id: argocd_app_install
+        run: kubectl -n argocd apply -f test/argocd-applications.yaml --server-side=true
+
+      - name: Install ArgoCD CLI
+        id: argocd_cli_install
+        run: |
+          curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /tmp/argocd
+          sudo mv /tmp/argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: Sync Application and wait for ready
+        id: argocd_app_sync
+        run: |
+          argocd app wait basic-deployment
+          #sleep 1
+          #k#ubectl -n basic-deployment wait --for=condition=ready pod -l app=test --timeout=60s
+          argocd app get basic-deployment -o tree
+
+      - name: Run argo-diff as a standalone pod
+        id: argo_diff
+        run: |
+          pod_name=argo-diff-$(date +%s)
+          cat <<EOF | kubectl -n argocd apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: $pod_name
+          spec:
+            restartPolicy: Never
+            containers:
+              - name: argo-diff
+                command:
+                  - /app/argo-diff
+                image: ghcr.io/vince-riv/argo-diff:${{ steps.image_tag.outputs.IMAGE_TAG }}
+                env:
+                  - name: ARGO_DIFF_COMMENT_PREAMBLE
+                    value: |
+                      ## Argo-Diff - Ephemeral Environment Test
+                      This argo-diff should have the same output every run
+                  - name: ARGO_DIFF_CONTEXT_STR
+                    value: ephemeral-environment-test
+                  - name: ARGO_DIFF_SKIP_REF_CHECK
+                    value: "true"
+                  - name: ARGOCD_AUTH_TOKEN
+                    value: dummy_value
+                  - name: ARGOCD_SERVER_ADDR
+                    value: argocd-server.argocd.svc.cluster.local:80
+                  - name: ARGOCD_SERVER_INSECURE
+                    value: "true"
+                  - name: ARGOCD_SERVER_PLAINTEXT
+                    value: "true"
+                  - name: GITHUB_ACTIONS
+                    value: "true"
+                  - name: GITHUB_TOKEN
+                    value: ${{ secrets.GITHUB_TOKEN }}
+                  - name: GITHUB_SHA
+                    value: ${{ github.sha }}
+                  - name: GITHUB_REF
+                    value: ${{ github.ref }}  # should contain pr-num
+                  - name: GITHUB_EVENT_NAME
+                    value: "pull_request"  # ${{ github.event_name }}
+                  - name: GITHUB_HEAD_REF
+                    value: ${{ github.head_ref }}
+                  - name: GITHUB_BASE_REF
+                    value: "k3s-test"
+                  - name: GITHUB_REPOSITORY
+                    value: ${{ github.repository }}
+                  - name: REPO_DEFAULT_REF
+                    value: "k3s-test"
+                  - name: LOG_LEVEL
+                    value: "debug"
+          EOF
+          kubectl -n argocd wait --for=condition=ready pod/$pod_name --timeout=60s
+          kubectl -n argocd logs -f $pod_name --pod-running-timeout=60s

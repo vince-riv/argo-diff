@@ -1,0 +1,21 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: basic-deployment
+
+configMapGenerator:
+  - name: config-env
+    literals:
+      - HELLO_WORLD="another test string"
+      - TZ=America/New_York
+    options:
+      disableNameSuffixHash: true
+
+resources:
+  - namespace.yaml
+  - clusterrole.yaml
+  - serviceaccount.yaml
+  - clusterrolebinding.yaml
+  - secret.yaml
+  - deployment.yaml

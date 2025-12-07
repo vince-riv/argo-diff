@@ -1,0 +1,33 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+  labels:
+    app.kubernetes.io/name: argo-diff-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+      app.kubernetes.io/name: argo-diff-test
+  template:
+    metadata:
+      labels:
+        app: test
+        app.kubernetes.io/name: argo-diff-test
+    spec:
+      serviceAccountName: test-sa
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: test
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - while true ; do sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: config-env
+            - secretRef:
+                name: test-secret
