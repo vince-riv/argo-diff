@@ -7,7 +7,7 @@ namespace: basic-deployment
 configMapGenerator:
   - name: config-env
     literals:
-      - HELLO_WORLD="test string"
+      - HELLO_WORLD="another test string"
       - TZ=America/New_York
 
 resources:
