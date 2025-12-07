@@ -3,6 +3,7 @@ package argocd
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -247,20 +248,20 @@ func filterApplications(a []Application, eventInfo webhook.EventInfo, multiSourc
 }
 
 func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
-    const githubHost = "github.com"
-    candidates := []string{
-        fmt.Sprintf("%s/%s/%s.git", githubHost, repoOwner, repoName),
-        fmt.Sprintf("%s:%s/%s.git", githubHost, repoOwner, repoName),
-        fmt.Sprintf("%s/%s/%s", githubHost, repoOwner, repoName),
-        fmt.Sprintf("%s:%s/%s", githubHost, repoOwner, repoName),
-    }
-    log.Debug().Msgf("gitRepoMatch() - matching candidates: %v", candidates)
-    for _, candidate := range candidates {
-        if strings.HasSuffix(repoUrl, candidate) {
-            return true
-        }
-    }
-    return false
+	const githubHost = "github.com"
+	candidates := []string{
+		fmt.Sprintf("%s/%s/%s.git", githubHost, repoOwner, repoName),
+		fmt.Sprintf("%s:%s/%s.git", githubHost, repoOwner, repoName),
+		fmt.Sprintf("%s/%s/%s", githubHost, repoOwner, repoName),
+		fmt.Sprintf("%s:%s/%s", githubHost, repoOwner, repoName),
+	}
+	log.Debug().Msgf("gitRepoMatch() - matching candidates: %v", candidates)
+	for _, candidate := range candidates {
+		if strings.HasSuffix(repoUrl, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webhook.EventInfo, automatedSync bool) bool {
@@ -273,6 +274,9 @@ func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webh
 	if !gitRepoMatch(appSpecSource.RepoURL, eventInfo.RepoOwner, eventInfo.RepoName) {
 		log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't mach owner/repo %s/%s", appName, appSpecSource.RepoURL, eventInfo.RepoOwner, eventInfo.RepoName)
 		return false
+	}
+	if strings.ToLower(os.Getenv("ARGO_DIFF_SKIP_REF_CHECK")) == "true" {
+		log.Info().Msgf("checkSource() - ARGO_DIFF_SKIP_REF_CHECK is true, proceeding with application %s (changeRef %s = Target Rev %s)", appName, changeRef, appSpecSource.TargetRevision)
 	}
 	if baseRef != "" {
 		// Processing a PR ...
