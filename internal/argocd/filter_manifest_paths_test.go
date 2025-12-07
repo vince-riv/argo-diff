@@ -93,4 +93,19 @@ func TestFilterApplicationsByPath(t *testing.T) {
 	if len(mixedMatch3) != 1 {
 		t.Error("mixedMatch3 failed")
 	}
+
+	// Test "/" annotation - should match all files (same as no annotation)
+	a1[0].SetAnnotations(map[string]string{
+		annotationStr: "/",
+	})
+
+	rootMatch := FilterApplicationsByPath(a1, []string{"any/path/file.yaml", "another/file.txt"})
+	if len(rootMatch) != 1 {
+		t.Error("rootMatch failed - '/' annotation should match all files")
+	}
+
+	rootMatchEmpty := FilterApplicationsByPath(a1, []string{})
+	if len(rootMatchEmpty) != 1 {
+		t.Error("rootMatchEmpty failed - '/' annotation should include app even with no changed files")
+	}
 }
