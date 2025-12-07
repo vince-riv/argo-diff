@@ -6,14 +6,11 @@ on:
     workflows: ["Docker build"]
     types:
       - completed
-  #pull_request:
-  #  branches: ["main"]
-  #  paths:
-  #    #- '**/**.go'
-  #    #- 'go.mod'
-  #    #- 'go.sum'
-  #    #- '**/_testdata/**'
-  #    - '.github/workflows/k3s.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - '.github/workflows/k3s.yml'
+      - 'test/**'
 
 permissions:
   contents: read
@@ -24,8 +21,8 @@ env:
 
 jobs:
   k3s:
-    # Only run on pull_request events or successful workflow_run from dockerbuild
-    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    # Only run on pull_request events or successful workflow_run from dockerbuild in a pull request
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success') }}
     strategy:
       fail-fast: false
       matrix:
