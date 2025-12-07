@@ -7,7 +7,7 @@ namespace: basic-deployment
 configMapGenerator:
   - name: config-env
     literals:
-      - HELLO_WORLD="another test string"
+      - HELLO_WORLD="test string"
       - TZ=America/New_York
     options:
       disableNameSuffixHash: true
