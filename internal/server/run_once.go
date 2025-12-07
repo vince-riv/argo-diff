@@ -100,6 +100,9 @@ func eventInfoFromEnv() (*webhook.EventInfo, error) {
 		BaseRef:        os.Getenv("GITHUB_BASE_REF"),
 		Refresh:        true, // have argo-diff refresh sha, change-ref, and base-ref
 	}
+	if strings.ToLower(os.Getenv("ARGO_DIFF_SKIP_EVENT_REFRESH")) == "true" {
+		evt.Refresh = false
+	}
 
 	return &evt, nil
 }
