@@ -210,7 +210,8 @@ func (a ArgoAppMarkdown) OverviewStr(continued bool) string {
 		md += fmt.Sprintf("<summary>=== %s ===</summary>\n\n", capitalizeWords(a.AppName))
 	}
 	if argocdUiUrl != "" {
-		md += fmt.Sprintf("[ArgoCD UI](%s/applications/argocd/%s)\n", argocdUiUrl, a.AppName)
+		applicationUrl := fmt.Sprintf("%s/applications/argocd/%s", argocdUiUrl, a.AppName)
+		md += fmt.Sprintf("[%s](%s)\n", applicationUrl, applicationUrl)
 	}
 	md += syncString(a.SyncStatus) + "\n"
 	md += healthString(a.HealthStatus, a.HealthMsg) + "\n\n"
