@@ -6,7 +6,7 @@ toolchain go1.25.5
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
-	github.com/google/go-github/v79 v79.0.0
+	github.com/google/go-github/v80 v80.0.0
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/pflag v1.0.10
