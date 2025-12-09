@@ -36,22 +36,36 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Determine argo-diff image tag
-        id: image_tag
+      - name: Determine argo-diff image tag and PR refs
+        id: pr_info
         env:
           PR_DATA: ${{ toJSON(github.event.workflow_run.pull_requests) }}
         run: |
-          # Default argo-diff image tag - use when not triggered by Docker build
+          # Default values
           IMAGE_TAG="main"
+          HEAD_REF="${{ github.head_ref }}"
+          BASE_REF="${{ github.base_ref }}"
+          PR_REF="${{ github.ref }}"
+
           if [[ "${{ github.event_name }}" == "workflow_run" && "${{ github.event.workflow_run.event }}" == "pull_request" ]]; then
-            # Triggered by dockerbuild.yml workflow on a PR - use the PR tag
+            # Triggered by dockerbuild.yml workflow on a PR - extract PR context from workflow_run
             PR_NUMBER=$(echo "$PR_DATA" | jq -r '.[0].number')
+            HEAD_REF=$(echo "$PR_DATA" | jq -r '.[0].head.ref')
+            BASE_REF=$(echo "$PR_DATA" | jq -r '.[0].base.ref')
             if [[ -n "$PR_NUMBER" && "$PR_NUMBER" != "null" ]]; then
               IMAGE_TAG="pr-${PR_NUMBER}"
+              PR_REF="refs/pull/${PR_NUMBER}/merge"
             fi
           fi
+
           echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "HEAD_REF=${HEAD_REF}" >> $GITHUB_OUTPUT
+          echo "BASE_REF=${BASE_REF}" >> $GITHUB_OUTPUT
+          echo "PR_REF=${PR_REF}" >> $GITHUB_OUTPUT
           echo "Using argo-diff image tag: ${IMAGE_TAG}"
+          echo "Head ref (source branch): ${HEAD_REF}"
+          echo "Base ref (target branch): ${BASE_REF}"
+          echo "PR ref: ${PR_REF}"
 
       - name: K3d/K3s Setup
         id: k3s_setup
@@ -135,7 +149,7 @@ jobs:
               - name: argo-diff
                 command:
                   - /app/argo-diff
-                image: ghcr.io/vince-riv/argo-diff:${{ steps.image_tag.outputs.IMAGE_TAG }}
+                image: ghcr.io/vince-riv/argo-diff:${{ steps.pr_info.outputs.IMAGE_TAG }}
                 env:
                   - name: ARGO_DIFF_COMMENT_PREAMBLE
                     value: |
@@ -158,13 +172,13 @@ jobs:
                   - name: GITHUB_TOKEN
                     value: ${{ secrets.GITHUB_TOKEN }}
                   - name: GITHUB_SHA
-                    value: ${{ github.sha }}
+                    value: ${{ github.event.workflow_run.head_sha || github.sha }}
                   - name: GITHUB_REF
-                    value: ${{ github.ref }}  # should contain pr-num
+                    value: ${{ steps.pr_info.outputs.PR_REF }}
                   - name: GITHUB_EVENT_NAME
-                    value: "pull_request"  # ${{ github.event_name }}
+                    value: "pull_request"
                   - name: GITHUB_HEAD_REF
-                    value: ${{ github.head_ref }}
+                    value: ${{ steps.pr_info.outputs.HEAD_REF }}
                   - name: GITHUB_BASE_REF
                     value: "k3s-test"
                   - name: GITHUB_REPOSITORY
