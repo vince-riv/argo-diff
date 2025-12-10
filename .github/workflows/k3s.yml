@@ -133,6 +133,7 @@ jobs:
           #sleep 1
           #k#ubectl -n basic-deployment wait --for=condition=ready pod -l app=test --timeout=60s
           argocd app get basic-deployment -o tree
+          argocd app get helm-deployment -o tree
 
       - name: Run argo-diff as a standalone pod
         id: argo_diff
