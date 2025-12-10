@@ -1,0 +1,57 @@
+# Default values for test-basic-deployment
+
+# Namespace configuration
+namespace:
+  name: basic-deployment
+
+# Service account configuration
+serviceAccount:
+  name: test-sa
+
+# Deployment configuration
+deployment:
+  name: test
+  replicaCount: 1
+  terminationGracePeriodSeconds: 1
+
+  image:
+    repository: busybox
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  command:
+    - sh
+    - -c
+    - while true ; do sleep 2; done
+
+# ConfigMap configuration
+configMap:
+  name: config-env
+  data:
+    HELLO_WORLD: "test string"
+    TZ: America/New_York
+
+# Secret configuration
+secret:
+  name: test-secret
+  data:
+    TEST_SECRET: "TestSecret123"
+
+# ClusterRole configuration
+clusterRole:
+  name: test-clusterrole
+  rules:
+    - apiGroups: [""]
+      resources: ["namespaces"]
+      verbs: ["list"]
+
+# ClusterRoleBinding configuration
+clusterRoleBinding:
+  name: test-sa-rolebinding
+
+# Standard labels applied to all resources
+labels:
+  app.kubernetes.io/name: argo-diff-test
+
+# Common annotations (can be overridden per resource)
+annotations: {}
