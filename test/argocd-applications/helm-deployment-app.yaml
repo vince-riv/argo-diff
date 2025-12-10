@@ -1,0 +1,26 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: helm-deployment
+spec:
+  project: test
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: helm-deployment
+  sources:
+    - repoURL: 'https://github.com/vince-riv/argo-diff.git'
+      targetRevision: 'k3s-test'
+      path: charts/test-basic-deployment
+      helm:
+        valueFiles:
+          - $values/test/helm-deployment.values.yaml
+    - repoURL: 'https://github.com/vince-riv/argo-diff.git'
+      targetRevision: 'k3s-test'
+      ref: values
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

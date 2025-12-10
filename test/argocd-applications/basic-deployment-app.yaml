@@ -1,0 +1,20 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: basic-deployment
+spec:
+  project: test
+  source:
+    repoURL: 'https://github.com/vince-riv/argo-diff.git'
+    targetRevision: k3s-test
+    path: test/basic-deployment
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: basic-deployment
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
