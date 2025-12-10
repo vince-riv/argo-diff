@@ -116,7 +116,9 @@ jobs:
 
       - name: Create ArgoCD test applications
         id: argocd_app_install
-        run: kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
+        run: |
+          kubectl -n argocd apply -k test/argocd-applications/ --server-side=true
+          kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
 
       - name: Install ArgoCD CLI
         id: argocd_cli_install
