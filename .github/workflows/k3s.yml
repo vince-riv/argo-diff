@@ -116,7 +116,9 @@ jobs:
 
       - name: Create ArgoCD test applications
         id: argocd_app_install
-        run: kubectl -n argocd apply -f test/argocd-applications.yaml --server-side=true
+        run: |
+          kubectl -n argocd apply -k test/argocd-applications/ --server-side=true
+          kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
 
       - name: Install ArgoCD CLI
         id: argocd_cli_install
@@ -129,10 +131,13 @@ jobs:
       - name: Sync Application and wait for ready
         id: argocd_app_sync
         run: |
-          argocd app wait basic-deployment
-          #sleep 1
-          #k#ubectl -n basic-deployment wait --for=condition=ready pod -l app=test --timeout=60s
+          argocd app wait meta
+          echo "--- Meta ---"
+          argocd app get meta -o tree
+          echo "--- Basic-Deployment ---"
           argocd app get basic-deployment -o tree
+          echo "--- Helm-Deployment ---"
+          argocd app get helm-deployment -o tree
 
       - name: Run argo-diff as a standalone pod
         id: argo_diff
