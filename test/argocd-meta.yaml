@@ -2,16 +2,16 @@
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: test
+  name: meta
   # Finalizer that ensures that project is not deleted until it is not referenced by any application
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  description: Test project
+  description: Meta project
   sourceRepos:
     - 'https://github.com/vince-riv/argo-diff.git'
   destinations:
-    - namespace: 'basic-deployment'
+    - namespace: 'argocd'
       server: https://kubernetes.default.svc
   namespaceResourceWhitelist:
     - group: '*'
@@ -23,16 +23,16 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: basic-deployment
+  name: meta
 spec:
-  project: test
+  destination:
+    namespace: argocd
+    server: https://kubernetes.default.svc
+  project: meta
   source:
+    path: test/argocd-applications
     repoURL: 'https://github.com/vince-riv/argo-diff.git'
     targetRevision: k3s-test
-    path: test/basic-deployment
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: basic-deployment
   syncPolicy:
     automated:
       prune: true

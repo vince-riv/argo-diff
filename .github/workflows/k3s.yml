@@ -69,6 +69,7 @@ jobs:
 
       - name: K3d/K3s Setup
         id: k3s_setup
+        timeout-minutes: 2
         uses: nolar/setup-k3d-k3s@v1
         with:
           version: ${{ matrix.k8s }}
@@ -76,10 +77,12 @@ jobs:
 
       - name: K3s Cluster verification
         id: k3s_verify
+        timeout-minutes: 1
         run: kubectl version
 
       - name: Install ArgoCD via HelmChart CRD
         id: argocd_install
+        timeout-minutes: 1
         run: |
           kubectl create namespace argocd
           kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=true
@@ -110,16 +113,21 @@ jobs:
 
       - name: Debug pods if installation fails
         id: argocd_pod_debug
+        timeout-minutes: 1
         if: failure()
         run: |
           kubectl -n argocd get pods -o yaml
 
       - name: Create ArgoCD test applications
+        timeout-minutes: 1
         id: argocd_app_install
-        run: kubectl -n argocd apply -f test/argocd-applications.yaml --server-side=true
+        run: |
+          kubectl -n argocd apply -k test/argocd-applications/ --server-side=true
+          kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
 
       - name: Install ArgoCD CLI
         id: argocd_cli_install
+        timeout-minutes: 2
         run: |
           curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x /tmp/argocd
@@ -128,14 +136,29 @@ jobs:
 
       - name: Sync Application and wait for ready
         id: argocd_app_sync
+        timeout-minutes: 4
         run: |
+          echo "--- App List ---"
+          argocd app list
+          echo "--- Wait - meta ---"
+          argocd app wait meta
+          echo "--- Wait - basic-deployment ---"
           argocd app wait basic-deployment
-          #sleep 1
-          #k#ubectl -n basic-deployment wait --for=condition=ready pod -l app=test --timeout=60s
-          argocd app get basic-deployment -o tree
+          echo "--- Wait - helm-deployment ---"
+          argocd app wait helm-deployment
+          #echo "--- Meta ---"
+          #argocd app get meta -o tree
+          #echo "--- Basic-Deployment ---"
+          #argocd app get basic-deployment -o tree
+          #echo "--- Helm-Deployment ---"
+          #argocd app get helm-deployment -o tree
+          echo
+          echo "--- App List ---"
+          argocd app list
 
       - name: Run argo-diff as a standalone pod
         id: argo_diff
+        timeout-minutes: 2
         run: |
           pod_name=argo-diff-$(date +%s)
           cat <<EOF | kubectl -n argocd apply -f -

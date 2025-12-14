@@ -1,0 +1,9 @@
+---
+namespace:
+  name: helm-deployment
+
+clusterRole:
+  name: helm-test-clusterrole
+
+clusterRoleBinding:
+  name: helm-test-sa-rolebinding
