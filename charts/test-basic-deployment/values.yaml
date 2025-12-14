@@ -11,7 +11,7 @@ serviceAccount:
 # Deployment configuration
 deployment:
   name: test
-  replicaCount: 1
+  replicaCount: 2
   terminationGracePeriodSeconds: 1
 
   image:
