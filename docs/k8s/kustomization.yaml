@@ -12,4 +12,4 @@ resources:
 images:
   - name: argo-diff
     newName: ghcr.io/vince-riv/argo-diff
-    newTag: 2.3.0
+    newTag: 2.4.0
