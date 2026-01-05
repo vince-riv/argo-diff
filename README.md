@@ -189,9 +189,11 @@ variables must be set, or `GITHUB_TOKEN` or `GITHUB_PERSONAL_ACCESS_TOKEN` must 
 | ---------------------------- | ------------------------- | ---------------- | -------- | ----------- |
 | APP_ENV                      | N/A                       | no               |          | Set to 'dev' during local development. |
 | ARGOCD_AUTH_TOKEN            | argocd_auth_token         | yes              |          | Bearer token for ArgoCD (value passed to --auth-token) |
+| ARGOCD_APP_DIFF_SERVER_SIDE_DIFF | argocd_app_server_side_diff | no         |          | Value for --server-side-diff=? for argocd app diff command |
 | ARGOCD_CLI_CMD_NAME          | N/A                       | no               | `argocd` | When set, specifies the argocd cli command name. (Can be used to override the version of argocd argo-diff but requires the user to make it available |
 | ARGOCD_GRPC_WEB              | argocd_grpc_web           | no               | `false`  | Set --grpc-web flag for argocd cli (true/false) |
 | ARGOCD_GRPC_WEB_ROOT_PATH    | argocd_grpc_web_root_path | no               |          | Value for --grpc-web-root-path for argocd cli |
+| ARGOCD_OPTS                  | argocd_opts               | no               |          | Additional flags for argocd cli |
 | ARGOCD_SERVER_ADDR           | argocd_server             | yes              |          | ArgoCD server name (value passed to --server) |
 | ARGOCD_SERVER_INSECURE       | argocd_server_insecure    | no               | `false`  | Set --insecure flag for argocd cli (true/false) |
 | ARGOCD_SERVER_PLAINTEXT      | argocd_server_plaintext   | no               | `false`  | Set --plaintext flag for argocd cli (true/false) |
