@@ -21,11 +21,13 @@ import (
 var (
 	httpBearerToken string
 	commonCliArgv   []string
+	envArgoCdOpts   string
 )
 
 func init() {
 	serverAddr := os.Getenv("ARGOCD_SERVER_ADDR")
 	httpBearerToken = os.Getenv("ARGOCD_AUTH_TOKEN")
+	envArgoCdOpts = os.Getenv("ARGOCD_OPTS")
 	insecure := strings.ToLower(os.Getenv("ARGOCD_SERVER_INSECURE")) == "true"
 	plaintext := strings.ToLower(os.Getenv("ARGOCD_SERVER_PLAINTEXT")) == "true"
 	grpcWeb := strings.ToLower(os.Getenv("ARGOCD_GRPC_WEB")) == "true"
@@ -76,6 +78,9 @@ var execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 	argv := append(commonCliArgv, args...)
 	cmd := exec.CommandContext(ctx, argocdCmdName, argv...)
 	cmd.Env = append(cmd.Environ(), "KUBECTL_EXTERNAL_DIFF=diff -u")
+	if envArgoCdOpts != "" {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("ARGOCD_OPTS=%s", envArgoCdOpts))
+	}
 	logTraceCommandEnv(cmd)
 	out, err := cmd.Output()
 	if err != nil {

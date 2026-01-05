@@ -32,6 +32,10 @@ inputs:
   #  description: 'Version of argocd cli to use'
   #  required: false
   #  default: 'v2.13.2'
+  argocd_opts:
+    description: 'Additional flags to pass to argocd cli (eg: --timeout 30s). Populates ARGOCD_OPTS'
+    required: false
+    default: ''
   comment_line_max_chars:
     description: 'Any individual line in Pull Request comments by argo-diff longer than this are truncated.'
     required: false
@@ -69,6 +73,7 @@ runs:
     ARGOCD_SERVER_INSECURE: ${{ inputs.argocd_server_insecure }}
     ARGOCD_SERVER_PLAINTEXT: ${{ inputs.argocd_server_plaintext }}
     ARGOCD_UI_BASE_URL: ${{ inputs.argocd_ui_base_url }}
+    ARGOCD_OPTS: ${{ inputs.argocd_opts }}
     #ARGOCD_VERSION: ${{ inputs.argocd_version }}
     COMMENT_LINE_MAX_CHARS: ${{ inputs.comment_line_max_chars }}
     GITHUB_ACTIONS: "true"
