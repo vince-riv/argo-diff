@@ -57,6 +57,17 @@ func argocdCmdFromEnv() string {
 	return "argocd"
 }
 
+// function that uses log.Trace to log all environment variables for debugging. redact ARGOCD_AUTH_TOKEN and GITHUB_TOKEN, if set
+func logTraceCommandEnv(cmd *exec.Cmd) {
+	for _, envVar := range cmd.Env {
+		if strings.HasPrefix(envVar, "ARGOCD_AUTH_TOKEN=") || strings.HasPrefix(envVar, "GITHUB_TOKEN=") {
+			log.Trace().Msgf("%s=REDACTED", strings.SplitN(envVar, "=", 2)[0])
+		} else {
+			log.Trace().Msg(envVar)
+		}
+	}
+}
+
 // Wrapper around argocd cli; returns raw output in []bytes
 // Set as variable so it can be mocked in tests
 var execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
@@ -65,6 +76,7 @@ var execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 	argv := append(commonCliArgv, args...)
 	cmd := exec.CommandContext(ctx, argocdCmdName, argv...)
 	cmd.Env = append(cmd.Environ(), "KUBECTL_EXTERNAL_DIFF=diff -u")
+	logTraceCommandEnv(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		// log.Error().Err(err).Msgf("Failed to execute: %s ... %s", argocdCmdName, strings.Join(argv, " "))
