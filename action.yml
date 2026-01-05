@@ -36,6 +36,10 @@ inputs:
     description: 'Additional flags to pass to argocd cli (eg: --timeout 30s). Populates ARGOCD_OPTS'
     required: false
     default: ''
+  argocd_app_server_side_diff:
+    description: 'Set --server-side-diff flag for argocd app diff (true/false)'
+    required: false
+    default: ''
   comment_line_max_chars:
     description: 'Any individual line in Pull Request comments by argo-diff longer than this are truncated.'
     required: false
@@ -67,6 +71,7 @@ runs:
     ARGO_DIFF_COMMENT_PREAMBLE: ${{ inputs.comment_preamble }}
     ARGO_DIFF_CONTEXT_STR: ${{ inputs.context_str }}
     ARGOCD_AUTH_TOKEN: ${{ inputs.argocd_auth_token }}
+    ARGOCD_APP_DIFF_SERVER_SIDE_DIFF: ${{ inputs.argocd_app_server_side_diff }}
     ARGOCD_GRPC_WEB: ${{ inputs.argocd_grpc_web }}
     ARGOCD_GRPC_WEB_ROOT_PATH: ${{ inputs.argocd_grpc_web_root_path }}
     ARGOCD_SERVER_ADDR: ${{ inputs.argocd_server }}

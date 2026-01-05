@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	httpBearerToken string
-	commonCliArgv   []string
-	envArgoCdOpts   string
+	httpBearerToken       string
+	commonCliArgv         []string
+	envArgoCdOpts         string
+	appDiffServerSideDiff string
 )
 
 func init() {
@@ -48,6 +49,13 @@ func init() {
 	}
 	if grpcWebRoot != "" {
 		commonCliArgv = append(commonCliArgv, "--grpc-web-root-path", grpcWebRoot)
+	}
+	// check to see if we need to enable/disable server-side diff for app diff commands
+	envAppDiffServerSide := strings.ToLower(os.Getenv("ARGOCD_APP_DIFF_SERVER_SIDE_DIFF"))
+	if envAppDiffServerSide == "true" || envAppDiffServerSide == "false" {
+		appDiffServerSideDiff = envAppDiffServerSide
+	} else if envAppDiffServerSide != "" {
+		log.Warn().Msgf("Invalid value for ARGOCD_APP_DIFF_SERVER_SIDE_DIFF: %s; must be 'true' or 'false'", envAppDiffServerSide)
 	}
 }
 
@@ -214,6 +222,9 @@ func diffApplication(ctx context.Context, appName string, revision string, revis
 			args = append(args, "--source-positions")
 			args = append(args, strconv.Itoa(pos))
 		}
+	}
+	if appDiffServerSideDiff != "" {
+		args = append(args, fmt.Sprintf("--server-side-diff=%s", appDiffServerSideDiff))
 	}
 	output, err := execArgoCdCli(ctx, args)
 	if err != nil {
