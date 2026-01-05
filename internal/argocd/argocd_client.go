@@ -19,13 +19,16 @@ import (
 )
 
 var (
-	httpBearerToken string
-	commonCliArgv   []string
+	httpBearerToken       string
+	commonCliArgv         []string
+	envArgoCdOpts         string
+	appDiffServerSideDiff string
 )
 
 func init() {
 	serverAddr := os.Getenv("ARGOCD_SERVER_ADDR")
 	httpBearerToken = os.Getenv("ARGOCD_AUTH_TOKEN")
+	envArgoCdOpts = os.Getenv("ARGOCD_OPTS")
 	insecure := strings.ToLower(os.Getenv("ARGOCD_SERVER_INSECURE")) == "true"
 	plaintext := strings.ToLower(os.Getenv("ARGOCD_SERVER_PLAINTEXT")) == "true"
 	grpcWeb := strings.ToLower(os.Getenv("ARGOCD_GRPC_WEB")) == "true"
@@ -47,6 +50,13 @@ func init() {
 	if grpcWebRoot != "" {
 		commonCliArgv = append(commonCliArgv, "--grpc-web-root-path", grpcWebRoot)
 	}
+	// check to see if we need to enable/disable server-side diff for app diff commands
+	envAppDiffServerSide := strings.ToLower(os.Getenv("ARGOCD_APP_DIFF_SERVER_SIDE_DIFF"))
+	if envAppDiffServerSide == "true" || envAppDiffServerSide == "false" {
+		appDiffServerSideDiff = envAppDiffServerSide
+	} else if envAppDiffServerSide != "" {
+		log.Warn().Msgf("Invalid value for ARGOCD_APP_DIFF_SERVER_SIDE_DIFF: %s; must be 'true' or 'false'", envAppDiffServerSide)
+	}
 }
 
 func argocdCmdFromEnv() string {
@@ -57,6 +67,17 @@ func argocdCmdFromEnv() string {
 	return "argocd"
 }
 
+// function that uses log.Trace to log all environment variables for debugging. redact ARGOCD_AUTH_TOKEN and GITHUB_TOKEN, if set
+func logTraceCommandEnv(cmd *exec.Cmd) {
+	for _, envVar := range cmd.Env {
+		if strings.HasPrefix(envVar, "ARGOCD_AUTH_TOKEN=") || strings.HasPrefix(envVar, "GITHUB_TOKEN=") {
+			log.Trace().Msgf("%s=REDACTED", strings.SplitN(envVar, "=", 2)[0])
+		} else {
+			log.Trace().Msg(envVar)
+		}
+	}
+}
+
 // Wrapper around argocd cli; returns raw output in []bytes
 // Set as variable so it can be mocked in tests
 var execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
@@ -65,6 +86,10 @@ var execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 	argv := append(commonCliArgv, args...)
 	cmd := exec.CommandContext(ctx, argocdCmdName, argv...)
 	cmd.Env = append(cmd.Environ(), "KUBECTL_EXTERNAL_DIFF=diff -u")
+	if envArgoCdOpts != "" {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("ARGOCD_OPTS=%s", envArgoCdOpts))
+	}
+	logTraceCommandEnv(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		// log.Error().Err(err).Msgf("Failed to execute: %s ... %s", argocdCmdName, strings.Join(argv, " "))
@@ -197,6 +222,9 @@ func diffApplication(ctx context.Context, appName string, revision string, revis
 			args = append(args, "--source-positions")
 			args = append(args, strconv.Itoa(pos))
 		}
+	}
+	if appDiffServerSideDiff != "" {
+		args = append(args, fmt.Sprintf("--server-side-diff=%s", appDiffServerSideDiff))
 	}
 	output, err := execArgoCdCli(ctx, args)
 	if err != nil {
