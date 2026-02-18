@@ -172,7 +172,7 @@ jobs:
               - name: argo-diff
                 command:
                   - /app/argo-diff
-                image: ghcr.io/vince-riv/argo-diff:${{ steps.pr_info.outputs.IMAGE_TAG }}
+                image: ghcr.io/vince-riv/argo-diff:${{ steps.pr_info.outputs.IMAGE_TAG }}  # renovate: ignore
                 env:
                   - name: ARGO_DIFF_COMMENT_PREAMBLE
                     value: |
