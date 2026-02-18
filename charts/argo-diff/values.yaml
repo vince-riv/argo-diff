@@ -18,7 +18,7 @@ image:
   repository: ghcr.io/vince-riv/argo-diff
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""  # renovate: ignore
+  tag: "@sha256:030826af5aee7297b9cb0246b49fe0866719f2e613fad5f4436eb057417cea05"  # renovate: ignore
 
 imagePullSecrets: []
 
