@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v83 v83.0.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/pflag v1.0.10
-	k8s.io/apimachinery v0.35.1
+	k8s.io/apimachinery v0.35.2
 	sigs.k8s.io/yaml v1.6.0
 )
 
