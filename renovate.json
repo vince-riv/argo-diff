@@ -10,13 +10,7 @@
         ],
         "groupName": "go-github"
     }],
-    "customManagers": [{
-        "customType": "regex",
-        "managerFilePatterns": ["/(^|/).*\\.go$/"],
-        "matchStrings": ["go-github/v(?<currentValue>\\d+)/"],
-        "depNameTemplate": "google/go-github",
-        "datasourceTemplate": "github-tags",
-        "versioningTemplate": "regex:^(?<major>\\d+)$",
-        "extractVersionTemplate": "^v(?<version>\\d+)\\."
-    }]
+    "postUpdateOptions": [
+        "gomodUpdateImportPaths"
+    ]
 }
