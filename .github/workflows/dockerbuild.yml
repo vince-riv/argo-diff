@@ -121,7 +121,7 @@ jobs:
       -
         name: Build and push linux/amd64
         if: ${{ github.event_name == 'pull_request' }} ## only push amd64 on PRs
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: .
           file: Dockerfile.no-build
@@ -132,7 +132,7 @@ jobs:
       -
         name: Build and push multi-arch
         if: ${{ github.event_name != 'pull_request' }} ## push multi-arch when not a PR
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: .
           file: Dockerfile.no-build
