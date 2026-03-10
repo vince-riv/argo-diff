@@ -6,7 +6,7 @@ toolchain go1.25.7
 
 require (
 	github.com/akedrou/textdiff v0.1.0
-	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
+	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/google/go-github/v84 v84.0.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/pflag v1.0.10
@@ -18,7 +18,6 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/google/go-github/v75 v75.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kr/text v0.2.0 // indirect
