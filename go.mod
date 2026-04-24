@@ -8,7 +8,7 @@ require (
 	github.com/akedrou/textdiff v0.1.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/google/go-github/v84 v84.0.0
-	github.com/rs/zerolog v1.35.0
+	github.com/rs/zerolog v1.35.1
 	github.com/spf13/pflag v1.0.10
 	k8s.io/apimachinery v0.35.4
 	sigs.k8s.io/yaml v1.6.0
