@@ -1,5 +1,5 @@
 ## Build
-FROM golang:1.25@sha256:8a7adc288b77e9b787cd2695029eb54d10ae80571b21d44fed68d067ad0a9c96 AS build
+FROM golang:1.25@sha256:69a7b8cc06cfb629da20d23be8f8f359a1f823481ab1a14b4e1ece153ea1d1c0 AS build
 
 ARG VERSION=dev
 
