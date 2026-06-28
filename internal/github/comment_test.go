@@ -8,13 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v88/github"
 )
 
 const testDataDir = "github_testdata"
@@ -174,10 +173,12 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 func TestCommentNoExistingComments(t *testing.T) {
 	server := newHttpTestServer(t)
 	defer server.Close()
-	httpBaseUrl, _ := url.Parse(server.URL + "/")
-	commentClient = github.NewClient(nil).WithAuthToken("test1234")
-	commentClient.BaseURL = httpBaseUrl
-	commentClient.UploadURL = httpBaseUrl
+	baseURL := server.URL + "/"
+	var err error
+	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
 
 	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 1)
 	if err != nil {
@@ -199,10 +200,12 @@ func TestCommentNoExistingComments(t *testing.T) {
 func TestCommentExistingDifferentUser(t *testing.T) {
 	server := newHttpTestServer(t)
 	defer server.Close()
-	httpBaseUrl, _ := url.Parse(server.URL + "/")
-	commentClient = github.NewClient(nil).WithAuthToken("test1234")
-	commentClient.BaseURL = httpBaseUrl
-	commentClient.UploadURL = httpBaseUrl
+	baseURL := server.URL + "/"
+	var err error
+	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
 
 	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 2)
 	if err != nil {
@@ -224,10 +227,12 @@ func TestCommentExistingDifferentUser(t *testing.T) {
 func TestCommentExisting(t *testing.T) {
 	server := newHttpTestServer(t)
 	defer server.Close()
-	httpBaseUrl, _ := url.Parse(server.URL + "/")
-	commentClient = github.NewClient(nil).WithAuthToken("test1234")
-	commentClient.BaseURL = httpBaseUrl
-	commentClient.UploadURL = httpBaseUrl
+	baseURL := server.URL + "/"
+	var err error
+	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
 
 	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 3)
 	if err != nil {
@@ -251,10 +256,12 @@ func TestCommentExisting(t *testing.T) {
 func TestCommentExistingMulti(t *testing.T) {
 	server := newHttpTestServer(t)
 	defer server.Close()
-	httpBaseUrl, _ := url.Parse(server.URL + "/")
-	commentClient = github.NewClient(nil).WithAuthToken("test1234")
-	commentClient.BaseURL = httpBaseUrl
-	commentClient.UploadURL = httpBaseUrl
+	baseURL := server.URL + "/"
+	var err error
+	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
 
 	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 4)
 	if err != nil {
@@ -287,10 +294,12 @@ func TestCommentExistingMulti(t *testing.T) {
 func TestCommentExistingMultiNoComment(t *testing.T) {
 	server := newHttpTestServer(t)
 	defer server.Close()
-	httpBaseUrl, _ := url.Parse(server.URL + "/")
-	commentClient = github.NewClient(nil).WithAuthToken("test1234")
-	commentClient.BaseURL = httpBaseUrl
-	commentClient.UploadURL = httpBaseUrl
+	baseURL := server.URL + "/"
+	var err error
+	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
 
 	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 4)
 	if err != nil {
@@ -323,10 +332,12 @@ func TestCommentExistingMultiNoComment(t *testing.T) {
 func TestCommentNotHead(t *testing.T) {
 	server := newHttpTestServer(t)
 	defer server.Close()
-	httpBaseUrl, _ := url.Parse(server.URL + "/")
-	commentClient = github.NewClient(nil).WithAuthToken("test1234")
-	commentClient.BaseURL = httpBaseUrl
-	commentClient.UploadURL = httpBaseUrl
+	baseURL := server.URL + "/"
+	var err error
+	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
 
 	prHeadShaOld := "1111111111111111111111111111111111111111"
 

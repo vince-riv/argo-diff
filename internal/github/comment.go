@@ -12,7 +12,7 @@ import (
 	"time"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v88/github"
 	"github.com/rs/zerolog/log"
 )
 
@@ -45,9 +45,19 @@ func init() {
 	}
 	// Create Github API client
 	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
-		commentClient = github.NewClient(nil).WithAuthToken(githubPAT)
+		var err error
+		commentClient, err = github.NewClient(github.WithAuthToken(githubPAT))
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to create github client")
+			return
+		}
 	} else if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
-		commentClient = github.NewClient(nil).WithAuthToken(githubToken)
+		var err error
+		commentClient, err = github.NewClient(github.WithAuthToken(githubToken))
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to create github client")
+			return
+		}
 	} else {
 		tr := http.DefaultTransport
 		appId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)
@@ -67,8 +77,16 @@ func init() {
 			return
 		}
 		itr := ghinstallation.NewFromAppsTransport(atr, installId)
-		commentClient = github.NewClient(&http.Client{Transport: itr})
-		appsClient = github.NewClient(&http.Client{Transport: atr}) // /app endpoints need separate client
+		commentClient, err = github.NewClient(github.WithHTTPClient(&http.Client{Transport: itr}))
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to create github comment client")
+			return
+		}
+		appsClient, err = github.NewClient(github.WithHTTPClient(&http.Client{Transport: atr}))
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to create github apps client")
+			return
+		}
 		commentClientIsApp = true
 	}
 }
