@@ -37,11 +37,19 @@ func init() {
 	}
 	// Create Github API client
 	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
-		statusClient = github.NewClient(nil).WithAuthToken(githubPAT)
+		var err error
+		statusClient, err = github.NewClient(github.WithAuthToken(githubPAT))
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to create github status client")
+		}
 		return
 	}
 	if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
-		statusClient = github.NewClient(nil).WithAuthToken(githubToken)
+		var err error
+		statusClient, err = github.NewClient(github.WithAuthToken(githubToken))
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to create github status client")
+		}
 		return
 	}
 	tr := http.DefaultTransport
@@ -61,7 +69,10 @@ func init() {
 		log.Error().Err(err).Msgf("Failed to create github client: appId %d, installId %d, privKey %s...", appId, installId, privKey[:15])
 		return
 	}
-	statusClient = github.NewClient(&http.Client{Transport: itr})
+	statusClient, err = github.NewClient(github.WithHTTPClient(&http.Client{Transport: itr}))
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create github status client")
+	}
 }
 
 // Helper that sets commit status for the request commit sha
