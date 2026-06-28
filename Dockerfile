@@ -12,7 +12,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-X 'main.Version=${VERSION}'" -o argo-diff ./cmd/
 
 ## ArgoCD
-FROM quay.io/argoproj/argocd:v3.3.9@sha256:fd8a938f3ec64bfa272d17c20a56b548a97711b92bd5b0a80a485e81bc724969 AS argocd
+FROM quay.io/argoproj/argocd:v3.4.4@sha256:2fb3efa9eaa42382acb39c9a1485eaac7a1ad7a09e8aa7da7143ca256fa6da09 AS argocd
 
 ## Final image
 FROM alpine:latest@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
