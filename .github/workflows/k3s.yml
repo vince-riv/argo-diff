@@ -163,9 +163,9 @@ jobs:
           POD_NAME_PREFIX: argo-diff-healthy
           IMAGE_TAG: ${{ steps.pr_info.outputs.IMAGE_TAG }}
           ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test
-          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          GITHUB_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          ARGO_DIFF_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ARGO_DIFF_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
+          ARGO_DIFF_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REF: ${{ steps.pr_info.outputs.PR_REF }}
           EXPECT_EXIT: "0"
@@ -192,9 +192,9 @@ jobs:
           POD_NAME_PREFIX: argo-diff-failure
           IMAGE_TAG: ${{ steps.pr_info.outputs.IMAGE_TAG }}
           ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test-failure
-          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          GITHUB_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          ARGO_DIFF_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ARGO_DIFF_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
+          ARGO_DIFF_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REF: ${{ steps.pr_info.outputs.PR_REF }}
           EXPECT_EXIT: nonzero

@@ -6,12 +6,17 @@
 #   POD_NAME_PREFIX       - prefix for the pod name (a timestamp suffix is appended)
 #   IMAGE_TAG             - argo-diff image tag to run
 #   ARGO_DIFF_CONTEXT_STR - value for ARGO_DIFF_CONTEXT_STR (commit status / comment context)
-#   GITHUB_SHA            - commit sha argo-diff should diff against
-#   GITHUB_HEAD_REF       - PR head branch
-#   GITHUB_REPOSITORY     - owner/repo
+#   ARGO_DIFF_SHA         - commit sha argo-diff should diff against
+#   ARGO_DIFF_HEAD_REF    - PR head branch
+#   ARGO_DIFF_REPOSITORY  - owner/repo
 #   GITHUB_TOKEN          - GitHub token for commenting/status
 #   PR_REF                - GITHUB_REF value (e.g. refs/pull/N/merge)
 #   EXPECT_EXIT           - "0" to require success, "nonzero" to require failure
+#
+# Note: the ARGO_DIFF_SHA/HEAD_REF/REPOSITORY inputs are deliberately not named
+# GITHUB_SHA/GITHUB_HEAD_REF/GITHUB_REPOSITORY - those are GitHub Actions'
+# reserved default environment variables, and a step's own `env:` block cannot
+# override them (the runner silently keeps its own context value instead).
 #
 # Optional env vars:
 #   REQUIRE_LOG           - substring that must appear in the pod logs
@@ -19,7 +24,7 @@
 set -euo pipefail
 
 : "${POD_NAME_PREFIX:?}" "${IMAGE_TAG:?}" "${ARGO_DIFF_CONTEXT_STR:?}" \
-  "${GITHUB_SHA:?}" "${GITHUB_HEAD_REF:?}" "${GITHUB_REPOSITORY:?}" \
+  "${ARGO_DIFF_SHA:?}" "${ARGO_DIFF_HEAD_REF:?}" "${ARGO_DIFF_REPOSITORY:?}" \
   "${GITHUB_TOKEN:?}" "${PR_REF:?}" "${EXPECT_EXIT:?}"
 
 pod_name="${POD_NAME_PREFIX}-$(date +%s)"
@@ -58,17 +63,17 @@ spec:
         - name: GITHUB_TOKEN
           value: "${GITHUB_TOKEN}"
         - name: GITHUB_SHA
-          value: "${GITHUB_SHA}"
+          value: "${ARGO_DIFF_SHA}"
         - name: GITHUB_REF
           value: "${PR_REF}"
         - name: GITHUB_EVENT_NAME
           value: "pull_request"
         - name: GITHUB_HEAD_REF
-          value: "${GITHUB_HEAD_REF}"
+          value: "${ARGO_DIFF_HEAD_REF}"
         - name: GITHUB_BASE_REF
           value: "k3s-test"
         - name: GITHUB_REPOSITORY
-          value: "${GITHUB_REPOSITORY}"
+          value: "${ARGO_DIFF_REPOSITORY}"
         - name: REPO_DEFAULT_REF
           value: "k3s-test"
         - name: LOG_LEVEL
