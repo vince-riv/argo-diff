@@ -114,6 +114,78 @@ func TestFilterApplications(t *testing.T) {
 	}
 }
 
+func TestFilterApplicationsFullyQualifiedRefs(t *testing.T) {
+	loadApps := func(t *testing.T) []Application {
+		payload, _, err := readFileToByteArray(payloadAppList)
+		if err != nil {
+			t.Fatalf("Failed to read %s: %v", payloadAppList, err)
+		}
+		var appList ApplicationList
+		if err := json.Unmarshal(payload, &appList); err != nil {
+			t.Fatalf("Error decoding ApplicationList payload: %v", err)
+		}
+		return appList.Items
+	}
+
+	// targetRevision = refs/heads/main, PR base main should match even though
+	// the PR's change branch is unrelated.
+	a := loadApps(t)
+	a[1].Spec.Source.TargetRevision = "refs/heads/main"
+	evtInfo := wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "main"}
+	result, _ := filterApplications(a, evtInfo, false)
+	if len(result) != 1 {
+		t.Error("PR against main should have matched (targetRev refs/heads/main)")
+	}
+
+	// targetRevision = refs/heads/dev
+	a = loadApps(t)
+	a[1].Spec.Source.TargetRevision = "refs/heads/dev"
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "dev"}
+	result, _ = filterApplications(a, evtInfo, false)
+	if len(result) != 1 {
+		t.Error("PR against dev should have matched (targetRev refs/heads/dev)")
+	}
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "main"}
+	result, _ = filterApplications(a, evtInfo, false)
+	if len(result) != 0 {
+		t.Error("PR against main should NOT have matched (targetRev refs/heads/dev)")
+	}
+
+	// Push to refs/heads/main w/ auto-sync enabled should be filtered out,
+	// same as the short-name case.
+	a = loadApps(t)
+	a[1].Spec.Source.TargetRevision = "refs/heads/main"
+	a[1].Spec.SyncPolicy = &SyncPolicy{Automated: &SyncPolicyAutomated{}}
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "refs/heads/main", BaseRef: ""}
+	result, _ = filterApplications(a, evtInfo, false)
+	if len(result) != 0 {
+		t.Error("Push to main should NOT have matched (targetRev refs/heads/main) (auto-sync ENABLED)")
+	}
+
+	// Sanity: tag refs are not treated as branches.
+	a = loadApps(t)
+	a[1].Spec.Source.TargetRevision = "refs/tags/v1.0.0"
+	evtInfo = wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "dev", BaseRef: "v1.0.0"}
+	result, _ = filterApplications(a, evtInfo, false)
+	if len(result) != 0 {
+		t.Error("PR against a tag name should NOT have matched (targetRev refs/tags/v1.0.0)")
+	}
+}
+
+func TestNormalizeBranchRef(t *testing.T) {
+	cases := map[string]string{
+		"refs/heads/main": "main",
+		"HEAD":            "HEAD",
+		"refs/tags/v1":    "refs/tags/v1",
+		"main":            "main",
+	}
+	for in, want := range cases {
+		if got := normalizeBranchRef(in); got != want {
+			t.Errorf("normalizeBranchRef(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestFilterApplicationsMultiSource(t *testing.T) {
 	var a []Application
 
