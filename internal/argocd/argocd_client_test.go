@@ -1,8 +1,24 @@
 package argocd
 
 import (
+	"context"
+	"os/exec"
 	"testing"
 )
+
+// makeExitError runs a trivial failing command to obtain a real *exec.ExitError
+// with exit code 1, then stamps the given stderr onto it for test purposes.
+func makeExitError(t *testing.T, stderr []byte) *exec.ExitError {
+	t.Helper()
+	cmd := exec.Command("false")
+	err := cmd.Run()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected *exec.ExitError from running 'false', got %T: %v", err, err)
+	}
+	exitErr.Stderr = stderr
+	return exitErr
+}
 
 var lokiClusterRoleDiff = `===== rbac.authorization.k8s.io/ClusterRoleBinding /loki-clusterrolebinding ======
 --- /var/folders/4h/55t7qz1s27d2dpzp1dvcm5h40000gp/T/argocd-diff1365729858/loki-clusterrolebinding-live.yaml	2024-12-15 21:55:28
@@ -155,6 +171,41 @@ func TestExtractKubernetesFields(t *testing.T) {
 	if name != "loki-clusterrole" {
 		t.Errorf("Expected name 'loki-clusterrole', got %s", name)
 	}
+}
+
+func TestDiffApplicationExitCodeHandling(t *testing.T) {
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+
+	t.Run("exit 1 with stdout diff is treated as changes", func(t *testing.T) {
+		diffOutput := []byte(lokiClusterRoleDiff)
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			return diffOutput, makeExitError(t, nil)
+		}
+		appResList, err := diffApplication(context.Background(), "argo-diff", "HEAD", nil, nil)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		if len(appResList) != 1 {
+			t.Fatalf("expected 1 changed resource, got %d", len(appResList))
+		}
+		if appResList[0].Kind != "ClusterRoleBinding" {
+			t.Errorf("expected kind ClusterRoleBinding, got %s", appResList[0].Kind)
+		}
+	})
+
+	t.Run("exit 1 with empty stdout and stderr is treated as a render failure", func(t *testing.T) {
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			return nil, makeExitError(t, []byte("FATA[0000] failed to generate manifest"))
+		}
+		appResList, err := diffApplication(context.Background(), "argo-diff", "HEAD", nil, nil)
+		if err == nil {
+			t.Fatal("expected an error for exit 1 with empty stdout, got nil")
+		}
+		if appResList != nil {
+			t.Errorf("expected nil appResList on error, got %v", appResList)
+		}
+	})
 }
 
 func TestAppManifestHelper(t *testing.T) {
