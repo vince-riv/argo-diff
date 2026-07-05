@@ -129,6 +129,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		// if we had errors, commit status should be a failure
 		newStatus = github.StatusFailure
 		statusDescription = fmt.Sprintf("%s; %d had an error; first error: %s", changeCountStr, errorCount, firstError)
+		*callerErr = fmt.Errorf("%d application(s) failed to generate a diff; first error: %s", errorCount, firstError)
 	} else if firstError != "" {
 		// if we had a recoverable error, commit status can be a success (but let's give them the first error)
 		newStatus = github.StatusSuccess

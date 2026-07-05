@@ -229,10 +229,7 @@ func diffApplication(ctx context.Context, appName string, revision string, revis
 	output, err := execArgoCdCli(ctx, args)
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() == 1 {
-				if len(output) == 0 {
-					output = exitErr.Stderr
-				}
+			if exitErr.ExitCode() == 1 && len(output) > 0 {
 				log.Trace().Msgf("Application %s revision %s has changes: %s", appName, revision, output)
 				for _, diffStr := range diffBytesToStr(output) {
 					var appRes AppResource
