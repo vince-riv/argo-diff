@@ -264,10 +264,21 @@ func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
 	return false
 }
 
+// normalizeBranchRef strips the fully-qualified refs/heads/ prefix so a
+// fully-qualified targetRevision (refs/heads/main) — ArgoCD's recommended
+// form per its high-availability guide — compares equal to the short
+// branch names GitHub supplies in webhook events (main). Tag refs
+// (refs/tags/...) and non-branch refs are left untouched, since PR base
+// refs are always branches and would never match a tag.
+func normalizeBranchRef(ref string) string {
+	return strings.TrimPrefix(ref, "refs/heads/")
+}
+
 func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webhook.EventInfo, automatedSync bool) bool {
 	baseRef := eventInfo.BaseRef
 	changeRef := eventInfo.ChangeRef
 	repoDefaultRef := eventInfo.RepoDefaultRef
+	targetRevision := normalizeBranchRef(appSpecSource.TargetRevision)
 	log.Trace().Msgf("checkSource() - appname: %s (autosync %t)", appName, automatedSync)
 	log.Trace().Msgf("checkSource() - appSpecSource: %+v", appSpecSource)
 	log.Trace().Msgf("checkSource() - eventInfo: %+v", eventInfo)
@@ -281,12 +292,12 @@ func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webh
 	}
 	if baseRef != "" {
 		// Processing a PR ...
-		if appSpecSource.TargetRevision == "HEAD" && baseRef != repoDefaultRef {
+		if targetRevision == "HEAD" && baseRef != repoDefaultRef {
 			// filter application if argo targets repo default (eg: main) and PR is not targetting main
 			log.Debug().Msgf("Filtering application %s: Target Rev is HEAD; baseRef %s != repoDefaultRef %s", appName, baseRef, repoDefaultRef)
 			return false
 		}
-		if appSpecSource.TargetRevision != "HEAD" && baseRef != appSpecSource.TargetRevision {
+		if targetRevision != "HEAD" && baseRef != targetRevision {
 			// filter application if argo doesn't target repo default (eg: main)  and PR is not targetting that branch
 			log.Debug().Msgf("Filtering application %s: baseRef %s != Target Rev %s", appName, baseRef, appSpecSource.TargetRevision)
 			return false
@@ -294,13 +305,13 @@ func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webh
 	} else {
 		// processing a push
 		// eg: refs/heads/main -> main
-		changeRef = strings.TrimPrefix(changeRef, "refs/heads/")
+		changeRef = normalizeBranchRef(changeRef)
 		// filter out apps where auto-sync is enabled for the branch of the push
-		if appSpecSource.TargetRevision == "HEAD" && changeRef == repoDefaultRef && automatedSync {
+		if targetRevision == "HEAD" && changeRef == repoDefaultRef && automatedSync {
 			log.Debug().Msgf("Filtering auto-sync application %s: Target Rev is HEAD; changeRef %s == repoDefaultRef %s", appName, changeRef, repoDefaultRef)
 			return false
 		}
-		if appSpecSource.TargetRevision != "HEAD" && changeRef == appSpecSource.TargetRevision && automatedSync {
+		if targetRevision != "HEAD" && changeRef == targetRevision && automatedSync {
 			log.Debug().Msgf("checkSource() - Filtering auto-sync application %s: changeRef %s = Target Rev %s", appName, changeRef, appSpecSource.TargetRevision)
 			return false
 		}

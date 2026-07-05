@@ -13,8 +13,8 @@ type Application struct {
 }
 
 type ApplicationSpec struct {
-	Source     *ApplicationSource   `json:"source,omitempty"`
-	Sources    []ApplicationSource  `json:"sources,omitempty"`
+	Source     *ApplicationSource  `json:"source,omitempty"`
+	Sources    []ApplicationSource `json:"sources,omitempty"`
 	SyncPolicy *SyncPolicy         `json:"syncPolicy,omitempty"`
 }
 
