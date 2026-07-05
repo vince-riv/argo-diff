@@ -1,53 +1,36 @@
 ---
-name: Docker build
+name: Release
 
 on:
   push:
-    branches: [main]
-    paths:
-      - '**/**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/workflows/dockerbuild.yml'
-      - '.goreleaser.yaml'
-      - 'Dockerfile'
-  pull_request:
-    branches: [main]
-    paths:
-      - '**/**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/workflows/dockerbuild.yml'
-      - '.goreleaser.yaml'
-      - 'Dockerfile'
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-*'
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Branch, commit, or tag to checkout'
+        description: 'Tag to release'
         required: true
 
 env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AWS_REGION: us-east-1
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
 jobs:
 
-  go-build-and-docker-buildx:
+  release:
     runs-on: ubuntu-latest
-    #runs-on: [self-hosted]
-    permissions:
-      contents: read
-      packages: write
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
-          fetch-depth: '50'
+          fetch-depth: 0
           fetch-tags: 'true'
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -57,24 +40,19 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           version: '~> v2'
-          args: >-
-            build --clean --snapshot
-            ${{ github.event_name == 'pull_request' && '--single-target' || '' }}
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This repo stacks chart-*/actions-*/plain-semver tags on the same commit;
+          # pin the exact tag so GoReleaser doesn't guess the wrong one.
+          GORELEASER_CURRENT_TAG: ${{ github.event.inputs.ref || github.ref_name }}
       - name: Remap binaries for Docker build
         run: |
           mkdir -p temp
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ARCHES="amd64"
-          else
-            ARCHES="amd64 arm64 s390x ppc64le"
-          fi
-          for arch in $ARCHES; do
+          for arch in amd64 arm64 s390x ppc64le; do
             src=("dist/argo-diff_linux_${arch}"*/argo-diff)
             cp "${src[0]}" "temp/argo-diff-linux-${arch}"
           done
-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
@@ -83,7 +61,6 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       -
         name: Log in to container register
-        id: login-ghcr
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -96,25 +73,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=schedule
-            type=ref,event=branch
-            type=sha,event=branch
-            type=ref,event=pr
-            type=sha,event=pr
-      -
-        name: Build and push linux/amd64
-        if: ${{ github.event_name == 'pull_request' }} ## only push amd64 on PRs
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
+            type=ref,event=tag
       -
         name: Build and push multi-arch
-        if: ${{ github.event_name != 'pull_request' }} ## push multi-arch when not a PR
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -123,3 +84,19 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+      - name: Bump Dockerfile.actions base image
+        id: bump
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          sed -i -E "s#^FROM ghcr.io/vince-riv/argo-diff:.+#FROM ghcr.io/vince-riv/argo-diff:${VERSION}#" Dockerfile.actions
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Open PR bumping Dockerfile.actions
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump Dockerfile.actions to ${{ steps.bump.outputs.version }}"
+          title: "chore: bump Dockerfile.actions to ${{ steps.bump.outputs.version }}"
+          body: Automated bump of the `Dockerfile.actions` base image following the ${{ steps.bump.outputs.version }} release.
+          branch: chore/bump-actions-image-${{ steps.bump.outputs.version }}
+          base: main
+          delete-branch: true
