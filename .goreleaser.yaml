@@ -1,0 +1,39 @@
+version: 2
+
+project_name: argo-diff
+
+builds:
+  - main: ./cmd
+    binary: argo-diff
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - s390x
+      - ppc64le
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+
+snapshot:
+  version_template: '{{ .Summary }}'
+
+archives:
+  - formats: [tar.gz]
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+release:
+  github:
+    owner: vince-riv
+    name: argo-diff
