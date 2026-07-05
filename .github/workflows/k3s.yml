@@ -156,60 +156,47 @@ jobs:
           echo "--- App List ---"
           argocd app list
 
-      - name: Run argo-diff as a standalone pod
-        id: argo_diff
+      - name: Run argo-diff (healthy)
+        id: argo_diff_healthy
         timeout-minutes: 2
+        env:
+          POD_NAME_PREFIX: argo-diff-healthy
+          IMAGE_TAG: ${{ steps.pr_info.outputs.IMAGE_TAG }}
+          ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          GITHUB_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_REF: ${{ steps.pr_info.outputs.PR_REF }}
+          EXPECT_EXIT: "0"
+        run: test/run-argo-diff-pod.sh
+
+      - name: Swap in failing ArgoCD application
+        id: argo_diff_swap
+        timeout-minutes: 1
         run: |
-          pod_name=argo-diff-$(date +%s)
-          cat <<EOF | kubectl -n argocd apply -f -
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            name: $pod_name
-          spec:
-            restartPolicy: Never
-            containers:
-              - name: argo-diff
-                command:
-                  - /app/argo-diff
-                image: ghcr.io/vince-riv/argo-diff:${{ steps.pr_info.outputs.IMAGE_TAG }}
-                env:
-                  - name: ARGO_DIFF_COMMENT_PREAMBLE
-                    value: |
-                      ## Argo-Diff - Ephemeral Environment Test
-                      This argo-diff should have the same output every run
-                  - name: ARGO_DIFF_CONTEXT_STR
-                    value: ephemeral-environment-test
-                  - name: ARGO_DIFF_SKIP_REF_CHECK
-                    value: "true"
-                  - name: ARGOCD_AUTH_TOKEN
-                    value: dummy_value
-                  - name: ARGOCD_SERVER_ADDR
-                    value: argocd-server.argocd.svc.cluster.local:80
-                  - name: ARGOCD_SERVER_INSECURE
-                    value: "true"
-                  - name: ARGOCD_SERVER_PLAINTEXT
-                    value: "true"
-                  - name: GITHUB_ACTIONS
-                    value: "true"
-                  - name: GITHUB_TOKEN
-                    value: ${{ secrets.GITHUB_TOKEN }}
-                  - name: GITHUB_SHA
-                    value: ${{ github.event.workflow_run.head_sha || github.sha }}
-                  - name: GITHUB_REF
-                    value: ${{ steps.pr_info.outputs.PR_REF }}
-                  - name: GITHUB_EVENT_NAME
-                    value: "pull_request"
-                  - name: GITHUB_HEAD_REF
-                    value: ${{ steps.pr_info.outputs.HEAD_REF }}
-                  - name: GITHUB_BASE_REF
-                    value: "k3s-test"
-                  - name: GITHUB_REPOSITORY
-                    value: ${{ github.repository }}
-                  - name: REPO_DEFAULT_REF
-                    value: "k3s-test"
-                  - name: LOG_LEVEL
-                    value: "debug"
-          EOF
-          kubectl -n argocd wait --for=condition=ready pod/$pod_name --timeout=60s
-          kubectl -n argocd logs -f $pod_name --pod-running-timeout=60s
+          # meta has selfHeal: true and would resurrect the apps we're about to
+          # delete, so neutralize it first. Its children carry no finalizers
+          # and delete instantly.
+          kubectl -n argocd patch application meta --type=merge -p '{"metadata":{"finalizers":null}}'
+          kubectl -n argocd delete application meta --ignore-not-found
+          kubectl -n argocd delete application basic-deployment helm-deployment --ignore-not-found
+          kubectl -n argocd apply -f test/argocd-broken-app.yaml --server-side=true
+          echo "--- App List ---"
+          argocd app list
+
+      - name: Run argo-diff (manifest failure)
+        id: argo_diff_failure
+        timeout-minutes: 2
+        env:
+          POD_NAME_PREFIX: argo-diff-failure
+          IMAGE_TAG: ${{ steps.pr_info.outputs.IMAGE_TAG }}
+          ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test-failure
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          GITHUB_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_REF: ${{ steps.pr_info.outputs.PR_REF }}
+          EXPECT_EXIT: nonzero
+          REQUIRE_LOG: "Failed to diff application broken-deployment"
+        run: test/run-argo-diff-pod.sh

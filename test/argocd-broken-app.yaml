@@ -1,0 +1,37 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: broken
+  # Finalizer that ensures that project is not deleted until it is not referenced by any application
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Broken-app project (used to exercise argo-diff's manifest-generation-failure handling)
+  sourceRepos:
+    - 'https://github.com/vince-riv/argo-diff.git'
+  destinations:
+    - namespace: 'broken-deployment'
+      server: https://kubernetes.default.svc
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: broken-deployment
+spec:
+  project: broken
+  source:
+    repoURL: 'https://github.com/vince-riv/argo-diff.git'
+    targetRevision: k3s-test
+    # Deliberately nonexistent: argocd app diff fails to render manifests for this app,
+    # which is what proves argo-diff exits non-zero on manifest-generation errors.
+    path: test/does-not-exist
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: broken-deployment
