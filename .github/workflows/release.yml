@@ -42,6 +42,14 @@ jobs:
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Determine previous stable release
+        id: prevstable
+        if: ${{ steps.relmeta.outputs.prerelease == 'false' }}
+        run: |
+          VERSION="${{ steps.relmeta.outputs.version }}"
+          STABLE_TAGS="$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -vFx "${VERSION}" || true)"
+          PREV_STABLE="$(printf '%s\n%s\n' "${STABLE_TAGS}" "${VERSION}" | sort -V | grep -B1 -Fx "${VERSION}" | head -1)"
+          echo "previous_stable=${PREV_STABLE}" >> "$GITHUB_OUTPUT"
       - name: Verify action.yml image matches release version
         run: |
           VERSION="${{ steps.relmeta.outputs.version }}"
@@ -63,6 +71,9 @@ jobs:
           # This repo stacks chart-*/actions-*/plain-semver tags on the same commit;
           # pin the exact tag so GoReleaser doesn't guess the wrong one.
           GORELEASER_CURRENT_TAG: ${{ github.event.inputs.ref || github.ref_name }}
+          # Empty on prereleases (step above is skipped) - GoReleaser falls back to
+          # its default git-describe lookup, which is fine for rc-to-rc changelogs.
+          GORELEASER_PREVIOUS_TAG: ${{ steps.prevstable.outputs.previous_stable }}
       - name: Remap binaries for Docker build
         run: |
           mkdir -p temp
