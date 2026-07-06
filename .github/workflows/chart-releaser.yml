@@ -5,7 +5,7 @@ on:
   push:
     tags:
       - 'chart-[0-9]+.[0-9]+.[0-9]+'
-      - 'chart-[0-9]+.[0-9]+.[0-9]+-*'
+      - 'chart-[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
   workflow_dispatch:
     inputs:
       ref:
@@ -14,29 +14,27 @@ on:
 env:
   GCR: ghcr.io/${{ github.repository_owner }}
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   publish-chart:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
-      #- name: Install Helm
-      #  uses: azure/setup-helm@v3
-      #  with:
-      #    version: 3.13.2
-      #    token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          fetch-tags: 'true'
       - name: Install yq
         run: sudo snap install yq
       - name: Extract Chart Version
         id: extract_version
         run: |
-          VERSION=$(yq e '.version' charts/argo-diff/Chart.yaml)
-          echo "chart_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "chart_version=$(yq e '.version' charts/argo-diff/Chart.yaml)" >> "$GITHUB_OUTPUT"
+          echo "app_version=$(yq e '.appVersion' charts/argo-diff/Chart.yaml)" >> "$GITHUB_OUTPUT"
       - name: Verify Chart Version
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         run: |
@@ -45,17 +43,62 @@ jobs:
             echo "Tag version ($TAG_VERSION) does not match the chart version (${{ steps.extract_version.outputs.chart_version }})"
             exit 1
           fi
+      - name: Release metadata
+        id: relmeta
+        run: |
+          TAG="${{ github.event.inputs.ref || github.ref_name }}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if [[ "${TAG}" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Determine previous chart release
+        id: prevchart
+        run: |
+          TAG="${{ steps.relmeta.outputs.tag }}"
+          CHART_TAGS="$(git tag -l 'chart-*' | grep -vFx "${TAG}" || true)"
+          PREV_CHART="$(printf '%s\n%s\n' "${CHART_TAGS}" "${TAG}" | sort -V | grep -B1 -Fx "${TAG}" | head -1)"
+          echo "prev_tag=${PREV_CHART}" >> "$GITHUB_OUTPUT"
       - name: Helm login
         run: |
           helm version
-          cd charts/argo-diff
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.GCR }} --username ${{ github.repository_owner }} --password-stdin
+      - name: Package chart
+        run: helm package charts/argo-diff --destination dist
       - name: Helm push
-        run: |
-          set -x
-          cd charts/argo-diff
-          version=${{ steps.extract_version.outputs.chart_version }}
-          helm package .
-          helm push ./argo-diff-$version.tgz oci://${{ env.GCR }}/chart
+        run: helm push dist/argo-diff-${{ steps.extract_version.outputs.chart_version }}.tgz oci://${{ env.GCR }}/chart
       - name: Helm logout
         run: helm registry logout ${{ env.GCR }}
+      - name: Generate chart changelog
+        id: changelog
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
+        with:
+          config: .github/cliff-chart.toml
+          args: >-
+            --include-path 'charts/argo-diff/**'
+            --strip all
+            ${{ steps.prevchart.outputs.prev_tag && format('{0}..{1}', steps.prevchart.outputs.prev_tag, steps.relmeta.outputs.tag) || '--current' }}
+        env:
+          OUTPUT: dist/CHANGELOG.md
+      - name: Build release notes
+        run: |
+          APP="${{ steps.extract_version.outputs.app_version }}"
+          {
+            echo "Ships argo-diff **${APP}** by default — see the [\`${APP}\` app release](${{ github.server_url }}/${{ github.repository }}/releases/tag/${APP})."
+            echo
+            echo "## Chart changes"
+            echo
+            cat dist/CHANGELOG.md
+          } > dist/RELEASE_NOTES.md
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.relmeta.outputs.tag }}" \
+            dist/argo-diff-${{ steps.extract_version.outputs.chart_version }}.tgz \
+            --title "Chart ${{ steps.extract_version.outputs.chart_version }}" \
+            --notes-file dist/RELEASE_NOTES.md \
+            --verify-tag \
+            --latest=false \
+            ${{ steps.relmeta.outputs.prerelease == 'true' && '--prerelease' || '' }}
