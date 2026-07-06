@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Bumps all version-pinned files ahead of cutting a release tag:
+# Bumps all version-pinned files ahead of cutting a release tag, then commits
+# the result:
 #   charts/argo-diff/Chart.yaml (version + appVersion)
 #   charts/argo-diff/README.md  (regenerated via helm-docs)
 #   docs/k8s/kustomization.yaml (image tag)
@@ -7,8 +8,8 @@
 #
 # Usage: scripts/prep-release.sh <version>   (e.g. 2.11.0)
 #
-# Review the diff, then commit/push directly to main or open a PR - whichever
-# fits the change. Once merged, tag the resulting commit and push the tag:
+# Push the resulting commit directly to main or open a PR - whichever fits the
+# change. Once merged, tag the commit and push the tag:
 #   git tag <version> && git push origin <version>
 # The release workflow does the rest (image build, GitHub release, and moving
 # the floating v<major>/actions-v<major> tags).
@@ -41,6 +42,15 @@ rm -f action.yml.bak
 
 helm-docs --chart-search-root=charts
 
+git add charts/argo-diff/Chart.yaml charts/argo-diff/README.md docs/k8s/kustomization.yaml action.yml
+
+if git diff --cached --quiet; then
+  echo "No changes to commit - already at ${VERSION}." >&2
+  exit 0
+fi
+
+git commit -m "chore: prep for release ${VERSION}"
+
 echo
-echo "Bumped to ${VERSION}:"
-git diff --stat -- charts/argo-diff/Chart.yaml charts/argo-diff/README.md docs/k8s/kustomization.yaml action.yml
+echo "Committed prep for ${VERSION}. Push directly to main or open a PR, then:"
+echo "  git tag -a -s -m 'argo-diff v${VERSION}' ${VERSION} && git push origin ${VERSION}"
