@@ -37,3 +37,6 @@ release:
   github:
     owner: vince-riv
     name: argo-diff
+  # Mark rc/alpha/beta tags (e.g. 2.11.0-rc1) as GitHub prereleases; plain
+  # X.Y.Z tags publish as full releases.
+  prerelease: auto
