@@ -22,9 +22,23 @@ go run cmd/main.go -f path/to/event_info.json
 # Format code
 go fmt ./...
 
-# Run tests
+# Lint (golangci-lint v2; config in .golangci.yaml)
+golangci-lint run
+
+# Run all tests
 go test -v ./...
+
+# Run a single test (or a package's tests)
+go test -run TestName ./internal/argocd/...
 ```
+
+Builds inject the version via ldflags (`-X 'main.Version=...'`, from `git describe`); a plain
+`go build`/`go run` falls back to running `git describe` itself, defaulting to `dev` if that fails.
+Requires Go 1.25+ (see `go.mod`).
+
+**Runtime dependency:** argo-diff shells out to the `argocd` CLI binary for all cluster
+interaction, so a compatible `argocd` executable must be on `PATH` (override the command name with
+`ARGOCD_CLI_CMD_NAME`) to actually generate diffs locally.
 
 ### Environment Setup
 Create a `.env.sh` file for local development:
@@ -48,7 +62,10 @@ go run cmd/main.go
 
 - **cmd/main.go**: Application entry point with CLI argument parsing and environment validation
 - **internal/webhook/**: Handles GitHub webhook event processing and EventInfo struct definitions
-- **internal/argocd/**: ArgoCD API client, connectivity checks, and manifest processing
+- **internal/argocd/**: Wrapper around the `argocd` CLI (not an HTTP API client). `argocd_client.go`
+  builds a common argv from `ARGOCD_*` env vars and runs `argocd app list|get|manifests|diff` via
+  `exec.CommandContext`. The `execArgoCdCli` function is a package-level `var` so tests can mock the
+  CLI. Connectivity checks and manifest filtering also live here.
 - **internal/github/**: GitHub API integration, comment generation, and status checks
 - **internal/server/**: HTTP server implementation for webhook processing and GitHub Actions mode
 - **internal/process_event/**: Core business logic for processing code changes and generating diffs
@@ -88,11 +105,16 @@ Tests can be run with standard Go testing commands and use real API response dat
 
 ## GitHub Actions Integration
 
-The project includes GitHub Actions workflows:
-- **go.yml**: Runs build, format, lint (golangci-lint v1.61), and tests
-- **dockerbuild.yml**: Builds and publishes Docker images
-- **helm.yml**: Manages Helm chart releases
-- **chart-releaser.yml**: Handles chart version releases
+The project includes GitHub Actions workflows (`.github/workflows/`):
+- **go.yml**: Build, `go fmt`, lint (golangci-lint v2, `only-new-issues`), and tests. Lint runs on
+  PRs only.
+- **k3s.yml**: Spins up a k3s cluster + ArgoCD for end-to-end diff tests using the fixtures under
+  `test/`.
+- **release.yml**: Cuts releases via GoReleaser (`.goreleaser.yaml`) on `X.Y.Z[-suffix]` tags —
+  builds multi-arch binaries/images and publishes to `ghcr.io`. Use `scripts/prep-release.sh` to
+  prep a release (requires `helm-docs` on PATH to regenerate chart READMEs).
+- **dockerbuild.yml**: Builds and publishes Docker images.
+- **helm.yml** / **chart-releaser.yml**: Manage Helm chart releases.
 
 ## Local Development
 
