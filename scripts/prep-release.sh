@@ -20,6 +20,11 @@ if [ $# -ne 1 ]; then
   exit 1
 fi
 
+if ! command -v helm-docs >/dev/null 2>&1; then
+  echo "error: helm-docs not found on PATH; install it (https://github.com/norwoodj/helm-docs) to regenerate charts/argo-diff/README.md" >&2
+  exit 1
+fi
+
 VERSION="$1"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -34,11 +39,7 @@ rm -f docs/k8s/kustomization.yaml.bak
 sed -i.bak -E "s#(docker://ghcr\.io/vince-riv/argo-diff:).+'#\1${VERSION}'#" action.yml
 rm -f action.yml.bak
 
-if command -v helm-docs >/dev/null 2>&1; then
-  helm-docs --chart-search-root=charts
-else
-  echo "warning: helm-docs not found on PATH; charts/argo-diff/README.md badges not regenerated" >&2
-fi
+helm-docs --chart-search-root=charts
 
 echo
 echo "Bumped to ${VERSION}:"

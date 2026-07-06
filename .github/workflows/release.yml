@@ -43,7 +43,6 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Verify action.yml image matches release version
-        if: ${{ steps.relmeta.outputs.prerelease == 'false' }}
         run: |
           VERSION="${{ steps.relmeta.outputs.version }}"
           if ! grep -qF "docker://ghcr.io/vince-riv/argo-diff:${VERSION}'" action.yml; then
