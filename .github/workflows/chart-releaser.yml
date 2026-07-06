@@ -59,7 +59,12 @@ jobs:
           TAG="${{ steps.relmeta.outputs.tag }}"
           CHART_TAGS="$(git tag -l 'chart-*' | grep -vFx "${TAG}" || true)"
           PREV_CHART="$(printf '%s\n%s\n' "${CHART_TAGS}" "${TAG}" | sort -V | grep -B1 -Fx "${TAG}" | head -1)"
-          echo "prev_tag=${PREV_CHART}" >> "$GITHUB_OUTPUT"
+          # No earlier chart-* tag (e.g. very first chart release): fall back to the
+          # repo root so the changelog range still resolves.
+          if [ -z "${PREV_CHART}" ]; then
+            PREV_CHART="$(git rev-list --max-parents=0 HEAD | tail -1)"
+          fi
+          echo "range_start=${PREV_CHART}" >> "$GITHUB_OUTPUT"
       - name: Helm login
         run: |
           helm version
@@ -75,10 +80,14 @@ jobs:
         uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
         with:
           config: .github/cliff-chart.toml
+          # tag-pattern scopes tag resolution to chart-* — this repo stacks chart-*,
+          # actions-*, and plain-semver tags on the same commits, and without it
+          # git-cliff splits the range into one section per tag scheme instead of one.
           args: >-
             --include-path 'charts/argo-diff/**'
+            --tag-pattern '^chart-'
             --strip all
-            ${{ steps.prevchart.outputs.prev_tag && format('{0}..{1}', steps.prevchart.outputs.prev_tag, steps.relmeta.outputs.tag) || '--current' }}
+            ${{ format('{0}..{1}', steps.prevchart.outputs.range_start, steps.relmeta.outputs.tag) }}
         env:
           OUTPUT: dist/CHANGELOG.md
       - name: Build release notes
@@ -97,7 +106,7 @@ jobs:
         run: |
           gh release create "${{ steps.relmeta.outputs.tag }}" \
             dist/argo-diff-${{ steps.extract_version.outputs.chart_version }}.tgz \
-            --title "Chart ${{ steps.extract_version.outputs.chart_version }}" \
+            --title "${{ steps.relmeta.outputs.tag }}" \
             --notes-file dist/RELEASE_NOTES.md \
             --verify-tag \
             --latest=false \
