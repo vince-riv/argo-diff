@@ -1,6 +1,11 @@
 ---
 
+name: 'argo-diff'
 description: 'Preview k8s manifest changes using argocd diff'
+author: 'vince-riv'
+branding:
+  icon: 'git-pull-request'
+  color: 'blue'
 inputs:
   argocd_auth_token:
     description: 'Bearer token for ArgoCD (value passed to --auth-token)'
@@ -60,7 +65,7 @@ inputs:
     required: false
     default: info
   repo_default_ref:
-    decription: 'Default branch of repository (eg: "main"); only needed when `HEAD` is specified as target revision in ArgoCD application source'
+    description: 'Default branch of repository (eg: "main"); only needed when `HEAD` is specified as target revision in ArgoCD application source'
     required: false
     default: ''
 
