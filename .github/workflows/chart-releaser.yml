@@ -48,7 +48,10 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.ref || github.ref_name }}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          if [[ "${TAG}" == *-* ]]; then
+          # Strip the "chart-" prefix before checking for a prerelease suffix - the
+          # prefix itself contains a hyphen, so checking the raw tag always matches.
+          CHART_VERSION="${TAG#chart-}"
+          if [[ "${CHART_VERSION}" == *-* ]]; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
