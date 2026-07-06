@@ -157,7 +157,7 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 				log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.ObjectMeta.Name)
 			} else {
 				// diff matching multi-source application
-				log.Info().Msgf("%d Argo applications detected to have changes via %s", len(appsWithChanges), app.ObjectMeta.Name)
+				log.Info().Msgf("Found %d nested ArgoCD Application(s) with changes within '%s'", len(appsWithChanges), app.Name)
 				for _, subApp := range appsWithChanges {
 					if subAppCur, ok := appLookup[subApp.ObjectMeta.Name]; ok {
 						multiSrcAppNamesDiffed = append(multiSrcAppNamesDiffed, subApp.ObjectMeta.Name)
