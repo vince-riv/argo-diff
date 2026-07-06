@@ -19,7 +19,6 @@ env:
 permissions:
   contents: write
   packages: write
-  pull-requests: write
 
 jobs:
 
@@ -32,6 +31,25 @@ jobs:
           ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
           fetch-tags: 'true'
+      - name: Determine release version
+        id: relmeta
+        run: |
+          VERSION="${{ github.event.inputs.ref || github.ref_name }}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major=${VERSION%%.*}" >> "$GITHUB_OUTPUT"
+          if [[ "${VERSION}" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Verify action.yml image matches release version
+        if: ${{ steps.relmeta.outputs.prerelease == 'false' }}
+        run: |
+          VERSION="${{ steps.relmeta.outputs.version }}"
+          if ! grep -qF "docker://ghcr.io/vince-riv/argo-diff:${VERSION}'" action.yml; then
+            echo "::error::action.yml is not pinned to ${VERSION} - run scripts/prep-release.sh ${VERSION}, merge it, then tag" >&2
+            exit 1
+          fi
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -84,19 +102,21 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
-      - name: Bump Dockerfile.actions base image
-        id: bump
+      - name: Move floating tags for stable release
+        if: ${{ steps.relmeta.outputs.prerelease == 'false' }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          sed -i -E "s#^FROM ghcr.io/vince-riv/argo-diff:.+#FROM ghcr.io/vince-riv/argo-diff:${VERSION}#" Dockerfile.actions
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-      - name: Open PR bumping Dockerfile.actions
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: bump Dockerfile.actions to ${{ steps.bump.outputs.version }}"
-          title: "chore: bump Dockerfile.actions to ${{ steps.bump.outputs.version }}"
-          body: Automated bump of the `Dockerfile.actions` base image following the ${{ steps.bump.outputs.version }} release.
-          branch: chore/bump-actions-image-${{ steps.bump.outputs.version }}
-          base: main
-          delete-branch: true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          VERSION="${{ steps.relmeta.outputs.version }}"
+          MAJOR="${{ steps.relmeta.outputs.major }}"
+
+          # New: floating major tag (e.g. v2) - recommended entrypoint for the Action
+          git tag -f "v${MAJOR}"
+          git push origin "refs/tags/v${MAJOR}" --force
+
+          # Legacy: exact + floating actions-v tags, kept for existing consumers
+          git tag -a "actions-v${VERSION}" -m "actions-v${VERSION}"
+          git push origin "refs/tags/actions-v${VERSION}"
+          git tag -f "actions-v${MAJOR}"
+          git push origin "refs/tags/actions-v${MAJOR}" --force

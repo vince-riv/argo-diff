@@ -163,7 +163,7 @@ jobs:
     steps:
       - name: ArgoCD Diff
         id: argo-diff
-        uses: vince-riv/argo-diff@actions-v1
+        uses: vince-riv/argo-diff@v2  # or pin an exact release, e.g. @2.10.0
         with:
           argocd_auth_token: ${{ secrets.ARGOCD_AUTH_TOKEN }}
           argocd_server: argocd-server.argocd.svc.cluster.local:80  # argocd.domain.example when publicly available via https
@@ -175,6 +175,10 @@ jobs:
           log_level: trace
           repo_default_ref: main
 ```
+
+**Note**: Releases were previously published under an `actions-vX.Y.Z` tag prefix (with a floating `actions-vX`
+major tag). Those tags continue to be maintained alongside the plain `vX`/`X.Y.Z` tags shown above for existing
+consumers, but new workflows should prefer the plain tags.
 
 ## Configuration
 
