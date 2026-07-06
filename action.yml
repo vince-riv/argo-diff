@@ -66,7 +66,8 @@ inputs:
 
 runs:
   using: 'docker'
-  image: 'Dockerfile.actions'
+  image: 'docker://ghcr.io/vince-riv/argo-diff:2.10.1-rc2'
+  entrypoint: '/app/argo-diff'
   env:
     ARGO_DIFF_COMMENT_PREAMBLE: ${{ inputs.comment_preamble }}
     ARGO_DIFF_CONTEXT_STR: ${{ inputs.context_str }}

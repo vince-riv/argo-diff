@@ -120,5 +120,5 @@ Create JSON file matching `EventInfo` struct for local testing:
 
 1. **Helm Chart**: `helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff`
 2. **Kubernetes Manifests**: Use examples in `docs/k8s/`
-3. **GitHub Actions**: Use `vince-riv/argo-diff@actions-v1` action
-4. **Docker**: Multi-stage Dockerfiles available (`Dockerfile`, `Dockerfile.actions`, `Dockerfile.no-build`)
+3. **GitHub Actions**: Use `vince-riv/argo-diff@v2` action (legacy `actions-vX.Y.Z`/`actions-vX` tags still maintained)
+4. **Docker**: Multi-stage `Dockerfile` (prebuilt, multi-arch) published to `ghcr.io/vince-riv/argo-diff`
