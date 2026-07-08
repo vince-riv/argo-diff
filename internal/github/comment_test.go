@@ -48,7 +48,7 @@ func readFileToByteArray(fileName string) ([]byte, string, error) {
 }
 
 func jsonFieldExtract(srcField string, src []byte, destField string, dest []byte) ([]byte, error) {
-	var srcData, destData map[string]interface{}
+	var srcData, destData map[string]any
 	err := json.Unmarshal(src, &srcData)
 	if err != nil {
 		return []byte{}, err

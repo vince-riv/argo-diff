@@ -94,7 +94,7 @@ func Status(ctx context.Context, status, description, repoOwner, repoName, commi
 	repoStatus := github.RepoStatus{
 		State:       &status,
 		Description: &description,
-		Context:     github.String(contextStr),
+		Context:     github.Ptr(contextStr),
 	}
 
 	if dryRun {

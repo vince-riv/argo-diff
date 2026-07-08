@@ -7,9 +7,9 @@ import (
 // Custom Application struct with only the fields we need
 type Application struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 	Spec              ApplicationSpec   `json:"spec"`
-	Status            ApplicationStatus `json:"status,omitempty"`
+	Status            ApplicationStatus `json:"status"`
 }
 
 type ApplicationSpec struct {
@@ -36,8 +36,8 @@ type SyncPolicyAutomated struct {
 }
 
 type ApplicationStatus struct {
-	Sync   SyncStatus   `json:"sync,omitempty"`
-	Health HealthStatus `json:"health,omitempty"`
+	Sync   SyncStatus   `json:"sync"`
+	Health HealthStatus `json:"health"`
 }
 
 type SyncStatus struct {
@@ -51,7 +51,7 @@ type HealthStatus struct {
 
 type ApplicationList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata"`
 	Items           []Application `json:"items"`
 }
 

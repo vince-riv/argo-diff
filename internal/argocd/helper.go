@@ -28,7 +28,7 @@ func versionCheck(version string) bool {
 	versionParts := strings.Split(version, ".")
 
 	// Compare major, minor, and patch versions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		v1, err1 := strconv.Atoi(versionParts[i])
 		v2, err2 := strconv.Atoi(minVersionParts[i])
 		// Handle parsing errors
