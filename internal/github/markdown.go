@@ -67,17 +67,17 @@ func syncString(s string) string {
 }
 
 func truncateLines(s string, maxLen int) string {
-	var result string
-	lines := strings.Split(s, "\n")
-	for _, line := range lines {
+	var result strings.Builder
+	lines := strings.SplitSeq(s, "\n")
+	for line := range lines {
 		if len(line) > maxLen {
-			result += line[:maxLen] + "...[TRUNCATED]"
+			result.WriteString(line[:maxLen] + "...[TRUNCATED]")
 		} else {
-			result += line
+			result.WriteString(line)
 		}
-		result += "\n"
+		result.WriteString("\n")
 	}
-	return result
+	return result.String()
 }
 
 func healthString(s string, msg string) string {

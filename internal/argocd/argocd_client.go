@@ -120,8 +120,8 @@ func listApplications(ctx context.Context) (*ApplicationList, error) {
 // ParseArgoCDVersion extracts the client and server version from the output of "argocd version".
 // It trims everything after the '+' sign, including the sign itself.
 func parseArgoCDVersion(output []byte) (clientVersion, serverVersion string, err error) {
-	lines := bytes.Split(output, []byte("\n"))
-	for _, line := range lines {
+	lines := bytes.SplitSeq(output, []byte("\n"))
+	for line := range lines {
 		trimmed := strings.TrimSpace(string(line))
 		if strings.HasPrefix(trimmed, "argocd:") {
 			// Extract client version
@@ -175,8 +175,8 @@ func getApplication(ctx context.Context, appName string) (*Application, error) {
 
 func appManifestHelper(input []byte) ([]K8sManifest, error) {
 	var manifests []K8sManifest
-	yamlDocs := strings.Split(string(input), "\n---")
-	for _, doc := range yamlDocs {
+	yamlDocs := strings.SplitSeq(string(input), "\n---")
+	for doc := range yamlDocs {
 		if strings.TrimSpace(doc) == "" {
 			continue // Skip empty documents
 		}

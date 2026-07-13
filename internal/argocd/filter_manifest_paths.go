@@ -77,8 +77,8 @@ func FilterApplicationsByPath(apps []Application, changedFiles []string) []Appli
 
 			if manifestPaths != "" {
 				// Split the annotation on semicolons and build full patterns.
-				parts := strings.Split(manifestPaths, ";")
-				for _, p := range parts {
+				parts := strings.SplitSeq(manifestPaths, ";")
+				for p := range parts {
 					p = strings.TrimSpace(p)
 					if p == "" {
 						continue
@@ -88,8 +88,8 @@ func FilterApplicationsByPath(apps []Application, changedFiles []string) []Appli
 						// If p is not an absolute path, join it with the source's path.
 						if p == "." {
 							fullPattern = source.Path
-						} else if strings.HasPrefix(p, "./") {
-							fullPattern = filepath.Join(source.Path, strings.TrimPrefix(p, "./"))
+						} else if after, ok0 := strings.CutPrefix(p, "./"); ok0 {
+							fullPattern = filepath.Join(source.Path, after)
 						} else {
 							fullPattern = filepath.Join(source.Path, p)
 						}
