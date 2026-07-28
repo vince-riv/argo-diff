@@ -275,3 +275,36 @@ func TestManifestIsArgoApplication(t *testing.T) {
 		}
 	}
 }
+
+func TestGitRepoMatch(t *testing.T) {
+	const owner = "acme"
+	const repo = "widgets"
+	tests := []struct {
+		name    string
+		repoURL string
+		want    bool
+	}{
+		// github.com (existing behavior)
+		{"github https .git", "https://github.com/acme/widgets.git", true},
+		{"github https no .git", "https://github.com/acme/widgets", true},
+		{"github scp ssh", "git@github.com:acme/widgets.git", true},
+		// non-github hosts (new fallback)
+		{"github enterprise", "https://github.example.com/acme/widgets.git", true},
+		{"aws codeconnections", "https://codeconnections.us-west-2.amazonaws.com/git-http/111122223333/us-west-2/1a2b3c/acme/widgets.git", true},
+		{"gitlab mirror no .git", "https://gitlab.example.com/group/acme/widgets", true},
+		{"generic scp ssh", "git@git.example.com:acme/widgets.git", true},
+		{"case insensitive", "https://github.example.com/ACME/Widgets.git", true},
+		// negatives
+		{"different repo", "https://github.example.com/acme/gadgets.git", false},
+		{"owner suffix must not partial match", "https://github.example.com/notacme/widgets.git", false},
+		{"repo name substring", "https://github.example.com/acme/widgets-internal.git", false},
+		{"empty url", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := gitRepoMatch(tc.repoURL, owner, repo); got != tc.want {
+				t.Errorf("gitRepoMatch(%q, %q, %q) = %v; want %v", tc.repoURL, owner, repo, got, tc.want)
+			}
+		})
+	}
+}
