@@ -261,6 +261,25 @@ func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
 			return true
 		}
 	}
+	// Fallback for non-github.com hosts (GitHub Enterprise, AWS CodeConnections,
+	// mirrors, etc.): match the owner/repo path suffix regardless of host. The
+	// leading separator ('/' for HTTP(S) paths, ':' for scp-style SSH) anchors
+	// the owner boundary so a URL ending in "…/otherowner/repo" is not matched
+	// for owner "owner". Comparison is case-insensitive since git hosting
+	// providers treat owner and repo names case-insensitively.
+	repoUrlLower := strings.ToLower(repoUrl)
+	for _, sep := range []string{"/", ":"} {
+		fallbacks := []string{
+			fmt.Sprintf("%s%s/%s.git", sep, repoOwner, repoName),
+			fmt.Sprintf("%s%s/%s", sep, repoOwner, repoName),
+		}
+		for _, fallback := range fallbacks {
+			if strings.HasSuffix(repoUrlLower, strings.ToLower(fallback)) {
+				log.Debug().Msgf("gitRepoMatch() - non-github host suffix match: %q ends with %q", repoUrl, fallback)
+				return true
+			}
+		}
+	}
 	return false
 }
 
