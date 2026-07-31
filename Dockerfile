@@ -9,7 +9,7 @@ WORKDIR /src
 COPY temp/argo-diff-linux-${TARGETARCH} argo-diff
 
 ## ArgoCD
-FROM quay.io/argoproj/argocd:v3.4.5@sha256:224e454cfd8c1818fec3ed17b72b2034c9a3915fa819e1dcccafc753776d446a AS argocd
+FROM quay.io/argoproj/argocd:v3.4.6@sha256:6e9f4f1d646d9056c8e285495d0c8043b5f553c784181b3522ef324dcefdcc82 AS argocd
 
 ## Final image
 FROM alpine:latest@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
