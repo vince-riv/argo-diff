@@ -68,6 +68,10 @@ inputs:
     description: 'Default branch of repository (eg: "main"); only needed when `HEAD` is specified as target revision in ArgoCD application source'
     required: false
     default: ''
+  timeout:
+    description: 'How long argo-diff may spend processing the event, as a Go duration (eg: "5m", "90s"). Raise when the change matches many ArgoCD applications. Defaults to 3m'
+    required: false
+    default: ''
 
 runs:
   using: 'docker'
@@ -76,6 +80,7 @@ runs:
   env:
     ARGO_DIFF_COMMENT_PREAMBLE: ${{ inputs.comment_preamble }}
     ARGO_DIFF_CONTEXT_STR: ${{ inputs.context_str }}
+    ARGO_DIFF_TIMEOUT: ${{ inputs.timeout }}
     ARGOCD_AUTH_TOKEN: ${{ inputs.argocd_auth_token }}
     ARGOCD_APP_DIFF_SERVER_SIDE_DIFF: ${{ inputs.argocd_app_server_side_diff }}
     ARGOCD_GRPC_WEB: ${{ inputs.argocd_grpc_web }}

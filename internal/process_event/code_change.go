@@ -3,6 +3,9 @@ package process_event
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,6 +14,30 @@ import (
 	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
+
+// How long a single event gets to process before we give up. Configurable via
+// ARGO_DIFF_TIMEOUT because the time needed scales with the number of ArgoCD
+// applications matching the change: each one costs a round trip to the argocd
+// server, so a shared chart in a monorepo can match dozens of apps.
+const defaultProcessTimeout = 3 * time.Minute
+
+// processTimeout returns the event processing deadline from ARGO_DIFF_TIMEOUT.
+// The value is a Go duration string (eg: "5m", "90s"); a bare integer is
+// treated as seconds. Invalid or non-positive values fall back to the default.
+func processTimeout() time.Duration {
+	envVal := strings.TrimSpace(os.Getenv("ARGO_DIFF_TIMEOUT"))
+	if envVal == "" {
+		return defaultProcessTimeout
+	}
+	if d, err := time.ParseDuration(envVal); err == nil && d > 0 {
+		return d
+	}
+	if secs, err := strconv.Atoi(envVal); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	log.Warn().Msgf("Invalid value for ARGO_DIFF_TIMEOUT: %s; must be a positive duration (eg: '5m'); using %s", envVal, defaultProcessTimeout)
+	return defaultProcessTimeout
+}
 
 // Returns first 7 characters of a string (to produce a short commit sha)
 /*
@@ -28,9 +55,10 @@ func shortSha(str string) string {
 // Designed to run within a gorouting to decouple from the webhook response
 func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitGroup, callerErr *error) {
 	defer wg.Done()
-	// Don't take longer than 3 minutes to execute
 	// TODO figure out how to call github.Status() with an error status when there's a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	timeout := processTimeout()
+	log.Debug().Msgf("Processing event with a %s timeout", timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	// Validate this is a PR event (required for PR-only support)
