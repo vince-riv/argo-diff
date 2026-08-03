@@ -225,6 +225,7 @@ the accepted environment variables and their respective GitHub Actions inputs.
 | ARGOCD_UI_BASE_URL               | argocd_ui_base_url          | no               |          | Base URL of ArgoCD UI (usually the server name prefixed with `https://`). |
 | ARGO_DIFF_COMMENT_PREAMBLE       | comment_preamble            | no               |          | String/markdown prefixed to comments. Keep to 150 chars or less. |
 | ARGO_DIFF_CONTEXT_STR            | context_str                 | no               |          | Unique identifier of the argo-diff instance. Use when deploying multiple instances (eg: one per cluster); a brief cluster nickname is recommended. |
+| ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH | N/A                   | no               | `false`  | Set to `true` to disable matching ArgoCD application sources on non-`github.com` git hosts (GitHub Enterprise, AWS CodeConnections, GitLab, mirrors, etc.) by `owner/repo` path suffix; matching on `github.com` URLs is unaffected. |
 | COMMENT_LINE_MAX_CHARS           | comment_line_max_chars      | no               | `175`    | Individual lines in argo-diff PR comments longer than this are truncated. |
 | GITHUB_APP_ID                    | N/A                         | no               |          | GitHub Application Id (see deployment instructions). |
 | GITHUB_APP_INSTALLATION_ID       | N/A                         | no               |          | GitHub Application Installation Id (see deployment instructions). |
