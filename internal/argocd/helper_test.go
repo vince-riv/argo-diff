@@ -282,28 +282,63 @@ func TestGitRepoMatch(t *testing.T) {
 	tests := []struct {
 		name    string
 		repoURL string
+		chart   string
 		want    bool
 	}{
 		// github.com (existing behavior)
-		{"github https .git", "https://github.com/acme/widgets.git", true},
-		{"github https no .git", "https://github.com/acme/widgets", true},
-		{"github scp ssh", "git@github.com:acme/widgets.git", true},
+		{"github https .git", "https://github.com/acme/widgets.git", "", true},
+		{"github https no .git", "https://github.com/acme/widgets", "", true},
+		{"github scp ssh", "git@github.com:acme/widgets.git", "", true},
 		// non-github hosts (new fallback)
-		{"github enterprise", "https://github.example.com/acme/widgets.git", true},
-		{"aws codeconnections", "https://codeconnections.us-west-2.amazonaws.com/git-http/111122223333/us-west-2/1a2b3c/acme/widgets.git", true},
-		{"gitlab mirror no .git", "https://gitlab.example.com/group/acme/widgets", true},
-		{"generic scp ssh", "git@git.example.com:acme/widgets.git", true},
-		{"case insensitive", "https://github.example.com/ACME/Widgets.git", true},
+		{"github enterprise", "https://github.example.com/acme/widgets.git", "", true},
+		{"aws codeconnections", "https://codeconnections.us-west-2.amazonaws.com/git-http/111122223333/us-west-2/1a2b3c/acme/widgets.git", "", true},
+		{"gitlab mirror no .git", "https://gitlab.example.com/group/acme/widgets", "", true},
+		{"generic scp ssh", "git@git.example.com:acme/widgets.git", "", true},
+		{"case insensitive", "https://github.example.com/ACME/Widgets.git", "", true},
 		// negatives
-		{"different repo", "https://github.example.com/acme/gadgets.git", false},
-		{"owner suffix must not partial match", "https://github.example.com/notacme/widgets.git", false},
-		{"repo name substring", "https://github.example.com/acme/widgets-internal.git", false},
-		{"empty url", "", false},
+		{"different repo", "https://github.example.com/acme/gadgets.git", "", false},
+		{"owner suffix must not partial match", "https://github.example.com/notacme/widgets.git", "", false},
+		{"repo name substring", "https://github.example.com/acme/widgets-internal.git", "", false},
+		{"empty url", "", "", false},
+		// Chart/OCI sources must never match, even if RepoURL's path happens to
+		// collide with owner/repo (RepoURL here is a Helm/OCI registry, not a
+		// git remote).
+		{"chart source with colliding path is never matched", "oci://registry.example.com/acme/widgets", "widgets", false},
+		{"chart source with github.com host is never matched", "https://github.com/acme/widgets.git", "widgets", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := gitRepoMatch(tc.repoURL, owner, repo); got != tc.want {
-				t.Errorf("gitRepoMatch(%q, %q, %q) = %v; want %v", tc.repoURL, owner, repo, got, tc.want)
+			src := ApplicationSource{RepoURL: tc.repoURL, Chart: tc.chart}
+			if got := gitRepoMatch(src, owner, repo); got != tc.want {
+				t.Errorf("gitRepoMatch(%+v, %q, %q) = %v; want %v", src, owner, repo, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGitRepoMatch_DisableNonGithubFallback(t *testing.T) {
+	const owner = "acme"
+	const repo = "widgets"
+	tests := []struct {
+		name     string
+		repoURL  string
+		disabled string
+		want     bool
+	}{
+		{"non-github host matches when flag unset", "https://github.example.com/acme/widgets.git", "", true},
+		{"non-github host matches when flag false", "https://github.example.com/acme/widgets.git", "false", true},
+		{"non-github host blocked when flag true", "https://github.example.com/acme/widgets.git", "true", false},
+		{"non-github host blocked when flag TRUE (case-insensitive)", "https://github.example.com/acme/widgets.git", "TRUE", false},
+		{"github.com still matches when flag true", "https://github.com/acme/widgets.git", "true", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Empty string behaves identically to the var being unset, since the
+			// check only looks for the literal value "true".
+			t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", tc.disabled)
+			src := ApplicationSource{RepoURL: tc.repoURL}
+			if got := gitRepoMatch(src, owner, repo); got != tc.want {
+				t.Errorf("gitRepoMatch(%+v, %q, %q) with ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH=%q = %v; want %v", src, owner, repo, tc.disabled, got, tc.want)
 			}
 		})
 	}

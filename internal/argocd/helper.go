@@ -100,7 +100,7 @@ func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *App
 		if curSrc.RepoURL != newSources[i].RepoURL {
 			return appResChanges, fmt.Errorf("source URL is changing in %s", appName)
 		}
-		if gitRepoMatch(curSrc.RepoURL, repoOwner, repoName) {
+		if gitRepoMatch(curSrc, repoOwner, repoName) {
 			newRevision = revision
 		}
 		revisions = append(revisions, newRevision)
@@ -198,7 +198,7 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		revList := []string{}
 		srcPos := []int{}
 		for i, appSrc := range app.Spec.GetSources() {
-			if gitRepoMatch(appSrc.RepoURL, eventInfo.RepoOwner, eventInfo.RepoName) {
+			if gitRepoMatch(appSrc, eventInfo.RepoOwner, eventInfo.RepoName) {
 				revList = append(revList, eventInfo.Sha)
 				srcPos = append(srcPos, i+1)
 			}
@@ -247,7 +247,16 @@ func filterApplications(a []Application, eventInfo webhook.EventInfo, multiSourc
 	return appList, nil
 }
 
-func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
+func gitRepoMatch(appSrc ApplicationSource, repoOwner, repoName string) bool {
+	if appSrc.Chart != "" {
+		// Chart/OCI registry sources aren't git remotes, so RepoURL isn't a git
+		// remote URL here (e.g. "oci://registry.example.com/acme/widgets" for a
+		// Helm chart). Never treat them as matching a changed git repo, since
+		// the host-agnostic fallback below would otherwise be prone to
+		// coincidental owner/repo path collisions with unrelated charts.
+		return false
+	}
+	repoUrl := appSrc.RepoURL
 	const githubHost = "github.com"
 	candidates := []string{
 		fmt.Sprintf("%s/%s/%s.git", githubHost, repoOwner, repoName),
@@ -260,6 +269,10 @@ func gitRepoMatch(repoUrl, repoOwner, repoName string) bool {
 		if strings.HasSuffix(repoUrl, candidate) {
 			return true
 		}
+	}
+	if strings.ToLower(os.Getenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH")) == "true" {
+		log.Debug().Msg("gitRepoMatch() - non-github host fallback disabled via ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH")
+		return false
 	}
 	// Fallback for non-github.com hosts (GitHub Enterprise, AWS CodeConnections,
 	// mirrors, etc.): match the owner/repo path suffix regardless of host. The
@@ -301,7 +314,7 @@ func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webh
 	log.Trace().Msgf("checkSource() - appname: %s (autosync %t)", appName, automatedSync)
 	log.Trace().Msgf("checkSource() - appSpecSource: %+v", appSpecSource)
 	log.Trace().Msgf("checkSource() - eventInfo: %+v", eventInfo)
-	if !gitRepoMatch(appSpecSource.RepoURL, eventInfo.RepoOwner, eventInfo.RepoName) {
+	if !gitRepoMatch(appSpecSource, eventInfo.RepoOwner, eventInfo.RepoName) {
 		log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't mach owner/repo %s/%s", appName, appSpecSource.RepoURL, eventInfo.RepoOwner, eventInfo.RepoName)
 		return false
 	}
