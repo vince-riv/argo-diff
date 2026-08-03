@@ -111,21 +111,27 @@ func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *App
 
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
 // and return their manifests.
-func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]ApplicationResourcesWithChanges, error) {
+//
+// The second return value holds the names of matching applications that weren't
+// diffed because ctx ran out of time. Diffing stops at that point rather than
+// firing calls that are guaranteed to fail, and the partial results collected so
+// far are returned so the caller can still report them.
+func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]ApplicationResourcesWithChanges, []string, error) {
 	log.Trace().Msgf("GetApplicationChanges(%+v)", eventInfo)
 	var appResList []ApplicationResourcesWithChanges
+	var notDiffed []string
 	argoApps, err := listApplications(ctx)
 	if err != nil {
-		return appResList, err
+		return appResList, notDiffed, err
 	}
 	log.Trace().Msgf("listApplications() returned %d items", len(argoApps.Items))
 	if len(argoApps.Items) == 0 {
-		return appResList, fmt.Errorf("empty ArgoCD app list")
+		return appResList, notDiffed, fmt.Errorf("empty ArgoCD app list")
 	}
 	appLookup := appListToMap(argoApps.Items)
 	apps, err := filterApplications(argoApps.Items, eventInfo, false)
 	if err != nil {
-		return appResList, err
+		return appResList, notDiffed, err
 	}
 	log.Debug().Msgf("Matching apps: %s", func() (s string) {
 		for _, app := range apps {
@@ -140,6 +146,10 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 
 	multiSrcAppNamesDiffed := []string{}
 	for _, app := range apps {
+		if ctx.Err() != nil {
+			notDiffed = append(notDiffed, app.Name)
+			continue
+		}
 		log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, eventInfo.Sha)
 		//app, err = getApplication(ctx, app.ObjectMeta.Name)
 		//if err != nil {
@@ -148,12 +158,25 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		//}
 		appResChanges, err := getApplicationChanges(ctx, &app, eventInfo.Sha, nil, nil)
 		if err != nil {
+			if ctx.Err() != nil {
+				// the diff was interrupted by the deadline, so this isn't an
+				// application-level failure worth reporting as one
+				notDiffed = append(notDiffed, app.Name)
+				continue
+			}
 			appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
 			appResList = append(appResList, appResChanges)
 		} else if len(appResChanges.ChangedResources) > 0 {
 			appResList = append(appResList, appResChanges)
 			appsWithChanges, err := argoAppsWithChanges(ctx, app.ObjectMeta.Name, appResChanges.ChangedResources, eventInfo.Sha)
 			if err != nil {
+				if ctx.Err() != nil {
+					// This app's diff turned up nested Applications but we ran out of
+					// time enumerating them, so they can't be named individually. Record
+					// one entry anyway: without it the run reports as complete while
+					// every nested application diff is missing.
+					notDiffed = append(notDiffed, fmt.Sprintf("nested apps of %s", app.Name))
+				}
 				log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.ObjectMeta.Name)
 			} else {
 				// diff matching multi-source application
@@ -161,8 +184,16 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 				for _, subApp := range appsWithChanges {
 					if subAppCur, ok := appLookup[subApp.ObjectMeta.Name]; ok {
 						multiSrcAppNamesDiffed = append(multiSrcAppNamesDiffed, subApp.ObjectMeta.Name)
+						if ctx.Err() != nil {
+							notDiffed = append(notDiffed, subApp.Name)
+							continue
+						}
 						subAppResChanges, err := getMultiSrcAppChanges(ctx, &subAppCur, &subApp, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
 						if err != nil {
+							if ctx.Err() != nil {
+								notDiffed = append(notDiffed, subApp.Name)
+								continue
+							}
 							subAppResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", subApp.ObjectMeta.Name, err.Error())
 						} else if len(subAppResChanges.ChangedResources) > 0 {
 							appResList = append(appResList, subAppResChanges)
@@ -177,7 +208,7 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	// re-filter applications, except this time with multi-source
 	apps, err = filterApplications(argoApps.Items, eventInfo, true)
 	if err != nil {
-		return appResList, err
+		return appResList, notDiffed, err
 	}
 	log.Debug().Msgf("Matching multi-source apps: %s", func() (s string) {
 		for _, app := range apps {
@@ -194,6 +225,10 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 			log.Debug().Msgf("Skipping multi-source %s, we already diff'ed it", app.ObjectMeta.Name)
 			continue
 		}
+		if ctx.Err() != nil {
+			notDiffed = append(notDiffed, app.Name)
+			continue
+		}
 		log.Info().Msgf("Generating application diff for multi-source ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, eventInfo.Sha)
 		revList := []string{}
 		srcPos := []int{}
@@ -205,6 +240,10 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		}
 		appResChanges, err := getApplicationChanges(ctx, &app, "", revList, srcPos)
 		if err != nil {
+			if ctx.Err() != nil {
+				notDiffed = append(notDiffed, app.Name)
+				continue
+			}
 			appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
 			appResList = append(appResList, appResChanges)
 		} else if len(appResChanges.ChangedResources) > 0 {
@@ -212,7 +251,10 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		}
 	}
 
-	return appResList, nil
+	if len(notDiffed) > 0 {
+		log.Error().Err(ctx.Err()).Msgf("Ran out of time; %d application(s) were not diffed: %s", len(notDiffed), strings.Join(notDiffed, ", "))
+	}
+	return appResList, notDiffed, nil
 }
 
 // Returns a list of Applications whose git URLs match repo owner & name
