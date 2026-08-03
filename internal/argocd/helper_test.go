@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	wh "github.com/vince-riv/argo-diff/internal/webhook"
 )
 
@@ -218,6 +220,34 @@ func TestFilterApplicationsMultiSource(t *testing.T) {
 	result, _ = filterApplications(a, evtInfo, true)
 	if len(result) != 1 {
 		t.Errorf("Push to main should have matched 1 (auto-sync off); got %d", len(result))
+	}
+}
+
+// A multi-source app whose sources point at the changed repo more than once
+// (eg: a chart source and a values source in the same monorepo) must be
+// returned once, so it's only diffed once.
+func TestFilterApplicationsMultiSourceMatchesOnce(t *testing.T) {
+	repoURL := "https://github.com/vince-riv/argo-diff.git"
+	a := []Application{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "monorepo-app"},
+			Spec: ApplicationSpec{
+				Sources: []ApplicationSource{
+					{RepoURL: "https://charts.example.com", TargetRevision: "1.2.3", Chart: "somechart"},
+					{RepoURL: repoURL, TargetRevision: "main", Path: "charts/mychart"},
+					{RepoURL: repoURL, TargetRevision: "main", Path: "values/mychart", Ref: "values"},
+				},
+			},
+		},
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main"}
+	result, err := filterApplications(a, evtInfo, true)
+	if err != nil {
+		t.Fatalf("filterApplications() err'd: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("app with 2 matching sources should be returned once; got %d", len(result))
 	}
 }
 

@@ -234,8 +234,13 @@ func filterApplications(a []Application, eventInfo webhook.EventInfo, multiSourc
 		}
 		for _, appSpecSource := range sources {
 			if checkSource(appSpecSource, app.ObjectMeta.Name, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
+				// Stop at the first matching source: an app is only diffed once, no
+				// matter how many of its sources point at the changed repo. A
+				// multi-source app in a monorepo commonly matches twice (eg: a chart
+				// source and a values source), and every matching source position is
+				// passed to a single `argocd app diff` call by the caller.
 				appList = append(appList, app)
-				continue
+				break
 			}
 		}
 	}
