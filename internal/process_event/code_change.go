@@ -3,6 +3,9 @@ package process_event
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,6 +14,62 @@ import (
 	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
+
+// How long a single event gets to process before we give up. Configurable via
+// ARGO_DIFF_TIMEOUT because the time needed scales with the number of ArgoCD
+// applications matching the change: each one costs a round trip to the argocd
+// server, so a shared chart in a monorepo can match dozens of apps.
+const defaultProcessTimeout = 3 * time.Minute
+
+// processTimeout returns the event processing deadline from ARGO_DIFF_TIMEOUT.
+// The value is a Go duration string (eg: "5m", "90s"); a bare integer is
+// treated as seconds. Invalid or non-positive values fall back to the default.
+func processTimeout() time.Duration {
+	envVal := strings.TrimSpace(os.Getenv("ARGO_DIFF_TIMEOUT"))
+	if envVal == "" {
+		return defaultProcessTimeout
+	}
+	if d, err := time.ParseDuration(envVal); err == nil && d > 0 {
+		return d
+	}
+	if secs, err := strconv.Atoi(envVal); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	log.Warn().Msgf("Invalid value for ARGO_DIFF_TIMEOUT: %s; must be a positive duration (eg: '5m'); using %s", envVal, defaultProcessTimeout)
+	return defaultProcessTimeout
+}
+
+// How long the closing GitHub calls (commit status and PR comment) get, so that
+// running out of time still produces a partial diff comment naming what was
+// missed, rather than no comment at all. Diffing tries to stop this far short of
+// the deadline, but since reporting runs on a context of its own, a run can take
+// up to this much longer than the timeout.
+const defaultReportReserve = 30 * time.Second
+
+// reportReserve returns the portion of timeout to hold back for reporting
+// results to GitHub. Budgets too small to absorb the full reserve give up half
+// their time, so there's always some left for diffing.
+func reportReserve(timeout time.Duration) time.Duration {
+	if timeout <= 2*defaultReportReserve {
+		return timeout / 2
+	}
+	return defaultReportReserve
+}
+
+// timeoutMarkdown renders the PR comment warning about applications that
+// weren't diffed. The list of names is capped so a change matching hundreds of
+// applications can't crowd the diffs out of the comment.
+func timeoutMarkdown(timeout time.Duration, notDiffed []string) string {
+	const maxNames = 20
+	names := strings.Join(notDiffed, ", ")
+	if len(notDiffed) > maxNames {
+		names = fmt.Sprintf("%s and %d more", strings.Join(notDiffed[:maxNames], ", "), len(notDiffed)-maxNames)
+	}
+	md := "\n> [!WARNING]\n"
+	md += fmt.Sprintf("> argo-diff ran out of time, so %d application(s) were **not** diffed: %s\n", len(notDiffed), names)
+	md += fmt.Sprintf(">\n> Raise the timeout (currently %s, set via `ARGO_DIFF_TIMEOUT` or the `timeout` input in GitHub Actions) to diff them.\n", timeout)
+	return md
+}
 
 // Returns first 7 characters of a string (to produce a short commit sha)
 /*
@@ -28,9 +87,10 @@ func shortSha(str string) string {
 // Designed to run within a gorouting to decouple from the webhook response
 func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitGroup, callerErr *error) {
 	defer wg.Done()
-	// Don't take longer than 3 minutes to execute
 	// TODO figure out how to call github.Status() with an error status when there's a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	timeout := processTimeout()
+	log.Debug().Msgf("Processing event with a %s timeout", timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	// Validate this is a PR event (required for PR-only support)
@@ -76,10 +136,23 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 
 	// get a list of ArgoCD applications and their manifests whose git URLs match the webhook event
-	appResList, err := argocd.GetApplicationChanges(ctx, eventInfo)
+	// diffing aims to stop a reserve short of the deadline, so that reporting fits within the
+	// budget. The parent context still caps it though: if the GitHub calls above have already
+	// eaten the reserve, diffing gets whatever is left of the budget instead. Reporting survives
+	// either way, because the context it uses below doesn't derive from this one.
+	reserve := reportReserve(timeout)
+	diffCtx, diffCancel := context.WithTimeout(ctx, timeout-reserve)
+	defer diffCancel()
+	appResList, notDiffed, err := argocd.GetApplicationChanges(diffCtx, eventInfo)
+
+	// report on a context of its own: the one above may be at or past its
+	// deadline, and a partial comment is far more useful than no comment
+	reportCtx, reportCancel := context.WithTimeout(context.Background(), reserve)
+	defer reportCancel()
+
 	if err != nil {
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
-		_ = github.Status(ctx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+		_ = github.Status(reportCtx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 		*callerErr = err
 		return // we're done due to a processing error
 	}
@@ -123,6 +196,9 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	if unknownCount > 0 {
 		changeCountStr += fmt.Sprintf(" [%d apps unknown]", unknownCount)
 	}
+	if len(notDiffed) > 0 {
+		changeCountStr += fmt.Sprintf(" [%d apps not diffed]", len(notDiffed))
+	}
 	markdownStart := changeCountStr // markdownStart is the pre-amble of the github comment
 
 	if errorCount > 0 {
@@ -139,19 +215,30 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		newStatus = github.StatusSuccess
 		statusDescription = fmt.Sprintf("%s - no errors", changeCountStr)
 	}
+	if len(notDiffed) > 0 {
+		// results are incomplete - fail rather than report success on a partial diff
+		newStatus = github.StatusFailure
+		statusDescription = fmt.Sprintf("%d app(s) not diffed (timed out); %s", len(notDiffed), statusDescription)
+		if *callerErr == nil {
+			*callerErr = fmt.Errorf("timed out (ARGO_DIFF_TIMEOUT is %s); %d application(s) were not diffed", timeout, len(notDiffed))
+		}
+	}
 	// send the commit status
-	_ = github.Status(ctx, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	_ = github.Status(reportCtx, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 
 	// Post PR comment when something has happened
 	t := time.Now()
 	tStr := t.Format("3:04PM MST, 2 Jan 2006")
 	markdownStart += " compared to live state\n"
 	markdownStart += "\n" + tStr + "\n"
+	if len(notDiffed) > 0 {
+		markdownStart += timeoutMarkdown(timeout, notDiffed)
+	}
 	cMarkdown.Preamble = markdownStart
-	if changeCount == 0 && firstError == "" {
+	if changeCount == 0 && firstError == "" && len(notDiffed) == 0 {
 		// if there are no changes or warnings, don't comment (but clear out any existing comments)
-		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, []string{})
+		_, _ = github.Comment(reportCtx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, []string{})
 	} else {
-		_, _ = github.Comment(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
+		_, _ = github.Comment(reportCtx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
 	}
 }

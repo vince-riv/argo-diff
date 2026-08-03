@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	wh "github.com/vince-riv/argo-diff/internal/webhook"
 )
@@ -218,6 +222,156 @@ func TestFilterApplicationsMultiSource(t *testing.T) {
 	result, _ = filterApplications(a, evtInfo, true)
 	if len(result) != 1 {
 		t.Errorf("Push to main should have matched 1 (auto-sync off); got %d", len(result))
+	}
+}
+
+// A multi-source app whose sources point at the changed repo more than once
+// (eg: a chart source and a values source in the same monorepo) must be
+// returned once, so it's only diffed once.
+func TestFilterApplicationsMultiSourceMatchesOnce(t *testing.T) {
+	repoURL := "https://github.com/vince-riv/argo-diff.git"
+	a := []Application{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "monorepo-app"},
+			Spec: ApplicationSpec{
+				Sources: []ApplicationSource{
+					{RepoURL: "https://charts.example.com", TargetRevision: "1.2.3", Chart: "somechart"},
+					{RepoURL: repoURL, TargetRevision: "main", Path: "charts/mychart"},
+					{RepoURL: repoURL, TargetRevision: "main", Path: "values/mychart", Ref: "values"},
+				},
+			},
+		},
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main"}
+	result, err := filterApplications(a, evtInfo, true)
+	if err != nil {
+		t.Fatalf("filterApplications() err'd: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("app with 2 matching sources should be returned once; got %d", len(result))
+	}
+}
+
+// When the context is out of time, matching applications are reported as
+// not diffed instead of each one firing an `argocd app diff` that can only fail.
+func TestGetApplicationChangesOutOfTime(t *testing.T) {
+	appListData, filePath, err := readFileToByteArray(outputListApplications)
+	if err != nil {
+		t.Fatalf("Failed to read %s: %v", filePath, err)
+	}
+
+	tests := []struct {
+		name     string
+		repoName string
+		want     []string
+	}{
+		{"single source app", "argo-diff-config", []string{"argo-diff"}},
+		{"multi source app", "argo-diff-testing", []string{"argo-diff-testing"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diffCalls := 0
+			originalExecArgoCdCli := execArgoCdCli
+			defer func() { execArgoCdCli = originalExecArgoCdCli }()
+			execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+				if len(args) > 1 && args[1] == "diff" {
+					diffCalls++
+				}
+				return appListData, nil
+			}
+
+			// already out of time before any diffing starts
+			ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+			defer cancel()
+
+			evtInfo := wh.EventInfo{
+				RepoOwner:      "vince-riv",
+				RepoName:       tt.repoName,
+				RepoDefaultRef: "main",
+				ChangeRef:      "my-branch",
+				BaseRef:        "main",
+				Sha:            "abcdef",
+			}
+			appResList, notDiffed, err := GetApplicationChanges(ctx, evtInfo)
+			if err != nil {
+				t.Errorf("GetApplicationChanges() err'd: %v", err)
+			}
+			if len(appResList) != 0 {
+				t.Errorf("expected no diff results, got %d", len(appResList))
+			}
+			if !slices.Equal(notDiffed, tt.want) {
+				t.Errorf("notDiffed = %v, want %v", notDiffed, tt.want)
+			}
+			if diffCalls != 0 {
+				t.Errorf("expected no `argocd app diff` calls once out of time, got %d", diffCalls)
+			}
+		})
+	}
+}
+
+// Running out of time while enumerating an app-of-apps' nested Applications
+// must still be reported: the parent's own diff succeeds, so without an entry
+// the run looks complete while every nested application diff is missing.
+func TestGetApplicationChangesOutOfTimeEnumeratingNestedApps(t *testing.T) {
+	appListData, filePath, err := readFileToByteArray(outputListApplications)
+	if err != nil {
+		t.Fatalf("Failed to read %s: %v", filePath, err)
+	}
+	// a diff whose changed resource is itself an ArgoCD Application, which sends
+	// GetApplicationChanges() into the nested-application path
+	nestedAppDiff := []byte(`===== argoproj.io/Application /nested-app ======
+--- /tmp/argocd-diff/nested-app-live.yaml	2026-07-31 21:49:00
++++ /tmp/argocd-diff/nested-app	2026-07-31 21:49:00
+@@ -1,4 +1,4 @@
+   spec:
+-    targetRevision: 1.0.0
++    targetRevision: 2.0.0
+`)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	manifestCalls := 0
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+	execArgoCdCli = func(c context.Context, args []string) ([]byte, error) {
+		switch args[1] {
+		case "list":
+			return appListData, nil
+		case "diff":
+			// the deadline lands immediately after the parent's diff succeeds
+			cancel()
+			return nestedAppDiff, makeExitError(t, nil)
+		case "manifests":
+			manifestCalls++
+			return nil, c.Err()
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	evtInfo := wh.EventInfo{
+		RepoOwner:      "vince-riv",
+		RepoName:       "argo-diff-config",
+		RepoDefaultRef: "main",
+		ChangeRef:      "my-branch",
+		BaseRef:        "main",
+		Sha:            "abcdef",
+	}
+	appResList, notDiffed, err := GetApplicationChanges(ctx, evtInfo)
+	if err != nil {
+		t.Errorf("GetApplicationChanges() err'd: %v", err)
+	}
+	if manifestCalls != 1 {
+		t.Errorf("expected 1 `argocd app manifests` call, got %d", manifestCalls)
+	}
+	// the parent's own diff succeeded and should still be reported
+	if len(appResList) != 1 {
+		t.Errorf("expected the parent app's diff in the results, got %d results", len(appResList))
+	}
+	want := []string{"nested apps of argo-diff"}
+	if !slices.Equal(notDiffed, want) {
+		t.Errorf("notDiffed = %v, want %v", notDiffed, want)
 	}
 }
 
