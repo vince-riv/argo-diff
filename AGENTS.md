@@ -1,146 +1,131 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for coding agents working in this repository. `CLAUDE.md` is a symlink to this file.
+
+**Keep this file succinct.** It is loaded into every session, so it carries only what applies
+repo-wide. Directory-specific detail belongs in that directory's `context.md`.
+
+## Directory context files
+
+Every top-level directory (dot directories excepted) and every package under `internal/` has a
+`context.md` describing what lives there, how it works, and its gotchas. Read a directory's
+`context.md` before changing files in it, and update it when that directory's layout or behavior
+changes.
+
+| Path | What it is |
+| ---- | ---------- |
+| `cmd/` | Entry point: flags, env validation, mode dispatch |
+| `internal/argocd/` | Wrapper around the `argocd` CLI; application matching and diffing |
+| `internal/github/` | GitHub API client, PR comments, commit statuses |
+| `internal/process_event/` | Orchestrates one event: diff → commit status → PR comment |
+| `internal/server/` | HTTP webhook server plus the run-once entry points |
+| `internal/webhook/` | Webhook payload parsing (`EventInfo`) and signature verification |
+| `internal/gendiff/` | Unified-diff helper; currently unused by the rest of the code |
+| `charts/` | Helm chart for deploying argo-diff, plus a fixture chart for e2e tests |
+| `docs/` | Screenshots and example raw Kubernetes manifests |
+| `scripts/` | `prep-release.sh` — bumps every version-pinned file before a release |
+| `test/` | Fixtures and runner for the k3s end-to-end test |
+| `temp/` | Gitignored scratch dir used by the Docker build and `post-local.sh` |
 
 ## Overview
 
-Argo-diff is a Go application that provides Pull Request comments for changes to Kubernetes manifests delivered via ArgoCD. It can run as a webhook server or through GitHub Actions to automatically detect changes in ArgoCD applications and generate diffs against the live cluster state.
+Argo-diff posts a Pull Request comment showing what a change does to the Kubernetes manifests
+ArgoCD delivers, by diffing the PR's revision against live cluster state. It runs either as a
+long-lived GitHub webhook receiver or as a one-shot process (GitHub Actions, or a local event file).
 
-## Development Commands
+**Only pull request events are supported.** `ProcessCodeChange()` rejects any event without a PR
+number; push events are not handled.
 
-### Build and Run
+**Runtime dependency:** argo-diff shells out to the `argocd` CLI binary for all cluster interaction
+— it is not an HTTP API client. A compatible `argocd` executable must be on `PATH` (override the
+command name with `ARGOCD_CLI_CMD_NAME`) for anything to work locally.
+
+## Development commands
+
 ```bash
-# Build the application
-go build -v ./...
-
-# Run locally (requires environment variables)
-go run cmd/main.go
-
-# Run with a specific event file
-go run cmd/main.go -f path/to/event_info.json
-
-# Format code
-go fmt ./...
-
-# Lint (golangci-lint v2; config in .golangci.yaml)
-golangci-lint run
-
-# Run all tests
-go test -v ./...
-
-# Run a single test (or a package's tests)
+go build -v ./...                      # build
+go run cmd/main.go                     # run (needs env vars, see below)
+go run cmd/main.go -f event.json       # run once against a single event file ("-" reads stdin)
+go fmt ./...                           # format
+golangci-lint run                      # lint (golangci-lint v2; config in .golangci.yaml)
+go test ./...                          # all tests
 go test -run TestName ./internal/argocd/...
 ```
 
-Builds inject the version via ldflags (`-X 'main.Version=...'`, from `git describe`); a plain
-`go build`/`go run` falls back to running `git describe` itself, defaulting to `dev` if that fails.
-Requires Go 1.25+ (see `go.mod`).
+Requires Go 1.25+ (see `go.mod`). Builds inject the version via ldflags
+(`-X 'main.Version=...'`, from `git describe`); a plain `go build`/`go run` falls back to running
+`git describe` itself, defaulting to `dev`.
 
-**Runtime dependency:** argo-diff shells out to the `argocd` CLI binary for all cluster
-interaction, so a compatible `argocd` executable must be on `PATH` (override the command name with
-`ARGOCD_CLI_CMD_NAME`) to actually generate diffs locally.
+### Local environment
 
-### Environment Setup
-Create a `.env.sh` file for local development:
+`README.md` holds the full table of environment variables and their GitHub Actions inputs — keep
+that table as the source of truth rather than duplicating it here. The minimum for a local run:
+
 ```bash
-GITHUB_PERSONAL_ACCESS_TOKEN='github_pat_XXXX'
+GITHUB_PERSONAL_ACCESS_TOKEN='github_pat_XXXX'   # or GITHUB_TOKEN, or the GITHUB_APP_* trio
 ARGOCD_AUTH_TOKEN='YOUR_ARGOCD_TOKEN'
 ARGOCD_SERVER_ADDR='argocd.your.domain:443'
 ARGOCD_UI_BASE_URL='https://argocd.your.domain'
 APP_ENV='dev'
 ```
 
-Load environment and run:
 ```bash
 set -o allexport ; . .env.sh ; set +o allexport
 go run cmd/main.go
 ```
 
-## Architecture
+Most packages read their configuration in `init()`, so environment changes after package load have
+no effect — tests set the package-level variables directly instead.
 
-### Core Packages
+## Operational modes
 
-- **cmd/main.go**: Application entry point with CLI argument parsing and environment validation
-- **internal/webhook/**: Handles GitHub webhook event processing and EventInfo struct definitions
-- **internal/argocd/**: Wrapper around the `argocd` CLI (not an HTTP API client). `argocd_client.go`
-  builds a common argv from `ARGOCD_*` env vars and runs `argocd app list|get|manifests|diff` via
-  `exec.CommandContext`. The `execArgoCdCli` function is a package-level `var` so tests can mock the
-  CLI. Connectivity checks and manifest filtering also live here.
-- **internal/github/**: GitHub API integration, comment generation, and status checks
-- **internal/server/**: HTTP server implementation for webhook processing and GitHub Actions mode
-- **internal/process_event/**: Core business logic for processing code changes and generating diffs
-- **internal/gendiff/**: Diff generation utilities
+Selected in `cmd/main.go`, in this order:
 
-### Key Data Structures
-
-- **EventInfo** (internal/webhook/process.go): Core event data structure containing repository info, PR details, and changed files
-- **ApplicationResourcesWithChanges** (internal/argocd/types.go): Contains ArgoCD application with changed resources and diffs
-- **AppResource** (internal/argocd/types.go): Individual Kubernetes resource with diff information
-
-### Operational Modes
-
-1. **Webhook Server Mode**: Receives GitHub webhook events and processes them
-2. **GitHub Actions Mode**: Runs once when `GITHUB_ACTIONS=true` environment variable is set
-3. **File Processing Mode**: Processes a single event from a JSON file using `-f` flag
-4. **Dev Mode**: Enabled with `APP_ENV=dev`, provides `/dev` endpoint for manual testing
-
-### Required Environment Variables
-
-**Critical (Application will fail without these):**
-- `ARGOCD_AUTH_TOKEN`: Bearer token for ArgoCD API access
-- `ARGOCD_SERVER_ADDR`: ArgoCD server address
-- `GITHUB_WEBHOOK_SECRET`: For webhook mode only
-- GitHub authentication (one of):
-  - `GITHUB_TOKEN` or `GITHUB_PERSONAL_ACCESS_TOKEN`
-  - Or GitHub App credentials: `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY`
+1. **GitHub Actions** — `GITHUB_ACTIONS=true`: builds the event from `GITHUB_*` env vars, runs once,
+   exits non-zero on failure. Commit statuses are skipped; the failed step is the signal.
+2. **File processing** — `-f <file>`: decodes an `EventInfo` JSON document and runs once.
+3. **Webhook server** — the default: serves `/webhook`, `/webhook_log`, and `/healthz`.
+4. **Dev mode** — `APP_ENV=dev`: adds a `/dev` endpoint, disables webhook signature validation, and
+   turns commit statuses into dry-run logging (comments are still posted).
 
 ## Testing
 
-The codebase includes comprehensive test coverage with test data in `*_testdata/` directories:
-- `internal/argocd/argocd_testdata/`: ArgoCD API response fixtures
-- `internal/github/github_testdata/`: GitHub API response fixtures  
-- `internal/webhook/webhook_testdata/`: GitHub webhook payload samples
+`go test ./...`. Fixtures live in `*_testdata/` directories next to the packages that use them
+(`internal/argocd/argocd_testdata/`, `internal/github/github_testdata/`,
+`internal/webhook/webhook_testdata/`) and are captured from real `argocd` CLI output and GitHub API
+responses. Package-level `var` seams (`execArgoCdCli`, the `github` package clients) are the
+mocking points — see the relevant `context.md`.
 
-Tests can be run with standard Go testing commands and use real API response data for reliable testing.
+## CI and releases
 
-## GitHub Actions Integration
+Workflows in `.github/workflows/`:
 
-The project includes GitHub Actions workflows (`.github/workflows/`):
-- **go.yml**: Build, `go fmt`, lint (golangci-lint v2, `only-new-issues`), and tests. Lint runs on
-  PRs only.
-- **k3s.yml**: Spins up a k3s cluster + ArgoCD for end-to-end diff tests using the fixtures under
-  `test/`.
-- **release.yml**: Cuts releases via GoReleaser (`.goreleaser.yaml`) on `X.Y.Z[-suffix]` tags —
-  builds multi-arch binaries/images and publishes to `ghcr.io`. Use `scripts/prep-release.sh` to
-  prep a release (requires `helm-docs` on PATH to regenerate chart READMEs).
-- **dockerbuild.yml**: Builds and publishes Docker images.
-- **helm.yml** / **chart-releaser.yml**: Manage Helm chart releases.
+- **go.yml** — build, `go fmt`, tests, and lint (golangci-lint v2, `only-new-issues`; PRs only).
+- **dockerbuild.yml** — GoReleaser build + multi-arch image publish to `ghcr.io`.
+- **k3s.yml** — end-to-end test on a k3s cluster with ArgoCD, using `test/` (see `test/context.md`).
+- **release.yml** — cuts a release on an `X.Y.Z[-suffix]` tag and moves the floating `vX` /
+  `actions-vX` tags.
+- **helm.yml** / **chart-releaser.yml** — chart lint/unittest, and publish on a `chart-X.Y.Z` tag.
 
-## Local Development
+Release prep is `scripts/prep-release.sh <version>` (needs `helm-docs` on `PATH`); `release.yml`
+fails if `action.yml` is not pinned to the tagged version.
 
-### Testing HTTP Endpoints
-- Use `post-local.sh` script with `temp/curl-headers.txt` and `temp/curl-payload.json`
-- Dev endpoint at `/dev` when `APP_ENV=dev` (bypasses webhook processing)
-- Dev mode disables status checks but allows commenting
+## Conventions
 
-### Event File Format
-Create JSON file matching `EventInfo` struct for local testing:
-```json
-{
-    "ignore": false,
-    "owner": "GITHUB_ORG_NAME",
-    "repo": "REPOSITORY_NAME", 
-    "default_ref": "main",
-    "commit_sha": "LONG_SHA_OF_COMMIT",
-    "pr": 123,
-    "change_ref": "BRANCH_NAME_OF_PR",
-    "base_ref": "main"
-}
-```
+### Commit messages
 
-## Deployment Options
+- Conventional-commit subject (`feat:`, `fix:`, `chore:`, `docs:`), imperative mood; use the body to
+  explain *why*, not just what.
+- Coding agents **must** add an `Assisted-by:` trailer naming the agent and the model used:
 
-1. **Helm Chart**: `helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff`
-2. **Kubernetes Manifests**: Use examples in `docs/k8s/`
-3. **GitHub Actions**: Use `vince-riv/argo-diff@v2` action (legacy `actions-vX.Y.Z`/`actions-vX` tags still maintained)
-4. **Docker**: Multi-stage `Dockerfile` (prebuilt, multi-arch) published to `ghcr.io/vince-riv/argo-diff`
+  ```
+  Assisted-by: Claude Code (claude-opus-5)
+  ```
+
+- **Never add a `Signed-off-by:` trailer** to commits or pull requests in this repository.
+
+### Deployment surfaces
+
+Changes to configuration usually need to land in more than one place: `README.md`'s env var table,
+`action.yml` inputs, `charts/argo-diff/values.yaml` (+ chart templates and unittests), and
+`docs/k8s/`. Check all of them before calling a config change done.
