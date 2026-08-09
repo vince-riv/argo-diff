@@ -20,6 +20,24 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
+# argocdCli -- Pin the version of the argocd CLI argo-diff runs, independent of the argo-diff image.
+argocdCli:
+  image:
+    # argocdCli.image.registry -- Registry hosting the ArgoCD image the argocd CLI is copied from
+    registry: quay.io
+    # argocdCli.image.repository -- Repository of the ArgoCD image the argocd CLI is copied from
+    repository: argoproj/argocd
+    # argocdCli.image.tag -- Tag of the ArgoCD image to copy the argocd CLI binary from; this is how
+    # you pin the version of the argocd CLI argo-diff runs (eg: "v3.4.6", or "v3.4.6@sha256:..." to
+    # also pin the digest). When set, an initContainer copies the argocd binary out of that image
+    # into a shared emptyDir volume and argo-diff is pointed at it via ARGOCD_CLI_CMD_NAME. When
+    # empty, argo-diff uses the argocd binary baked into its own image.
+    tag: ""
+    # argocdCli.image.pullPolicy -- Image pull policy for the argocd CLI initContainer
+    pullPolicy: IfNotPresent
+  # argocdCli.volumeSizeLimit -- Max size of the emptyDir volume the argocd CLI binary is copied into
+  volumeSizeLimit: 2Gi
+
 imagePullSecrets: []
 
 config:
