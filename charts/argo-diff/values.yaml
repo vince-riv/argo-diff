@@ -32,7 +32,7 @@ argocdCli:
     # also pin the digest). When set, an initContainer copies the argocd binary out of that image
     # into a shared emptyDir volume and argo-diff is pointed at it via ARGOCD_CLI_CMD_NAME. When
     # empty, argo-diff uses the argocd binary baked into its own image.
-    tag: ""
+    tag: "@sha256:077c2d87fc5d2dbb29a2c7aa09af3243d26b4609705966b5488108e5efaa4202"
     # argocdCli.image.pullPolicy -- Image pull policy for the argocd CLI initContainer
     pullPolicy: IfNotPresent
   # argocdCli.volumeSizeLimit -- Max size of the emptyDir volume the argocd CLI binary is copied into
