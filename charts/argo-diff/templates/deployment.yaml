@@ -39,6 +39,25 @@ spec:
       serviceAccountName: {{ include "argo-diff.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.deployment.podSecurityContext | nindent 8 }}
+      {{- if .Values.argocdCli.image.tag }}
+      initContainers:
+        - name: argocd-cli
+          image: "{{ .Values.argocdCli.image.registry }}/{{ .Values.argocdCli.image.repository }}:{{ .Values.argocdCli.image.tag }}"
+          imagePullPolicy: {{ .Values.argocdCli.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              cp /usr/local/bin/argocd /argocd-cli/argocd
+              chmod 0755 /argocd-cli/argocd
+          securityContext:
+            {{- toYaml .Values.deployment.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.deployment.resources | nindent 12 }}
+          volumeMounts:
+            - name: argocd-cli
+              mountPath: /argocd-cli
+      {{- end }}
       containers:
         - name: argo-diff
           command: {{ .Values.command }}
@@ -53,6 +72,10 @@ spec:
           env:
             - name: LOG_LEVEL
               value: "{{ .Values.logLevel }}"
+            {{- if .Values.argocdCli.image.tag }}
+            - name: ARGOCD_CLI_CMD_NAME
+              value: "/argocd-cli/argocd"
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "argo-diff.configMapName" . | quote }}
@@ -66,13 +89,27 @@ spec:
             {{- toYaml .Values.deployment.startupProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.deployment.resources | nindent 12 }}
-          {{- with .Values.deployment.volumeMounts }}
+          {{- if or .Values.argocdCli.image.tag .Values.deployment.volumeMounts }}
           volumeMounts:
+            {{- if .Values.argocdCli.image.tag }}
+            - name: argocd-cli
+              mountPath: /argocd-cli
+              readOnly: true
+            {{- end }}
+            {{- with .Values.deployment.volumeMounts }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- with .Values.deployment.volumes }}
+      {{- if or .Values.argocdCli.image.tag .Values.deployment.volumes }}
       volumes:
+        {{- if .Values.argocdCli.image.tag }}
+        - name: argocd-cli
+          emptyDir:
+            sizeLimit: {{ .Values.argocdCli.volumeSizeLimit }}
+        {{- end }}
+        {{- with .Values.deployment.volumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       {{- with .Values.deployment.nodeSelector }}
       nodeSelector:

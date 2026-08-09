@@ -31,6 +31,20 @@ them with `config.configMapName` / `secret.name`.
 ConfigMap. Adding one means touching `values.yaml` (with its `# key -- description` comment for
 helm-docs), `templates/configmap.yaml`, `tests/configmap_test.yaml`, and the README table.
 
+### Pinning the argocd CLI version (`argocdCli.*`)
+
+`ARGOCD_CLI_CMD_NAME` (see `internal/argocd/context.md`) lets argo-diff run an `argocd` binary other
+than the one baked into the image, but the chart previously had no way to reach it. `argocdCli.*`
+values fill that gap: when `argocdCli.image.tag` is set, `templates/deployment.yaml` adds an
+`initContainer` that copies `/usr/local/bin/argocd` out of the given ArgoCD image
+(`argocdCli.image.registry`/`repository`/`tag`) into a shared `emptyDir` volume (sized by
+`argocdCli.volumeSizeLimit`, default `2Gi`), mounted read-only into the `argo-diff` container at
+`/argocd-cli`. `ARGOCD_CLI_CMD_NAME` is set to `/argocd-cli/argocd` in that case, overriding any
+value supplied via `envFrom`. When `argocdCli.image.tag` is empty (the default), none of this
+renders and the deployment is unchanged — argo-diff uses the argocd binary baked in at build time.
+`argocdCli.image.tag` also accepts a digest suffix (`v3.4.6@sha256:...`) since there is no separate
+digest key.
+
 ### Versioning
 
 `version` and `appVersion` in `Chart.yaml` are bumped together by `scripts/prep-release.sh`, which

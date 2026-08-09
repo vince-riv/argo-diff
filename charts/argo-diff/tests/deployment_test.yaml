@@ -105,3 +105,123 @@ tests:
           content:
             configMapRef:
               name: testing-env
+  - it: argocd cli tag unset
+    template: deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+      - notExists:
+          path: spec.template.spec.volumes
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: ARGOCD_CLI_CMD_NAME, value: "/argocd-cli/argocd"}
+  - it: argocd cli tag set
+    set:
+      argocdCli.image.tag: "v3.4.6"
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: argocd-cli
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "quay.io/argoproj/argocd:v3.4.6"
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: IfNotPresent
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content: {name: argocd-cli, mountPath: /argocd-cli}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: argocd-cli
+            emptyDir:
+              sizeLimit: 2Gi
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: argocd-cli, mountPath: /argocd-cli, readOnly: true}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: ARGOCD_CLI_CMD_NAME, value: "/argocd-cli/argocd"}
+  - it: argocd cli image and size overrides
+    set:
+      argocdCli.image.registry: "myregistry.example.com"
+      argocdCli.image.repository: "myorg/argocd"
+      argocdCli.image.tag: "v3.4.6"
+      argocdCli.image.pullPolicy: Always
+      argocdCli.volumeSizeLimit: 5Gi
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "myregistry.example.com/myorg/argocd:v3.4.6"
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: Always
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: argocd-cli
+            emptyDir:
+              sizeLimit: 5Gi
+  - it: argocd cli digest-pinned tag
+    set:
+      argocdCli.image.tag: "v3.4.6@sha256:6e9f4f1dcbf1f2e3d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "quay.io/argoproj/argocd:v3.4.6@sha256:6e9f4f1dcbf1f2e3d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"
+  - it: argocd cli alongside user volumes
+    set:
+      argocdCli.image.tag: "v3.4.6"
+      deployment.volumes:
+        - name: foo
+          secret:
+            secretName: mysecret
+      deployment.volumeMounts:
+        - name: foo
+          mountPath: "/etc/foo"
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: argocd-cli
+            emptyDir:
+              sizeLimit: 2Gi
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: foo
+            secret:
+              secretName: mysecret
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: argocd-cli, mountPath: /argocd-cli, readOnly: true}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: foo, mountPath: "/etc/foo"}
+  - it: argocd cli initContainer inherits deployment securityContext and resources
+    set:
+      argocdCli.image.tag: "v3.4.6"
+      deployment.securityContext:
+        runAsUser: 1000
+      deployment.resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: 256Mi

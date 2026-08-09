@@ -131,6 +131,8 @@ configuration.
   ```console
   helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
   ```
+  To run an argocd CLI version other than the one baked into the argo-diff image, set the chart's
+  `argocdCli.image.tag` value — see [charts/argo-diff/README.md](charts/argo-diff/README.md#values).
 - Alternatively, use the example manifests in [docs/k8s/](docs/k8s/) to deploy argo-diff to the argocd
   namespace of your cluster. You'll need to add an Ingress or IngressRoute so GitHub can reach the
   `/webhook` endpoint on the argo-diff Service.
@@ -215,7 +217,7 @@ the accepted environment variables and their respective GitHub Actions inputs.
 | APP_ENV                          | N/A                         | no               |          | Set to `dev` during local development. |
 | ARGOCD_AUTH_TOKEN                | argocd_auth_token           | yes              |          | Bearer token for ArgoCD (value passed to `--auth-token`). |
 | ARGOCD_APP_DIFF_SERVER_SIDE_DIFF | argocd_app_server_side_diff | no               |          | Set `--server-side-diff` for `argocd app diff` (`true`/`false`). |
-| ARGOCD_CLI_CMD_NAME              | N/A                         | no               | `argocd` | Overrides the `argocd` CLI command name (e.g., to use a specific argocd version); the named binary must be available on `PATH`. |
+| ARGOCD_CLI_CMD_NAME              | N/A                         | no               | `argocd` | Overrides the `argocd` CLI command name (e.g., to use a specific argocd version); accepts either a bare command name on `PATH` or an absolute path to the binary. |
 | ARGOCD_GRPC_WEB                  | argocd_grpc_web             | no               | `false`  | Set `--grpc-web` flag for argocd cli (`true`/`false`). |
 | ARGOCD_GRPC_WEB_ROOT_PATH        | argocd_grpc_web_root_path   | no               |          | Value for `--grpc-web-root-path` for argocd cli. |
 | ARGOCD_OPTS                      | argocd_opts                 | no               |          | Additional flags for argocd cli. |
@@ -270,7 +272,7 @@ $ go run cmd/main.go -f path/to/event_info.json
 ```
 
 > **Note:** argo-diff shells out to the `argocd` CLI, so a compatible `argocd` binary must be on your
-> `PATH` (override the command name with `ARGOCD_CLI_CMD_NAME`).
+> `PATH` (override the command name, or point at an absolute path, with `ARGOCD_CLI_CMD_NAME`).
 
 ### Craft a local file with event data
 
