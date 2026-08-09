@@ -4,6 +4,11 @@
         "matchPackageNames": ["ghcr.io/vince-riv/argo-diff"],
         "pinDigests": false
     }, {
+        "matchManagers": ["helm-values"],
+        "matchFileNames": ["charts/argo-diff/values.yaml"],
+        "matchPackageNames": ["quay.io/argoproj/argocd"],
+        "enabled": false
+    }, {
         "matchPackageNames": [
             "google/go-github",
             "/^github\\.com/google/go-github/"
