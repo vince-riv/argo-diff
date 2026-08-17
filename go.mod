@@ -2,7 +2,7 @@ module github.com/vince-riv/argo-diff
 
 go 1.26.0
 
-toolchain go1.26.5
+toolchain go1.26.6
 
 require (
 	github.com/akedrou/textdiff v0.1.0
