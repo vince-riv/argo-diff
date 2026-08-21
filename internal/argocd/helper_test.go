@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -271,6 +272,7 @@ func TestGetApplicationChangesOutOfTime(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ARGO_DIFF_MAX_WORKERS", "1")
 			diffCalls := 0
 			originalExecArgoCdCli := execArgoCdCli
 			defer func() { execArgoCdCli = originalExecArgoCdCli }()
@@ -314,6 +316,7 @@ func TestGetApplicationChangesOutOfTime(t *testing.T) {
 // must still be reported: the parent's own diff succeeds, so without an entry
 // the run looks complete while every nested application diff is missing.
 func TestGetApplicationChangesOutOfTimeEnumeratingNestedApps(t *testing.T) {
+	t.Setenv("ARGO_DIFF_MAX_WORKERS", "1")
 	appListData, filePath, err := readFileToByteArray(outputListApplications)
 	if err != nil {
 		t.Fatalf("Failed to read %s: %v", filePath, err)
@@ -372,6 +375,137 @@ func TestGetApplicationChangesOutOfTimeEnumeratingNestedApps(t *testing.T) {
 	want := []string{"nested apps of argo-diff"}
 	if !slices.Equal(notDiffed, want) {
 		t.Errorf("notDiffed = %v, want %v", notDiffed, want)
+	}
+}
+
+// buildTestApps returns n single-source Applications, all matching repoURL,
+// suitable for marshaling into a fake `argocd app list -o json` response.
+func buildTestApps(n int, repoURL string) []Application {
+	apps := make([]Application, n)
+	for i := range apps {
+		apps[i] = Application{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pool-app-%d", i)},
+			Spec: ApplicationSpec{
+				Source: &ApplicationSource{RepoURL: repoURL, TargetRevision: "main"},
+			},
+		}
+	}
+	return apps
+}
+
+// The worker pool must actually bound concurrency to ARGO_DIFF_MAX_WORKERS:
+// with more matching apps than the configured limit, no more than that many
+// `argocd app diff` calls should ever be in flight at once.
+func TestGetApplicationChangesConcurrencyBound(t *testing.T) {
+	const workers = 3
+	const numApps = 9
+	t.Setenv("ARGO_DIFF_MAX_WORKERS", fmt.Sprintf("%d", workers))
+
+	repoURL := "https://github.com/acme/widgets.git"
+	appListJSON, err := json.Marshal(buildTestApps(numApps, repoURL))
+	if err != nil {
+		t.Fatalf("failed to marshal test apps: %v", err)
+	}
+
+	var current atomic.Int64
+	var maxSeen atomic.Int64
+
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		if len(args) > 1 && args[1] == "list" {
+			return appListJSON, nil
+		}
+		if len(args) > 1 && args[1] == "diff" {
+			n := current.Add(1)
+			for {
+				m := maxSeen.Load()
+				if n <= m || maxSeen.CompareAndSwap(m, n) {
+					break
+				}
+			}
+			time.Sleep(20 * time.Millisecond)
+			current.Add(-1)
+			return nil, nil // no changes
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "acme", RepoName: "widgets", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main", Sha: "abcdef"}
+	_, notDiffed, err := GetApplicationChanges(context.Background(), evtInfo)
+	if err != nil {
+		t.Fatalf("GetApplicationChanges() err'd: %v", err)
+	}
+	if len(notDiffed) != 0 {
+		t.Errorf("expected no notDiffed entries, got %v", notDiffed)
+	}
+	if got := maxSeen.Load(); got != workers {
+		t.Errorf("observed max concurrency = %d, want exactly %d", got, workers)
+	}
+}
+
+// Regardless of how many workers actually run concurrently, appResList must
+// come back in the same order (original apps order) as a fully sequential
+// (ARGO_DIFF_MAX_WORKERS=1) run, since results are merged from a pre-sized,
+// index-addressed slice after each wave's pool drains.
+func TestGetApplicationChangesOrderStable(t *testing.T) {
+	const numApps = 6
+	repoURL := "https://github.com/acme/widgets.git"
+	appListJSON, err := json.Marshal(buildTestApps(numApps, repoURL))
+	if err != nil {
+		t.Fatalf("failed to marshal test apps: %v", err)
+	}
+
+	newMock := func(t *testing.T) func(context.Context, []string) ([]byte, error) {
+		return func(ctx context.Context, args []string) ([]byte, error) {
+			if len(args) > 1 && args[1] == "list" {
+				return appListJSON, nil
+			}
+			if len(args) > 1 && args[1] == "diff" {
+				appName := args[2]
+				var idx int
+				_, _ = fmt.Sscanf(appName, "pool-app-%d", &idx)
+				// later-indexed apps finish first, so a truly parallel run
+				// completes out of dispatch order
+				time.Sleep(time.Duration(numApps-idx) * 5 * time.Millisecond)
+				diffStr := fmt.Sprintf("===== apps/Deployment /dummy-%s ======\n--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new\n", appName)
+				return []byte(diffStr), makeExitError(t, nil)
+			}
+			if len(args) > 1 && args[1] == "manifests" {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("unexpected argocd args: %v", args)
+		}
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "acme", RepoName: "widgets", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main", Sha: "abcdef"}
+
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+
+	t.Setenv("ARGO_DIFF_MAX_WORKERS", "1")
+	execArgoCdCli = newMock(t)
+	seqResList, _, err := GetApplicationChanges(context.Background(), evtInfo)
+	if err != nil {
+		t.Fatalf("GetApplicationChanges() (sequential) err'd: %v", err)
+	}
+
+	t.Setenv("ARGO_DIFF_MAX_WORKERS", "4")
+	execArgoCdCli = newMock(t)
+	parResList, _, err := GetApplicationChanges(context.Background(), evtInfo)
+	if err != nil {
+		t.Fatalf("GetApplicationChanges() (parallel) err'd: %v", err)
+	}
+
+	if len(seqResList) != numApps || len(parResList) != numApps {
+		t.Fatalf("expected %d results in both runs, got sequential=%d parallel=%d", numApps, len(seqResList), len(parResList))
+	}
+	for i := range seqResList {
+		seqName := seqResList[i].ArgoApp.ObjectMeta.Name
+		parName := parResList[i].ArgoApp.ObjectMeta.Name
+		if seqName != parName {
+			t.Errorf("order mismatch at index %d: sequential=%s parallel=%s", i, seqName, parName)
+		}
 	}
 }
 

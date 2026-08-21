@@ -43,6 +43,13 @@ tests:
       - equal:
           path: data.COMMENT_LINE_MAX_CHARS
           value: "12345"
+  - it: config maxWorkers
+    set:
+      config.maxWorkers: 8
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_MAX_WORKERS
+          value: "8"
   - it: config argocd.grpcWeb
     set:
       config.argocd.grpcWeb: true

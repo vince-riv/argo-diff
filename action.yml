@@ -64,6 +64,10 @@ inputs:
     description: 'Log level of argo-diff'
     required: false
     default: info
+  max_workers:
+    description: 'Max number of ArgoCD applications diffed concurrently (capped at 32). Defaults to 4'
+    required: false
+    default: ''
   repo_default_ref:
     description: 'Default branch of repository (eg: "main"); only needed when `HEAD` is specified as target revision in ArgoCD application source'
     required: false
@@ -80,6 +84,7 @@ runs:
   env:
     ARGO_DIFF_COMMENT_PREAMBLE: ${{ inputs.comment_preamble }}
     ARGO_DIFF_CONTEXT_STR: ${{ inputs.context_str }}
+    ARGO_DIFF_MAX_WORKERS: ${{ inputs.max_workers }}
     ARGO_DIFF_TIMEOUT: ${{ inputs.timeout }}
     ARGOCD_AUTH_TOKEN: ${{ inputs.argocd_auth_token }}
     ARGOCD_APP_DIFF_SERVER_SIDE_DIFF: ${{ inputs.argocd_app_server_side_diff }}

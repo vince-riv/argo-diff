@@ -9,6 +9,7 @@ Wrapper around the **`argocd` CLI** — not an HTTP API client. Everything here 
 | ---- | -------- |
 | `argocd_client.go` | CLI argv construction, `execArgoCdCli`, and the parsers for its output |
 | `helper.go` | The public entry points: `ConnectivityCheck()`, `GetApplicationChanges()`, plus application matching (`filterApplications`, `checkSource`, `gitRepoMatch`) and app-of-apps handling |
+| `concurrency.go` | `runWithLimit()` — the bounded worker pool `GetApplicationChanges()` diffs applications through — and `maxWorkers()`, which reads `ARGO_DIFF_MAX_WORKERS` |
 | `application.go` | Trimmed-down copies of ArgoCD's `Application` types — only the fields used here, so the ArgoCD source tree isn't a dependency |
 | `filter_manifest_paths.go` | `FilterApplicationsByPath()` — the `argocd.argoproj.io/manifest-generate-paths` filter |
 | `types.go` | `AppResource`, `ApplicationResourcesWithChanges`, `K8sManifest` |
@@ -42,11 +43,25 @@ for this whole package. It prepends `commonCliArgv`, sets `KUBECTL_EXTERNAL_DIFF
 `GetApplicationChanges(ctx, eventInfo)` is the one entry point `process_event` calls. It:
 
 1. Lists all applications (`argocd app list -o json`).
-2. Filters to single-source apps matching the event (`filterApplications(..., multiSource=false)`),
-   diffs each one, and then looks inside each diff for nested `argoproj.io/Application` resources
-   (**app-of-apps**): those nested apps are re-diffed as multi-source apps against the changed
-   revision, via `getMultiSrcAppChanges()`.
-3. Filters again with `multiSource=true` and diffs anything not already covered.
+2. Filters to single-source apps matching the event (`filterApplications(..., multiSource=false)`)
+   and diffs each one through a bounded worker pool (wave 1). Any diff that turns up nested
+   `argoproj.io/Application` resources (**app-of-apps**) queues those nested apps rather than
+   diffing them inline.
+3. Diffs all queued nested apps, flattened across every parent, through the same bounded pool
+   (wave 2), via `getMultiSrcAppChanges()`.
+4. Filters again with `multiSource=true` and diffs anything not already covered, again through the
+   pool (wave 3).
+
+Each wave runs to completion (all its goroutines finish) before the next starts, so at most
+`maxWorkers()` (`ARGO_DIFF_MAX_WORKERS`, default `4`, capped at `32`) `argocd` CLI calls are ever in
+flight at once, system-wide — see `concurrency.go`. Each wave's results are written into a
+pre-sized, index-addressed slice (one slot per app/job) so the merge back into `appResList` is
+deterministic regardless of which worker finishes first; only the *order* changed from the old
+sequential loop ("parent, its nested apps, next parent, ...") to "all wave-1 apps, then all wave-2
+nested apps, then all wave-3 multi-source apps" — nothing downstream depends on parent/nested
+adjacency. A pre-existing inconsistency was preserved rather than fixed during this refactor: a
+wave-2 (nested app) diff error while `ctx` still has time left sets `WarnStr` but is not appended to
+`appResList`, unlike the equivalent wave-1/wave-3 cases which do append their `WarnStr` result.
 
 Matching rules worth knowing:
 
@@ -91,3 +106,11 @@ nested diff was missing.
 `getMockedArgoCdCli()` (in `argocd_list_test.go`) builds a stub from a fixture file; tests swap
 `execArgoCdCli` and restore it with `defer`. `makeExitError()` (in `argocd_client_test.go`)
 produces a genuine `*exec.ExitError` with exit code 1 for the diff-parsing tests.
+
+The two pool-behavior tests in `helper_test.go` (`TestGetApplicationChangesConcurrencyBound`,
+`TestGetApplicationChangesOrderStable`) don't use a fixture file — `buildTestApps()` builds
+`[]Application` values in Go and `json.Marshal`s them into the mocked `argocd app list` response,
+since the number of apps needs to vary with the test. `TestGetApplicationChangesOutOfTime` and
+`TestGetApplicationChangesOutOfTimeEnumeratingNestedApps` set `ARGO_DIFF_MAX_WORKERS=1` so wave 1
+runs one app at a time — the second test's mock relies on strict ordering, since it calls the
+test's own `cancel()` from inside the diff callback to simulate the deadline landing mid-run.
