@@ -7,7 +7,7 @@ toolchain go1.26.6
 require (
 	github.com/akedrou/textdiff v0.1.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
-	github.com/google/go-github/v89 v89.0.0
+	github.com/google/go-github/v90 v90.0.0
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/pflag v1.0.10
 	k8s.io/apimachinery v0.36.3
