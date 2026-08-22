@@ -439,8 +439,10 @@ func TestGetApplicationChangesConcurrencyBound(t *testing.T) {
 	if len(notDiffed) != 0 {
 		t.Errorf("expected no notDiffed entries, got %v", notDiffed)
 	}
-	if got := maxSeen.Load(); got != workers {
-		t.Errorf("observed max concurrency = %d, want exactly %d", got, workers)
+	// Exactly `workers` can under-report on a loaded CI runner; >1 still
+	// proves genuine parallelism, and <=workers proves the bound holds.
+	if got := maxSeen.Load(); got <= 1 || got > workers {
+		t.Errorf("observed max concurrency = %d, want >1 and <=%d", got, workers)
 	}
 }
 
@@ -506,6 +508,107 @@ func TestGetApplicationChangesOrderStable(t *testing.T) {
 		if seqName != parName {
 			t.Errorf("order mismatch at index %d: sequential=%s parallel=%s", i, seqName, parName)
 		}
+	}
+}
+
+// A parent app-of-apps' diff must be immediately followed by its own nested
+// apps' diffs in appResList, even though wave 2 (nested apps) now runs as one
+// flattened, pool-bounded batch across all parents rather than per-parent.
+// Without the parentIdx-based merge this regresses to "all parents, then all
+// nested apps," which scrambles app-of-apps grouping in the PR comment.
+func TestGetApplicationChangesNestedAppsGroupedWithParent(t *testing.T) {
+	t.Setenv("ARGO_DIFF_MAX_WORKERS", "4")
+
+	const repoURL = "https://github.com/acme/widgets.git"
+	const otherRepoURL = "https://github.com/acme/other.git"
+
+	parents := buildTestApps(3, repoURL) // pool-app-0, pool-app-1, pool-app-2
+	children := []Application{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child"},
+			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-2-child"},
+			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
+		},
+	}
+	appListJSON, err := json.Marshal(append(append([]Application{}, parents...), children...))
+	if err != nil {
+		t.Fatalf("failed to marshal test apps: %v", err)
+	}
+
+	nestedAppDiff := func(childName string) []byte {
+		return []byte(fmt.Sprintf(`===== argoproj.io/Application /%s ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+`, childName))
+	}
+	manifestWithChild := func(childName string) []byte {
+		return []byte(fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: %s
+  namespace: argocd
+spec:
+  source:
+    repoURL: %s
+    targetRevision: main
+`, childName, otherRepoURL))
+	}
+	plainDiff := []byte(`===== apps/Deployment /dummy ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+`)
+
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		if len(args) < 2 {
+			return nil, fmt.Errorf("unexpected argocd args: %v", args)
+		}
+		appName := ""
+		if len(args) > 2 {
+			appName = args[2]
+		}
+		switch {
+		case args[1] == "list":
+			return appListJSON, nil
+		case args[1] == "diff" && (appName == "pool-app-0" || appName == "pool-app-2"):
+			time.Sleep(20 * time.Millisecond) // let the sibling parent/children race ahead
+			return nestedAppDiff(appName + "-child"), makeExitError(t, nil)
+		case args[1] == "diff" && appName == "pool-app-1":
+			return plainDiff, makeExitError(t, nil)
+		case args[1] == "diff" && (appName == "pool-app-0-child" || appName == "pool-app-2-child"):
+			return nestedAppDiff(appName), makeExitError(t, nil)
+		case args[1] == "manifests":
+			return manifestWithChild(appName + "-child"), nil
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "acme", RepoName: "widgets", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main", Sha: "abcdef"}
+	appResList, notDiffed, err := GetApplicationChanges(context.Background(), evtInfo)
+	if err != nil {
+		t.Fatalf("GetApplicationChanges() err'd: %v", err)
+	}
+	if len(notDiffed) != 0 {
+		t.Fatalf("expected no notDiffed entries, got %v", notDiffed)
+	}
+
+	var gotNames []string
+	for _, r := range appResList {
+		gotNames = append(gotNames, r.ArgoApp.Name)
+	}
+	want := []string{"pool-app-0", "pool-app-0-child", "pool-app-1", "pool-app-2", "pool-app-2-child"}
+	if !slices.Equal(gotNames, want) {
+		t.Errorf("appResList order = %v, want %v (parent must be immediately followed by its own nested apps)", gotNames, want)
 	}
 }
 

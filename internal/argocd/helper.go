@@ -110,10 +110,13 @@ func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *App
 }
 
 // nestedJob is a queued diff of an app-of-apps' nested Application, discovered
-// while diffing its parent in wave 1 and executed in wave 2.
+// while diffing its parent in wave 1 and executed in wave 2. parentIdx is the
+// index into wave 1's apps slice of the parent that queued this job, so wave
+// 2's results can be merged back next to their parent's entry in appResList.
 type nestedJob struct {
-	appCur *Application
-	appNew *Application
+	appCur    *Application
+	appNew    *Application
+	parentIdx int
 }
 
 // wave1Result is one top-level app's outcome from processTopLevelApp(). No
@@ -260,13 +263,14 @@ func processMultiSrcApp(ctx context.Context, app Application, eventInfo webhook.
 // far are returned so the caller can still report them.
 //
 // Diffing runs in three sequential, bounded waves (top-level single-source
-// apps, then their flattened nested app-of-apps children, then multi-source
-// apps), each capped at maxWorkers() concurrent `argocd` CLI calls. Each wave
-// runs to completion before the next starts, so at most maxWorkers() diffs
-// are ever in flight system-wide. This means appResList's order changes from
-// "parent, its nested apps, next parent, ..." (as it was when this loop ran
-// sequentially) to "all top-level apps, then all nested apps, then all
-// multi-source apps" — nothing downstream depends on parent/nested adjacency.
+// apps, then their nested app-of-apps children, then multi-source apps),
+// each capped at maxWorkers() concurrent `argocd` CLI calls. Each wave runs
+// to completion before the next starts, so at most maxWorkers() diffs are
+// ever in flight system-wide. Wave 2 (nested apps) runs as one flattened,
+// pool-bounded batch across all parents rather than per-parent, but results
+// are merged back next to their parent's entry afterward, so appResList's
+// order still reads "parent, its nested apps, next parent, ..." — the same
+// order this produced when the loop ran sequentially.
 func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]ApplicationResourcesWithChanges, []string, error) {
 	log.Trace().Msgf("GetApplicationChanges(%+v)", eventInfo)
 	var appResList []ApplicationResourcesWithChanges
@@ -300,14 +304,17 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	// Wave 1: top-level single-source apps.
 	wave1Results := make([]wave1Result, len(apps))
 	runWithLimit(len(apps), limit, func(i int) {
-		wave1Results[i] = processTopLevelApp(ctx, apps[i], appLookup, eventInfo)
+		res := processTopLevelApp(ctx, apps[i], appLookup, eventInfo)
+		for j := range res.nestedJobs {
+			res.nestedJobs[j].parentIdx = i
+		}
+		wave1Results[i] = res
 	})
 	multiSrcAppNamesDiffed := []string{}
+	// nestedJobs accumulates in wave1Results order, so it comes out grouped
+	// by parentIdx (ascending, contiguous per parent) without extra sorting.
 	var nestedJobs []nestedJob
 	for _, r := range wave1Results {
-		if r.diffResult != nil {
-			appResList = append(appResList, *r.diffResult)
-		}
 		notDiffed = append(notDiffed, r.notDiffed...)
 		multiSrcAppNamesDiffed = append(multiSrcAppNamesDiffed, r.multiSrcAppNames...)
 		nestedJobs = append(nestedJobs, r.nestedJobs...)
@@ -320,10 +327,24 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		wave2Results[i] = processNestedJob(ctx, nestedJobs[i], eventInfo)
 	})
 	for _, r := range wave2Results {
+		notDiffed = append(notDiffed, r.notDiffed...)
+	}
+
+	// Merge wave 1 and wave 2 diff results so each parent's entry is
+	// immediately followed by its own nested apps' entries in appResList,
+	// matching the pre-parallelization "parent, its children, next parent"
+	// order that app-of-apps users see in the PR comment.
+	nestedIdx := 0
+	for i, r := range wave1Results {
 		if r.diffResult != nil {
 			appResList = append(appResList, *r.diffResult)
 		}
-		notDiffed = append(notDiffed, r.notDiffed...)
+		for nestedIdx < len(nestedJobs) && nestedJobs[nestedIdx].parentIdx == i {
+			if wave2Results[nestedIdx].diffResult != nil {
+				appResList = append(appResList, *wave2Results[nestedIdx].diffResult)
+			}
+			nestedIdx++
+		}
 	}
 
 	// re-filter applications, except this time with multi-source

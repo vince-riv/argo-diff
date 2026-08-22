@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -83,7 +84,9 @@ func logTraceCommandEnv(cmd *exec.Cmd) {
 var execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 	argocdCmdName := argocdCmdFromEnv()
 	log.Info().Msgf("Executing %s with args %s", argocdCmdName, strings.Join(args, " "))
-	argv := append(commonCliArgv, args...)
+	// slices.Concat always allocates a fresh backing array; a plain append(commonCliArgv, args...)
+	// can write into commonCliArgv's spare capacity and corrupt other concurrent callers' argv.
+	argv := slices.Concat(commonCliArgv, args)
 	cmd := exec.CommandContext(ctx, argocdCmdName, argv...)
 	cmd.Env = append(cmd.Environ(), "KUBECTL_EXTERNAL_DIFF=diff -u")
 	if envArgoCdOpts != "" {

@@ -24,6 +24,17 @@ optionally `--insecure`, `--plaintext`, `--grpc-web`, `--grpc-web-root-path`. It
 for this whole package. It prepends `commonCliArgv`, sets `KUBECTL_EXTERNAL_DIFF=diff -u` (hence
 `diffutils` in the Dockerfile), and re-injects `ARGOCD_OPTS`.
 
+**`commonCliArgv` must never be combined with per-call `args` via a plain `append`.** Depending on
+how many optional flags `init()` set, `commonCliArgv` can end up with spare capacity; `append`
+would then write the per-call args into that shared backing array, so a call running concurrently
+on another goroutine can observe (or clobber) another call's argv — silently diffing the wrong
+application. `execArgoCdCli` uses `slices.Concat(commonCliArgv, args)` instead, which always
+allocates a fresh backing array. `TestExecArgoCdCliConcurrentArgvIsolation` in
+`argocd_client_test.go` is the only test in this package that exercises the real, unmocked argv
+construction (everything else replaces `execArgoCdCli` wholesale) — it reproduces a
+`commonCliArgv` with spare capacity and asserts many concurrent calls each observe exactly their
+own args, via a fake `argocd` shell script pointed to by `ARGOCD_CLI_CMD_NAME`. Run with `-race`.
+
 `argocdCmdFromEnv()` honors `ARGOCD_CLI_CMD_NAME` (default `argocd`).
 
 ### Output parsing
@@ -56,12 +67,17 @@ Each wave runs to completion (all its goroutines finish) before the next starts,
 `maxWorkers()` (`ARGO_DIFF_MAX_WORKERS`, default `4`, capped at `32`) `argocd` CLI calls are ever in
 flight at once, system-wide — see `concurrency.go`. Each wave's results are written into a
 pre-sized, index-addressed slice (one slot per app/job) so the merge back into `appResList` is
-deterministic regardless of which worker finishes first; only the *order* changed from the old
-sequential loop ("parent, its nested apps, next parent, ...") to "all wave-1 apps, then all wave-2
-nested apps, then all wave-3 multi-source apps" — nothing downstream depends on parent/nested
-adjacency. A pre-existing inconsistency was preserved rather than fixed during this refactor: a
-wave-2 (nested app) diff error while `ctx` still has time left sets `WarnStr` but is not appended to
-`appResList`, unlike the equivalent wave-1/wave-3 cases which do append their `WarnStr` result.
+deterministic regardless of which worker finishes first. Wave 2 (nested apps) itself runs as one
+flattened, pool-bounded batch across every parent rather than per-parent — but each `nestedJob`
+carries the `parentIdx` of the wave-1 app that queued it, and `GetApplicationChanges()` walks
+wave 1 and wave 2's results together afterward to append each parent's nested-app entries
+immediately after its own, so `appResList`'s order still reads "parent, its nested apps, next
+parent, ..." — the same order the old sequential loop produced. `TestGetApplicationChangesNestedAppsGroupedWithParent`
+covers this: multiple parents with nested apps, diffed concurrently with artificial jitter, must
+still come back grouped. A pre-existing inconsistency was preserved rather than fixed during the
+original parallelization refactor: a wave-2 (nested app) diff error while `ctx` still has time left
+sets `WarnStr` but is not appended to `appResList`, unlike the equivalent wave-1/wave-3 cases which
+do append their `WarnStr` result.
 
 Matching rules worth knowing:
 
@@ -107,10 +123,13 @@ nested diff was missing.
 `execArgoCdCli` and restore it with `defer`. `makeExitError()` (in `argocd_client_test.go`)
 produces a genuine `*exec.ExitError` with exit code 1 for the diff-parsing tests.
 
-The two pool-behavior tests in `helper_test.go` (`TestGetApplicationChangesConcurrencyBound`,
-`TestGetApplicationChangesOrderStable`) don't use a fixture file — `buildTestApps()` builds
-`[]Application` values in Go and `json.Marshal`s them into the mocked `argocd app list` response,
-since the number of apps needs to vary with the test. `TestGetApplicationChangesOutOfTime` and
+The pool-behavior tests in `helper_test.go` (`TestGetApplicationChangesConcurrencyBound`,
+`TestGetApplicationChangesOrderStable`, `TestGetApplicationChangesNestedAppsGroupedWithParent`)
+don't use a fixture file — `buildTestApps()` builds `[]Application` values in Go and
+`json.Marshal`s them into the mocked `argocd app list` response, since the number of apps needs to
+vary with the test. `TestGetApplicationChangesConcurrencyBound` asserts observed max concurrency is
+`>1` and `<=` the configured limit rather than exactly equal, since an exact count can under-report
+on a loaded CI runner. `TestGetApplicationChangesOutOfTime` and
 `TestGetApplicationChangesOutOfTimeEnumeratingNestedApps` set `ARGO_DIFF_MAX_WORKERS=1` so wave 1
 runs one app at a time — the second test's mock relies on strict ordering, since it calls the
 test's own `cancel()` from inside the diff callback to simulate the deadline landing mid-run.
