@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/go-github/v89/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/rs/zerolog/log"
 
 	argoDiffGh "github.com/vince-riv/argo-diff/internal/github"
