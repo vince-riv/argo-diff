@@ -155,6 +155,13 @@ func getCommentUser(ctx context.Context) error {
 			log.Info().Msgf("%s received when calling client.Users.Get() via go-github", resp.Status)
 		}
 		if err != nil {
+			// GitHub App installation tokens passed via GITHUB_TOKEN can't
+			// call GET /user (403). This is only a connectivity check —
+			// PR commenting works fine without commentLogin being set.
+			if resp != nil && resp.StatusCode == http.StatusForbidden {
+				log.Warn().Msg("GET /user returned 403 — GITHUB_TOKEN may be a GitHub App installation token. Skipping user lookup.")
+				return nil
+			}
 			log.Error().Err(err).Msg("Unable to determine get my github user")
 			return err
 		}
