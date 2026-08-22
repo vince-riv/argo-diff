@@ -71,10 +71,17 @@ deterministic regardless of which worker finishes first. Wave 2 (nested apps) it
 flattened, pool-bounded batch across every parent rather than per-parent — but each `nestedJob`
 carries the `parentIdx` of the wave-1 app that queued it, and `GetApplicationChanges()` walks
 wave 1 and wave 2's results together afterward to append each parent's nested-app entries
-immediately after its own, so `appResList`'s order still reads "parent, its nested apps, next
-parent, ..." — the same order the old sequential loop produced. `TestGetApplicationChangesNestedAppsGroupedWithParent`
-covers this: multiple parents with nested apps, diffed concurrently with artificial jitter, must
-still come back grouped. A pre-existing inconsistency was preserved rather than fixed during the
+immediately after its own, so both `appResList` and `notDiffed` still read "parent, its nested
+apps, next parent, ..." — the same order the old sequential loop produced. This single merge loop
+drives both slices together on purpose: an earlier version merged `appResList` this way but still
+built `notDiffed` as "all wave-1 skips, then all wave-2 skips," which only reads as flat
+mis-ordering when a later top-level app is skipped outright (deadline already passed) while an
+earlier parent's nested child is also skipped — the common case of one parent's own skip next to
+another parent's skip happens to coincide either way.
+`TestGetApplicationChangesNestedAppsGroupedWithParent` covers the `appResList` side: multiple
+parents with nested apps, diffed concurrently with artificial jitter, must still come back grouped.
+`TestGetApplicationChangesNotDiffedGroupedWithParent` covers the `notDiffed` side with the
+deadline-ordering scenario above. A pre-existing inconsistency was preserved rather than fixed during the
 original parallelization refactor: a wave-2 (nested app) diff error while `ctx` still has time left
 sets `WarnStr` but is not appended to `appResList`, unlike the equivalent wave-1/wave-3 cases which
 do append their `WarnStr` result.
@@ -124,8 +131,9 @@ nested diff was missing.
 produces a genuine `*exec.ExitError` with exit code 1 for the diff-parsing tests.
 
 The pool-behavior tests in `helper_test.go` (`TestGetApplicationChangesConcurrencyBound`,
-`TestGetApplicationChangesOrderStable`, `TestGetApplicationChangesNestedAppsGroupedWithParent`)
-don't use a fixture file — `buildTestApps()` builds `[]Application` values in Go and
+`TestGetApplicationChangesOrderStable`, `TestGetApplicationChangesNestedAppsGroupedWithParent`,
+`TestGetApplicationChangesNotDiffedGroupedWithParent`) don't use a fixture file — `buildTestApps()`
+builds `[]Application` values in Go and
 `json.Marshal`s them into the mocked `argocd app list` response, since the number of apps needs to
 vary with the test. `TestGetApplicationChangesConcurrencyBound` asserts observed max concurrency is
 `>1` and `<=` the configured limit rather than exactly equal, since an exact count can under-report

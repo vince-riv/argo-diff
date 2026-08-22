@@ -268,9 +268,10 @@ func processMultiSrcApp(ctx context.Context, app Application, eventInfo webhook.
 // to completion before the next starts, so at most maxWorkers() diffs are
 // ever in flight system-wide. Wave 2 (nested apps) runs as one flattened,
 // pool-bounded batch across all parents rather than per-parent, but results
-// are merged back next to their parent's entry afterward, so appResList's
-// order still reads "parent, its nested apps, next parent, ..." — the same
-// order this produced when the loop ran sequentially.
+// are merged back next to their parent's entry afterward, so both
+// appResList and notDiffed still read "parent, its nested apps, next
+// parent, ..." — the same order this produced when the loop ran
+// sequentially.
 func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]ApplicationResourcesWithChanges, []string, error) {
 	log.Trace().Msgf("GetApplicationChanges(%+v)", eventInfo)
 	var appResList []ApplicationResourcesWithChanges
@@ -315,7 +316,6 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	// by parentIdx (ascending, contiguous per parent) without extra sorting.
 	var nestedJobs []nestedJob
 	for _, r := range wave1Results {
-		notDiffed = append(notDiffed, r.notDiffed...)
 		multiSrcAppNamesDiffed = append(multiSrcAppNamesDiffed, r.multiSrcAppNames...)
 		nestedJobs = append(nestedJobs, r.nestedJobs...)
 	}
@@ -326,23 +326,22 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	runWithLimit(len(nestedJobs), limit, func(i int) {
 		wave2Results[i] = processNestedJob(ctx, nestedJobs[i], eventInfo)
 	})
-	for _, r := range wave2Results {
-		notDiffed = append(notDiffed, r.notDiffed...)
-	}
 
-	// Merge wave 1 and wave 2 diff results so each parent's entry is
-	// immediately followed by its own nested apps' entries in appResList,
-	// matching the pre-parallelization "parent, its children, next parent"
-	// order that app-of-apps users see in the PR comment.
+	// Merge wave 1 and wave 2 results so each parent's entry (in both
+	// appResList and notDiffed) is immediately followed by its own nested
+	// apps' entries, matching the pre-parallelization "parent, its children,
+	// next parent" order that app-of-apps users see in the PR comment.
 	nestedIdx := 0
 	for i, r := range wave1Results {
 		if r.diffResult != nil {
 			appResList = append(appResList, *r.diffResult)
 		}
+		notDiffed = append(notDiffed, r.notDiffed...)
 		for nestedIdx < len(nestedJobs) && nestedJobs[nestedIdx].parentIdx == i {
 			if wave2Results[nestedIdx].diffResult != nil {
 				appResList = append(appResList, *wave2Results[nestedIdx].diffResult)
 			}
+			notDiffed = append(notDiffed, wave2Results[nestedIdx].notDiffed...)
 			nestedIdx++
 		}
 	}

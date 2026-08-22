@@ -516,6 +516,43 @@ func TestGetApplicationChangesOrderStable(t *testing.T) {
 // flattened, pool-bounded batch across all parents rather than per-parent.
 // Without the parentIdx-based merge this regresses to "all parents, then all
 // nested apps," which scrambles app-of-apps grouping in the PR comment.
+// nestedAppDiffFixture builds an `argocd app diff` output whose sole changed
+// resource is an argoproj.io/Application named childName, the shape that
+// sends processTopLevelApp() down the nested-app enumeration path.
+func nestedAppDiffFixture(childName string) []byte {
+	return []byte(fmt.Sprintf(`===== argoproj.io/Application /%s ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+`, childName))
+}
+
+// argoAppManifestFixture builds a minimal `argocd app manifests` document
+// containing a single-source Application named childName, so
+// argoAppsWithChanges() recognizes it as a nested app to queue.
+func argoAppManifestFixture(childName, repoURL string) []byte {
+	return []byte(fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: %s
+  namespace: argocd
+spec:
+  source:
+    repoURL: %s
+    targetRevision: main
+`, childName, repoURL))
+}
+
+var plainDeploymentDiffFixture = []byte(`===== apps/Deployment /dummy ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+`)
+
 func TestGetApplicationChangesNestedAppsGroupedWithParent(t *testing.T) {
 	t.Setenv("ARGO_DIFF_MAX_WORKERS", "4")
 
@@ -538,35 +575,6 @@ func TestGetApplicationChangesNestedAppsGroupedWithParent(t *testing.T) {
 		t.Fatalf("failed to marshal test apps: %v", err)
 	}
 
-	nestedAppDiff := func(childName string) []byte {
-		return []byte(fmt.Sprintf(`===== argoproj.io/Application /%s ======
---- a
-+++ b
-@@ -1 +1 @@
--old
-+new
-`, childName))
-	}
-	manifestWithChild := func(childName string) []byte {
-		return []byte(fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: %s
-  namespace: argocd
-spec:
-  source:
-    repoURL: %s
-    targetRevision: main
-`, childName, otherRepoURL))
-	}
-	plainDiff := []byte(`===== apps/Deployment /dummy ======
---- a
-+++ b
-@@ -1 +1 @@
--old
-+new
-`)
-
 	originalExecArgoCdCli := execArgoCdCli
 	defer func() { execArgoCdCli = originalExecArgoCdCli }()
 	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
@@ -582,13 +590,13 @@ spec:
 			return appListJSON, nil
 		case args[1] == "diff" && (appName == "pool-app-0" || appName == "pool-app-2"):
 			time.Sleep(20 * time.Millisecond) // let the sibling parent/children race ahead
-			return nestedAppDiff(appName + "-child"), makeExitError(t, nil)
+			return nestedAppDiffFixture(appName + "-child"), makeExitError(t, nil)
 		case args[1] == "diff" && appName == "pool-app-1":
-			return plainDiff, makeExitError(t, nil)
+			return plainDeploymentDiffFixture, makeExitError(t, nil)
 		case args[1] == "diff" && (appName == "pool-app-0-child" || appName == "pool-app-2-child"):
-			return nestedAppDiff(appName), makeExitError(t, nil)
+			return nestedAppDiffFixture(appName), makeExitError(t, nil)
 		case args[1] == "manifests":
-			return manifestWithChild(appName + "-child"), nil
+			return argoAppManifestFixture(appName+"-child", otherRepoURL), nil
 		}
 		return nil, fmt.Errorf("unexpected argocd args: %v", args)
 	}
@@ -609,6 +617,79 @@ spec:
 	want := []string{"pool-app-0", "pool-app-0-child", "pool-app-1", "pool-app-2", "pool-app-2-child"}
 	if !slices.Equal(gotNames, want) {
 		t.Errorf("appResList order = %v, want %v (parent must be immediately followed by its own nested apps)", gotNames, want)
+	}
+}
+
+// notDiffed must group the same way appResList does: a nested app skipped
+// because the deadline landed mid-run belongs right after its own parent,
+// not lumped in with unrelated top-level apps that were skipped outright.
+// This is only observable when a wave-1-level skip (a later top-level app,
+// never dispatched because the deadline had already passed) sits after an
+// earlier parent whose nested child was also skipped - otherwise the flat
+// "all wave-1 skips, then all wave-2 skips" merge happens to coincide with
+// the grouped order.
+func TestGetApplicationChangesNotDiffedGroupedWithParent(t *testing.T) {
+	t.Setenv("ARGO_DIFF_MAX_WORKERS", "1") // strict dispatch order: pool-app-0, then -1, then -2
+
+	const repoURL = "https://github.com/acme/widgets.git"
+	const otherRepoURL = "https://github.com/acme/other.git"
+
+	parents := buildTestApps(3, repoURL) // pool-app-0, pool-app-1, pool-app-2
+	children := []Application{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child"},
+			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
+		},
+	}
+	appListJSON, err := json.Marshal(append(append([]Application{}, parents...), children...))
+	if err != nil {
+		t.Fatalf("failed to marshal test apps: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+	execArgoCdCli = func(c context.Context, args []string) ([]byte, error) {
+		if len(args) < 2 {
+			return nil, fmt.Errorf("unexpected argocd args: %v", args)
+		}
+		appName := ""
+		if len(args) > 2 {
+			appName = args[2]
+		}
+		switch {
+		case args[1] == "list":
+			return appListJSON, nil
+		case args[1] == "diff" && appName == "pool-app-0":
+			return nestedAppDiffFixture("pool-app-0-child"), makeExitError(t, nil)
+		case args[1] == "manifests" && appName == "pool-app-0":
+			return argoAppManifestFixture("pool-app-0-child", otherRepoURL), nil
+		case args[1] == "diff" && appName == "pool-app-1":
+			// the deadline lands only now: pool-app-0 (and its nested job
+			// queued from the manifests call above) is already fully
+			// processed, so pool-app-1's own diff and everything dispatched
+			// after it (pool-app-2, and the queued nested job in wave 2) get
+			// skipped as "out of time"
+			cancel()
+			return nil, c.Err()
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "acme", RepoName: "widgets", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main", Sha: "abcdef"}
+	appResList, notDiffed, err := GetApplicationChanges(ctx, evtInfo)
+	if err != nil {
+		t.Fatalf("GetApplicationChanges() err'd: %v", err)
+	}
+	if len(appResList) != 1 || appResList[0].ArgoApp.Name != "pool-app-0" {
+		t.Fatalf("expected only pool-app-0's diff in appResList, got %v", appResList)
+	}
+
+	want := []string{"pool-app-0-child", "pool-app-1", "pool-app-2"}
+	if !slices.Equal(notDiffed, want) {
+		t.Errorf("notDiffed = %v, want %v (pool-app-0's skipped nested child must sit next to pool-app-0, before the later top-level apps' own skips)", notDiffed, want)
 	}
 }
 
