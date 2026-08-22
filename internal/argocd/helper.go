@@ -145,7 +145,7 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 		res.notDiffed = append(res.notDiffed, app.Name)
 		return res
 	}
-	log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, eventInfo.Sha)
+	log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.Name, eventInfo.Sha)
 	appResChanges, err := getApplicationChanges(ctx, &app, eventInfo.Sha, nil, nil)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -154,7 +154,7 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 			res.notDiffed = append(res.notDiffed, app.Name)
 			return res
 		}
-		appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
+		appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.Name, err.Error())
 		res.diffResult = &appResChanges
 		return res
 	}
@@ -162,7 +162,7 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 		return res
 	}
 	res.diffResult = &appResChanges
-	appsWithChanges, err := argoAppsWithChanges(ctx, app.ObjectMeta.Name, appResChanges.ChangedResources, eventInfo.Sha)
+	appsWithChanges, err := argoAppsWithChanges(ctx, app.Name, appResChanges.ChangedResources, eventInfo.Sha)
 	if err != nil {
 		if ctx.Err() != nil {
 			// This app's diff turned up nested Applications but we ran out of
@@ -171,18 +171,18 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 			// every nested application diff is missing.
 			res.notDiffed = append(res.notDiffed, fmt.Sprintf("nested apps of %s", app.Name))
 		}
-		log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.ObjectMeta.Name)
+		log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.Name)
 		return res
 	}
 	// diff matching multi-source application
 	log.Info().Msgf("Found %d nested ArgoCD Application(s) with changes within '%s'", len(appsWithChanges), app.Name)
 	for _, subApp := range appsWithChanges {
-		subAppCur, ok := appLookup[subApp.ObjectMeta.Name]
+		subAppCur, ok := appLookup[subApp.Name]
 		if !ok {
-			log.Info().Msgf("Application %s not found in current ArgoCD app list", subApp.ObjectMeta.Name)
+			log.Info().Msgf("Application %s not found in current ArgoCD app list", subApp.Name)
 			continue
 		}
-		res.multiSrcAppNames = append(res.multiSrcAppNames, subApp.ObjectMeta.Name)
+		res.multiSrcAppNames = append(res.multiSrcAppNames, subApp.Name)
 		if ctx.Err() != nil {
 			res.notDiffed = append(res.notDiffed, subApp.Name)
 			continue
@@ -226,7 +226,7 @@ func processMultiSrcApp(ctx context.Context, app Application, eventInfo webhook.
 		res.notDiffed = append(res.notDiffed, app.Name)
 		return res
 	}
-	log.Info().Msgf("Generating application diff for multi-source ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, eventInfo.Sha)
+	log.Info().Msgf("Generating application diff for multi-source ArgoCD App '%s' w/ revision %s", app.Name, eventInfo.Sha)
 	revList := []string{}
 	srcPos := []int{}
 	for i, appSrc := range app.Spec.GetSources() {
@@ -241,7 +241,7 @@ func processMultiSrcApp(ctx context.Context, app Application, eventInfo webhook.
 			res.notDiffed = append(res.notDiffed, app.Name)
 			return res
 		}
-		appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
+		appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.Name, err.Error())
 		res.diffResult = &appResChanges
 		return res
 	}

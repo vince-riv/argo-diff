@@ -501,8 +501,8 @@ func TestGetApplicationChangesOrderStable(t *testing.T) {
 		t.Fatalf("expected %d results in both runs, got sequential=%d parallel=%d", numApps, len(seqResList), len(parResList))
 	}
 	for i := range seqResList {
-		seqName := seqResList[i].ArgoApp.ObjectMeta.Name
-		parName := parResList[i].ArgoApp.ObjectMeta.Name
+		seqName := seqResList[i].ArgoApp.Name
+		parName := parResList[i].ArgoApp.Name
 		if seqName != parName {
 			t.Errorf("order mismatch at index %d: sequential=%s parallel=%s", i, seqName, parName)
 		}
