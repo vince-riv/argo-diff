@@ -109,6 +109,151 @@ func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *App
 	return getApplicationChanges(ctx, appCur, "", revisions, positions)
 }
 
+// nestedJob is a queued diff of an app-of-apps' nested Application, discovered
+// while diffing its parent in wave 1 and executed in wave 2. parentIdx is the
+// index into wave 1's apps slice of the parent that queued this job, so wave
+// 2's results can be merged back next to their parent's entry in appResList.
+type nestedJob struct {
+	appCur    *Application
+	appNew    *Application
+	parentIdx int
+}
+
+// wave1Result is one top-level app's outcome from processTopLevelApp(). No
+// field here is written by more than one goroutine: GetApplicationChanges()
+// merges these sequentially, in original apps order, after the wave-1 pool
+// drains.
+type wave1Result struct {
+	diffResult       *ApplicationResourcesWithChanges
+	notDiffed        []string
+	multiSrcAppNames []string
+	nestedJobs       []nestedJob
+}
+
+// diffJobResult is the shared shape for wave-2 (nested app) and wave-3
+// (multi-source app) worker outcomes.
+type diffJobResult struct {
+	diffResult *ApplicationResourcesWithChanges
+	notDiffed  []string
+}
+
+// processTopLevelApp diffs one single-source top-level app and, if it has
+// changes, enumerates any nested app-of-apps Applications it contains,
+// queuing them as nestedJobs for wave 2 rather than diffing them inline. It
+// takes only read-only inputs and returns a private result, so it's safe to
+// run from any of runWithLimit's worker goroutines.
+func processTopLevelApp(ctx context.Context, app Application, appLookup map[string]Application, eventInfo webhook.EventInfo) wave1Result {
+	var res wave1Result
+	if ctx.Err() != nil {
+		res.notDiffed = append(res.notDiffed, app.Name)
+		return res
+	}
+	log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.Name, eventInfo.Sha)
+	appResChanges, err := getApplicationChanges(ctx, &app, eventInfo.Sha, nil, nil)
+	if err != nil {
+		if ctx.Err() != nil {
+			// the diff was interrupted by the deadline, so this isn't an
+			// application-level failure worth reporting as one
+			res.notDiffed = append(res.notDiffed, app.Name)
+			return res
+		}
+		appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.Name, err.Error())
+		res.diffResult = &appResChanges
+		return res
+	}
+	if len(appResChanges.ChangedResources) == 0 {
+		return res
+	}
+	res.diffResult = &appResChanges
+	appsWithChanges, err := argoAppsWithChanges(ctx, app.Name, appResChanges.ChangedResources, eventInfo.Sha)
+	if err != nil {
+		if ctx.Err() != nil {
+			// This app's diff turned up nested Applications but we ran out of
+			// time enumerating them, so they can't be named individually. Record
+			// one entry anyway: without it the run reports as complete while
+			// every nested application diff is missing.
+			res.notDiffed = append(res.notDiffed, fmt.Sprintf("nested apps of %s", app.Name))
+		}
+		log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.Name)
+		return res
+	}
+	// diff matching multi-source application
+	log.Info().Msgf("Found %d nested ArgoCD Application(s) with changes within '%s'", len(appsWithChanges), app.Name)
+	for _, subApp := range appsWithChanges {
+		subAppCur, ok := appLookup[subApp.Name]
+		if !ok {
+			log.Info().Msgf("Application %s not found in current ArgoCD app list", subApp.Name)
+			continue
+		}
+		res.multiSrcAppNames = append(res.multiSrcAppNames, subApp.Name)
+		if ctx.Err() != nil {
+			res.notDiffed = append(res.notDiffed, subApp.Name)
+			continue
+		}
+		res.nestedJobs = append(res.nestedJobs, nestedJob{appCur: &subAppCur, appNew: &subApp})
+	}
+	return res
+}
+
+// processNestedJob diffs one nested app-of-apps Application queued by wave 1.
+//
+// NOTE: on a non-timeout error, this intentionally does not surface WarnStr
+// in the returned diffResult (only the len(ChangedResources) > 0 success
+// branch below sets it) — matching the pre-existing behavior of the loop this
+// was extracted from. That looks like an inconsistency with the top-level
+// loop, which does append its WarnStr case; flagged to the user as a possible
+// follow-up rather than silently changed here (see issue #273 design notes).
+func processNestedJob(ctx context.Context, job nestedJob, eventInfo webhook.EventInfo) diffJobResult {
+	var res diffJobResult
+	if ctx.Err() != nil {
+		res.notDiffed = append(res.notDiffed, job.appNew.Name)
+		return res
+	}
+	subAppResChanges, err := getMultiSrcAppChanges(ctx, job.appCur, job.appNew, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
+	if err != nil {
+		if ctx.Err() != nil {
+			res.notDiffed = append(res.notDiffed, job.appNew.Name)
+		}
+		return res
+	}
+	if len(subAppResChanges.ChangedResources) > 0 {
+		res.diffResult = &subAppResChanges
+	}
+	return res
+}
+
+// processMultiSrcApp diffs one wave-3 multi-source app.
+func processMultiSrcApp(ctx context.Context, app Application, eventInfo webhook.EventInfo) diffJobResult {
+	var res diffJobResult
+	if ctx.Err() != nil {
+		res.notDiffed = append(res.notDiffed, app.Name)
+		return res
+	}
+	log.Info().Msgf("Generating application diff for multi-source ArgoCD App '%s' w/ revision %s", app.Name, eventInfo.Sha)
+	revList := []string{}
+	srcPos := []int{}
+	for i, appSrc := range app.Spec.GetSources() {
+		if gitRepoMatch(appSrc, eventInfo.RepoOwner, eventInfo.RepoName) {
+			revList = append(revList, eventInfo.Sha)
+			srcPos = append(srcPos, i+1)
+		}
+	}
+	appResChanges, err := getApplicationChanges(ctx, &app, "", revList, srcPos)
+	if err != nil {
+		if ctx.Err() != nil {
+			res.notDiffed = append(res.notDiffed, app.Name)
+			return res
+		}
+		appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.Name, err.Error())
+		res.diffResult = &appResChanges
+		return res
+	}
+	if len(appResChanges.ChangedResources) > 0 {
+		res.diffResult = &appResChanges
+	}
+	return res
+}
+
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
 // and return their manifests.
 //
@@ -116,6 +261,17 @@ func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *App
 // diffed because ctx ran out of time. Diffing stops at that point rather than
 // firing calls that are guaranteed to fail, and the partial results collected so
 // far are returned so the caller can still report them.
+//
+// Diffing runs in three sequential, bounded waves (top-level single-source
+// apps, then their nested app-of-apps children, then multi-source apps),
+// each capped at maxWorkers() concurrent `argocd` CLI calls. Each wave runs
+// to completion before the next starts, so at most maxWorkers() diffs are
+// ever in flight system-wide. Wave 2 (nested apps) runs as one flattened,
+// pool-bounded batch across all parents rather than per-parent, but results
+// are merged back next to their parent's entry afterward, so both
+// appResList and notDiffed still read "parent, its nested apps, next
+// parent, ..." — the same order this produced when the loop ran
+// sequentially.
 func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]ApplicationResourcesWithChanges, []string, error) {
 	log.Trace().Msgf("GetApplicationChanges(%+v)", eventInfo)
 	var appResList []ApplicationResourcesWithChanges
@@ -144,67 +300,52 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		return
 	}())
 
-	multiSrcAppNamesDiffed := []string{}
-	for _, app := range apps {
-		if ctx.Err() != nil {
-			notDiffed = append(notDiffed, app.Name)
-			continue
+	limit := maxWorkers()
+
+	// Wave 1: top-level single-source apps.
+	wave1Results := make([]wave1Result, len(apps))
+	runWithLimit(len(apps), limit, func(i int) {
+		res := processTopLevelApp(ctx, apps[i], appLookup, eventInfo)
+		for j := range res.nestedJobs {
+			res.nestedJobs[j].parentIdx = i
 		}
-		log.Info().Msgf("Generating application diff for ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, eventInfo.Sha)
-		//app, err = getApplication(ctx, app.ObjectMeta.Name)
-		//if err != nil {
-		//	appResChanges.WarnStr = fmt.Sprintf("Failed to refresh application %s: %s", app.ObjectMeta.Name, err.Error())
-		//	continue
-		//}
-		appResChanges, err := getApplicationChanges(ctx, &app, eventInfo.Sha, nil, nil)
-		if err != nil {
-			if ctx.Err() != nil {
-				// the diff was interrupted by the deadline, so this isn't an
-				// application-level failure worth reporting as one
-				notDiffed = append(notDiffed, app.Name)
-				continue
+		wave1Results[i] = res
+	})
+	multiSrcAppNamesDiffed := []string{}
+	// nestedJobs accumulates in wave1Results order, so it comes out grouped
+	// by parentIdx (ascending, contiguous per parent) without extra sorting.
+	var nestedJobs []nestedJob
+	for _, r := range wave1Results {
+		multiSrcAppNamesDiffed = append(multiSrcAppNamesDiffed, r.multiSrcAppNames...)
+		nestedJobs = append(nestedJobs, r.nestedJobs...)
+	}
+
+	// Wave 2: nested app-of-apps children queued by wave 1, flattened across
+	// all parents.
+	wave2Results := make([]diffJobResult, len(nestedJobs))
+	runWithLimit(len(nestedJobs), limit, func(i int) {
+		wave2Results[i] = processNestedJob(ctx, nestedJobs[i], eventInfo)
+	})
+
+	// Merge wave 1 and wave 2 results so each parent's entry (in both
+	// appResList and notDiffed) is immediately followed by its own nested
+	// apps' entries, matching the pre-parallelization "parent, its children,
+	// next parent" order that app-of-apps users see in the PR comment.
+	nestedIdx := 0
+	for i, r := range wave1Results {
+		if r.diffResult != nil {
+			appResList = append(appResList, *r.diffResult)
+		}
+		notDiffed = append(notDiffed, r.notDiffed...)
+		for nestedIdx < len(nestedJobs) && nestedJobs[nestedIdx].parentIdx == i {
+			if wave2Results[nestedIdx].diffResult != nil {
+				appResList = append(appResList, *wave2Results[nestedIdx].diffResult)
 			}
-			appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
-			appResList = append(appResList, appResChanges)
-		} else if len(appResChanges.ChangedResources) > 0 {
-			appResList = append(appResList, appResChanges)
-			appsWithChanges, err := argoAppsWithChanges(ctx, app.ObjectMeta.Name, appResChanges.ChangedResources, eventInfo.Sha)
-			if err != nil {
-				if ctx.Err() != nil {
-					// This app's diff turned up nested Applications but we ran out of
-					// time enumerating them, so they can't be named individually. Record
-					// one entry anyway: without it the run reports as complete while
-					// every nested application diff is missing.
-					notDiffed = append(notDiffed, fmt.Sprintf("nested apps of %s", app.Name))
-				}
-				log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.ObjectMeta.Name)
-			} else {
-				// diff matching multi-source application
-				log.Info().Msgf("Found %d nested ArgoCD Application(s) with changes within '%s'", len(appsWithChanges), app.Name)
-				for _, subApp := range appsWithChanges {
-					if subAppCur, ok := appLookup[subApp.ObjectMeta.Name]; ok {
-						multiSrcAppNamesDiffed = append(multiSrcAppNamesDiffed, subApp.ObjectMeta.Name)
-						if ctx.Err() != nil {
-							notDiffed = append(notDiffed, subApp.Name)
-							continue
-						}
-						subAppResChanges, err := getMultiSrcAppChanges(ctx, &subAppCur, &subApp, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
-						if err != nil {
-							if ctx.Err() != nil {
-								notDiffed = append(notDiffed, subApp.Name)
-								continue
-							}
-							subAppResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", subApp.ObjectMeta.Name, err.Error())
-						} else if len(subAppResChanges.ChangedResources) > 0 {
-							appResList = append(appResList, subAppResChanges)
-						}
-					} else {
-						log.Info().Msgf("Application %s not found in current ArgoCD app list", subApp.ObjectMeta.Name)
-					}
-				}
-			}
+			notDiffed = append(notDiffed, wave2Results[nestedIdx].notDiffed...)
+			nestedIdx++
 		}
 	}
+
 	// re-filter applications, except this time with multi-source
 	apps, err = filterApplications(argoApps.Items, eventInfo, true)
 	if err != nil {
@@ -220,35 +361,25 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		}
 		return
 	}())
+	var wave3Apps []Application
 	for _, app := range apps {
 		if slices.Contains(multiSrcAppNamesDiffed, app.ObjectMeta.Name) {
 			log.Debug().Msgf("Skipping multi-source %s, we already diff'ed it", app.ObjectMeta.Name)
 			continue
 		}
-		if ctx.Err() != nil {
-			notDiffed = append(notDiffed, app.Name)
-			continue
+		wave3Apps = append(wave3Apps, app)
+	}
+
+	// Wave 3: multi-source apps not already covered by wave 1/2.
+	wave3Results := make([]diffJobResult, len(wave3Apps))
+	runWithLimit(len(wave3Apps), limit, func(i int) {
+		wave3Results[i] = processMultiSrcApp(ctx, wave3Apps[i], eventInfo)
+	})
+	for _, r := range wave3Results {
+		if r.diffResult != nil {
+			appResList = append(appResList, *r.diffResult)
 		}
-		log.Info().Msgf("Generating application diff for multi-source ArgoCD App '%s' w/ revision %s", app.ObjectMeta.Name, eventInfo.Sha)
-		revList := []string{}
-		srcPos := []int{}
-		for i, appSrc := range app.Spec.GetSources() {
-			if gitRepoMatch(appSrc, eventInfo.RepoOwner, eventInfo.RepoName) {
-				revList = append(revList, eventInfo.Sha)
-				srcPos = append(srcPos, i+1)
-			}
-		}
-		appResChanges, err := getApplicationChanges(ctx, &app, "", revList, srcPos)
-		if err != nil {
-			if ctx.Err() != nil {
-				notDiffed = append(notDiffed, app.Name)
-				continue
-			}
-			appResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", app.ObjectMeta.Name, err.Error())
-			appResList = append(appResList, appResChanges)
-		} else if len(appResChanges.ChangedResources) > 0 {
-			appResList = append(appResList, appResChanges)
-		}
+		notDiffed = append(notDiffed, r.notDiffed...)
 	}
 
 	if len(notDiffed) > 0 {

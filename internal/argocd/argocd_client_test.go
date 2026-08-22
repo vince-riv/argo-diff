@@ -2,7 +2,13 @@ package argocd
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -206,6 +212,67 @@ func TestDiffApplicationExitCodeHandling(t *testing.T) {
 			t.Errorf("expected nil appResList on error, got %v", appResList)
 		}
 	})
+}
+
+// TestExecArgoCdCliConcurrentArgvIsolation exercises the real argv construction in
+// execArgoCdCli (unlike every other test in this package, which replaces execArgoCdCli
+// wholesale and so can never see this bug). It reproduces commonCliArgv with spare
+// capacity, the same shape init() produces when several optional flags are set, and calls
+// execArgoCdCli concurrently. A plain append(commonCliArgv, args...) writes each call's args
+// into that shared spare capacity, so concurrent callers observe each other's argv. Run with
+// -race to catch the underlying data race directly.
+func TestExecArgoCdCliConcurrentArgvIsolation(t *testing.T) {
+	originalCommonCliArgv := commonCliArgv
+	defer func() { commonCliArgv = originalCommonCliArgv }()
+	commonCliArgv = append(make([]string, 0, 16),
+		"--server", "argocd.example.com",
+		"--auth-token", "tok",
+		"--insecure", "--plaintext", "--grpc-web",
+		"--grpc-web-root-path", "/argocd")
+	if cap(commonCliArgv) <= len(commonCliArgv) {
+		t.Fatalf("test setup invalid: need spare capacity in commonCliArgv, got len=%d cap=%d", len(commonCliArgv), cap(commonCliArgv))
+	}
+
+	t.Setenv("ARGOCD_CLI_CMD_NAME", writeArgvEchoScript(t))
+
+	const workers = 16
+	var wg sync.WaitGroup
+	errs := make([]error, workers)
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			want := []string{"app", "diff", fmt.Sprintf("pool-app-%d", i)}
+			out, err := execArgoCdCli(context.Background(), want)
+			if err != nil {
+				errs[i] = fmt.Errorf("worker %d: %w", i, err)
+				return
+			}
+			gotArgv := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+			got := gotArgv[len(gotArgv)-len(want):]
+			if !slices.Equal(got, want) {
+				errs[i] = fmt.Errorf("worker %d: argv corrupted: wanted %v got %v (full argv %v)", i, want, got, gotArgv)
+			}
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+// writeArgvEchoScript writes a fake argocd CLI that prints each argv element on its own line,
+// so tests can assert on exactly what execArgoCdCli passed to the real exec.Cmd.
+func writeArgvEchoScript(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "fake-argocd.sh")
+	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("failed to write fake argocd script: %v", err)
+	}
+	return path
 }
 
 func TestAppManifestHelper(t *testing.T) {
