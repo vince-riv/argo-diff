@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v90 v90.0.0
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/pflag v1.0.10
-	k8s.io/apimachinery v0.36.3
+	k8s.io/apimachinery v0.36.4
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -28,9 +28,9 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
