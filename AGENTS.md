@@ -117,6 +117,7 @@ fails if `action.yml` is not pinned to the tagged version.
 
 - Conventional-commit subject (`feat:`, `fix:`, `chore:`, `docs:`), imperative mood; use the body to
   explain *why*, not just what.
+- Use Conventional-commit subjects for Pull Request titles
 - Coding agents **must** add an `Assisted-by:` trailer naming the agent and the model that did
   the work — not a fixed example model, the one actually running in the session (it can change
   mid-session, eg: via `/model`):
@@ -125,6 +126,7 @@ fails if `action.yml` is not pinned to the tagged version.
   Assisted-by: Claude Code (<model-id>)
   ```
 
+- Coding agents **must** add the aforementioned `Assisted-by:` trailer to Pull Requests summaries.
 - **Never add a `Signed-off-by:` trailer** to commits or pull requests in this repository.
 
 ### Deployment surfaces
