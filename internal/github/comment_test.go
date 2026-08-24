@@ -415,7 +415,9 @@ func TestGetCommentUserApp(t *testing.T) {
 				}
 				payload, filePath, err := readFileToByteArray(tc.fixture)
 				if err != nil {
-					t.Fatalf("readFileToByteArray(%s) failed: %s", filePath, err)
+					t.Errorf("readFileToByteArray(%s) failed: %s", filePath, err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
 				}
 				w.WriteHeader(http.StatusOK)
 				w.Write(payload)
