@@ -16,6 +16,7 @@ changes.
 | ---- | ---------- |
 | `cmd/` | Entry point: flags, env validation, mode dispatch |
 | `internal/argocd/` | Wrapper around the `argocd` CLI; application matching and diffing |
+| `internal/config/` | Cross-package operator config, eg: the connectivity-check bypass |
 | `internal/github/` | GitHub API client, PR comments, commit statuses |
 | `internal/process_event/` | Orchestrates one event: diff → commit status → PR comment |
 | `internal/server/` | HTTP webhook server plus the run-once entry points |

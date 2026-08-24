@@ -36,6 +36,13 @@ construction failures only log — the nil client surfaces later as an error.
   connectivity check and the comment-author check — under Actions the token's identity isn't
   resolvable the same way. `go.yml` sets `ARGO_DIFF_CI=true` so tests behave like the deployed
   service.
+- `bypassGithubCheck()` (see `internal/config/context.md`) does the same thing on purpose, for the same
+  reason, but by operator opt-in: `ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS=github` is for a GitHub
+  App installation token passed via `GITHUB_TOKEN` outside of Actions (eg: minted per-PR by a
+  Jenkins plugin), which 403s on `GET /user` the same way an Actions token would. It's checked at
+  every `isGithubAction` site: `ConnectivityCheck()`, the `getCommentUser()` call in
+  `getExistingComments()`, and the comment-author match — bypassing it means `commentLogin` stays
+  empty and comments are matched by `commentIdentifier` alone, same as under Actions.
 - `IsRefreshComment()` matches `argo diff` / `argo-diff`, optionally suffixed with the context
   string (case-insensitive, trimmed). This is what makes an `issue_comment` re-run the diff.
 
