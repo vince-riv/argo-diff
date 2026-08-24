@@ -87,7 +87,9 @@ concept) or a GitHub App.
 
 Create a new application in your organization under **Developer Settings**:
 
-- Name can be `argo-diff`.
+- Name can be anything, e.g. `argo-diff`. argo-diff identifies its own PR comments using the App's
+  slug (the URL-friendly form of the name GitHub derives automatically), not the display name, so
+  any name works.
 - Homepage URL can be the base URL of your ArgoCD instance or of your webhook URL.
 - Callback URL and Setup URL should be empty.
 - Webhooks should **not** be active.

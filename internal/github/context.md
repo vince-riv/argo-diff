@@ -20,8 +20,10 @@ credential: `GITHUB_PERSONAL_ACCESS_TOKEN`, then `GITHUB_TOKEN`, then a GitHub A
 The App path also builds `appsClient` (JWT auth) to resolve the bot's own login. Client
 construction failures only log — the nil client surfaces later as an error.
 
-`getCommentUser()` caches the login (`commentLogin`) behind an `RWMutex`; the App path appends
-`[bot]`.
+`getCommentUser()` caches the login (`commentLogin`) behind an `RWMutex`; the App path derives it
+from `App.GetSlug()` (falling back to `App.GetName()` if the slug is empty) and appends `[bot]` —
+GitHub builds the bot's real login from the App's slug, not its display name, so using `Name`
+directly breaks comment reuse for any App whose name isn't already slug-shaped.
 
 ## Comment behavior
 
