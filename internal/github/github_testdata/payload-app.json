@@ -1,0 +1,26 @@
+{
+  "id": 987654,
+  "slug": "argodiff-prod",
+  "client_id": "Iv1.abcdef1234567890",
+  "node_id": "MDM6QXBwOTg3NjU0",
+  "owner": {
+    "login": "vince-riv",
+    "id": 7654321,
+    "type": "Organization"
+  },
+  "name": "ArgoDiff Prod",
+  "description": "Posts ArgoCD diffs on pull requests",
+  "external_url": "https://argo-diff.example.com",
+  "html_url": "https://github.com/apps/argodiff-prod",
+  "created_at": "2023-01-01T00:00:00Z",
+  "updated_at": "2023-01-01T00:00:00Z",
+  "permissions": {
+    "issues": "write",
+    "pull_requests": "write"
+  },
+  "events": [
+    "pull_request",
+    "issue_comment"
+  ],
+  "installations_count": 1
+}

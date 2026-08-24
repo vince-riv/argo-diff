@@ -18,6 +18,7 @@ import (
 
 const testDataDir = "github_testdata"
 const payloadUser = "payload-user.json"
+const payloadApp = "payload-app.json"
 const payloadPr1Comments = "payload-pr-1-comments.json"
 const payloadPr2Comments = "payload-pr-2-comments.json"
 const payloadPr3Comments = "payload-pr-3-comments.json"
@@ -130,6 +131,9 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 			case "/user":
 				statusCode = http.StatusOK
 				payload, filePath, err = readFileToByteArray(payloadUser)
+			case "/app":
+				statusCode = http.StatusOK
+				payload, filePath, err = readFileToByteArray(payloadApp)
 			case "/repos/vince-riv/argo-diff/issues/1/comments":
 				if r.Method == "GET" {
 					statusCode = http.StatusOK
@@ -384,5 +388,44 @@ func TestCommentNotHead(t *testing.T) {
 	}
 	if len(comments) > 0 {
 		t.Error("Not expecting to comment")
+	}
+}
+
+// TestGetCommentUserApp is the regression case for #290: a GitHub App whose display name
+// ("ArgoDiff Prod") isn't slug-shaped must still derive commentLogin from the App's slug
+// ("argodiff-prod"), since that's what GitHub actually uses as the bot's login.
+func TestGetCommentUserApp(t *testing.T) {
+	server := newHttpTestServer(t)
+	defer server.Close()
+	baseURL := server.URL + "/"
+
+	origIsApp := commentClientIsApp
+	origAppsClient := appsClient
+	origCommentLogin := commentLogin
+	defer func() {
+		commentClientIsApp = origIsApp
+		appsClient = origAppsClient
+		mux.Lock()
+		commentLogin = origCommentLogin
+		mux.Unlock()
+	}()
+
+	var err error
+	appsClient, err = github.NewClient(github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
+	commentClientIsApp = true
+	mux.Lock()
+	commentLogin = ""
+	mux.Unlock()
+
+	if err := getCommentUser(context.Background()); err != nil {
+		t.Fatalf("getCommentUser() failed: %s", err)
+	}
+
+	want := "argodiff-prod[bot]"
+	if commentLogin != want {
+		t.Errorf("commentLogin = %q, want %q (must come from App slug, not display name %q)", commentLogin, want, "ArgoDiff Prod")
 	}
 }
