@@ -3,7 +3,7 @@ name: Go
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "release-*"]
     paths:
       - '**/**.go'
       - 'go.mod'
@@ -11,7 +11,7 @@ on:
       - '**/_testdata/**'
       - '.github/workflows/go.yml'
   pull_request:
-    branches: ["main"]
+    branches: ["main", "release-*"]
     paths:
       - '**/**.go'
       - 'go.mod'
