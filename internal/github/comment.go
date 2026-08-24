@@ -14,6 +14,8 @@ import (
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v90/github"
 	"github.com/rs/zerolog/log"
+
+	"github.com/vince-riv/argo-diff/internal/config"
 )
 
 var (
@@ -91,12 +93,23 @@ func init() {
 	}
 }
 
+// bypassGithubCheck reports whether the Github connectivity check and
+// comment-author matching are bypassed via ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS.
+// Read at call time, not cached in init(), so tests can t.Setenv it.
+func bypassGithubCheck() bool {
+	return config.BypassConnectivityCheck(config.ComponentGithub)
+}
+
 func ConnectivityCheck() error {
 	if commentClient == nil {
 		return errors.New("github client is not initialized")
 	}
 	if isGithubAction {
 		log.Info().Msg("Running in github actions - skipping connectivity test")
+		return nil
+	}
+	if bypassGithubCheck() {
+		log.Warn().Msgf("Skipping Github connectivity test per %s", config.BypassEnvVar)
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -254,7 +267,7 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		log.Error().Msg("Cannot call github API - I don't have a client set")
 		return nil, fmt.Errorf("no github commenter client")
 	}
-	if !isGithubAction {
+	if !isGithubAction && !bypassGithubCheck() {
 		err := getCommentUser(ctx)
 		if err != nil {
 			return nil, err
@@ -276,7 +289,7 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		log.Debug().Msgf("Checking %d comments in %s/%s#%d", len(comments), owner, repo, prNum)
 		for _, c := range comments {
 			if strings.Contains(*c.Body, commentIdentifier) {
-				if isGithubAction || *c.User.Login == commentLogin {
+				if isGithubAction || bypassGithubCheck() || *c.User.Login == commentLogin {
 					res = append(res, c)
 				}
 			}
