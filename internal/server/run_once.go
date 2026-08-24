@@ -71,6 +71,7 @@ func logEnvironmentVariables() {
 		"ARGO_DIFF_CONTEXT_STR",
 		"ARGO_DIFF_CI",
 		"ARGO_DIFF_COMMENT_PREAMBLE",
+		"ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS",
 		"COMMENT_LINE_MAX_CHARS",
 	}
 	for _, key := range nonSensitiveVars {

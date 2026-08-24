@@ -224,6 +224,43 @@ func TestCommentExistingDifferentUser(t *testing.T) {
 	}
 }
 
+// TestCommentExistingDifferentUserBypass mirrors TestCommentExistingDifferentUser
+// but with ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS=github set. This is the regression
+// case for PR #287: an install token that 403s on GET /user should still let
+// argo-diff find and update its own prior comment, matching by marker alone
+// (same as isGithubAction), instead of posting a duplicate.
+func TestCommentExistingDifferentUserBypass(t *testing.T) {
+	t.Setenv("ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS", "github")
+
+	server := newHttpTestServer(t)
+	defer server.Close()
+	baseURL := server.URL + "/"
+	var err error
+	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
+
+	c, err := getExistingComments(context.Background(), "vince-riv", "argo-diff", 2)
+	if err != nil {
+		t.Errorf("getExistingComments() failed: %s", err)
+	}
+	if len(c) != 1 {
+		t.Fatalf("Expected 1 existing comment matched by marker, got %d", len(c))
+	}
+	if *c[0].ID != 1828467122 {
+		t.Errorf("Comment ID doesn't match: got %d, want 1828467122", *c[0].ID)
+	}
+
+	comments, err := Comment(context.Background(), "vince-riv", "argo-diff", 2, prHeadSha, []string{"argo-diff test comment"})
+	if err != nil {
+		t.Errorf("Comment() failed: %s", err)
+	}
+	if *comments[0].ID != 1828467122 {
+		t.Errorf("Comment() should have updated the existing comment, got ID %d", *comments[0].ID)
+	}
+}
+
 func TestCommentExisting(t *testing.T) {
 	server := newHttpTestServer(t)
 	defer server.Close()

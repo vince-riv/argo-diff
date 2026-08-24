@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/vince-riv/argo-diff/internal/argocd"
+	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/server"
 )
@@ -98,7 +99,11 @@ func main() {
 		serverDevMode = true
 	}
 
-	if err = argocd.ConnectivityCheck(); err != nil {
+	config.LogBypassConfig()
+
+	if config.BypassConnectivityCheck(config.ComponentArgoCD) {
+		log.Warn().Msgf("Skipping ArgoCD connectivity check per %s", config.BypassEnvVar)
+	} else if err = argocd.ConnectivityCheck(); err != nil {
 		log.Fatal().Err(err).Msg("Connectivity check to ArgoCD failed")
 	}
 
