@@ -117,10 +117,12 @@ fails if `action.yml` is not pinned to the tagged version.
 
 - Conventional-commit subject (`feat:`, `fix:`, `chore:`, `docs:`), imperative mood; use the body to
   explain *why*, not just what.
-- Coding agents **must** add an `Assisted-by:` trailer naming the agent and the model used:
+- Coding agents **must** add an `Assisted-by:` trailer naming the agent and the model that did
+  the work — not a fixed example model, the one actually running in the session (it can change
+  mid-session, eg: via `/model`):
 
   ```
-  Assisted-by: Claude Code (claude-opus-5)
+  Assisted-by: Claude Code (<model-id>)
   ```
 
 - **Never add a `Signed-off-by:` trailer** to commits or pull requests in this repository.
