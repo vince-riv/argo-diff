@@ -267,7 +267,8 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		log.Error().Msg("Cannot call github API - I don't have a client set")
 		return nil, fmt.Errorf("no github commenter client")
 	}
-	if !isGithubAction && !bypassGithubCheck() {
+	bypass := bypassGithubCheck()
+	if !isGithubAction && !bypass {
 		err := getCommentUser(ctx)
 		if err != nil {
 			return nil, err
@@ -289,7 +290,7 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		log.Debug().Msgf("Checking %d comments in %s/%s#%d", len(comments), owner, repo, prNum)
 		for _, c := range comments {
 			if strings.Contains(*c.Body, commentIdentifier) {
-				if isGithubAction || bypassGithubCheck() || *c.User.Login == commentLogin {
+				if isGithubAction || bypass || *c.User.Login == commentLogin {
 					res = append(res, c)
 				}
 			}
