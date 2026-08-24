@@ -155,7 +155,7 @@ func getCommentUser(ctx context.Context) error {
 			return err
 		}
 		log.Trace().Msgf("Github App: %+v", app)
-		if app == nil || (app.Slug == nil && app.Name == nil) {
+		if app == nil {
 			log.Error().Msg("Empty app returned - not sure how I got here")
 			return fmt.Errorf("empty app info")
 		}
@@ -163,6 +163,10 @@ func getCommentUser(ctx context.Context) error {
 		if appLogin == "" {
 			log.Warn().Msg("Github App slug is empty - falling back to app name")
 			appLogin = app.GetName()
+		}
+		if appLogin == "" {
+			log.Error().Msg("Github App has neither slug nor name")
+			return fmt.Errorf("empty app info")
 		}
 		mux.Lock()
 		commentLogin = appLogin + "[bot]"

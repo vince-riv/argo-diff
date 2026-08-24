@@ -131,9 +131,6 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 			case "/user":
 				statusCode = http.StatusOK
 				payload, filePath, err = readFileToByteArray(payloadUser)
-			case "/app":
-				statusCode = http.StatusOK
-				payload, filePath, err = readFileToByteArray(payloadApp)
 			case "/repos/vince-riv/argo-diff/issues/1/comments":
 				if r.Method == "GET" {
 					statusCode = http.StatusOK
@@ -393,39 +390,81 @@ func TestCommentNotHead(t *testing.T) {
 
 // TestGetCommentUserApp is the regression case for #290: a GitHub App whose display name
 // ("ArgoDiff Prod") isn't slug-shaped must still derive commentLogin from the App's slug
-// ("argodiff-prod"), since that's what GitHub actually uses as the bot's login.
+// ("argodiff-prod"), since that's what GitHub actually uses as the bot's login. It also covers
+// the slug-empty fallback to name, and the case where both are empty (must error, not cache
+// a bare "[bot]" login).
 func TestGetCommentUserApp(t *testing.T) {
-	server := newHttpTestServer(t)
-	defer server.Close()
-	baseURL := server.URL + "/"
-
-	origIsApp := commentClientIsApp
-	origAppsClient := appsClient
-	origCommentLogin := commentLogin
-	defer func() {
-		commentClientIsApp = origIsApp
-		appsClient = origAppsClient
-		mux.Lock()
-		commentLogin = origCommentLogin
-		mux.Unlock()
-	}()
-
-	var err error
-	appsClient, err = github.NewClient(github.WithURLs(&baseURL, &baseURL))
-	if err != nil {
-		t.Fatalf("Failed to create github client: %s", err)
-	}
-	commentClientIsApp = true
-	mux.Lock()
-	commentLogin = ""
-	mux.Unlock()
-
-	if err := getCommentUser(context.Background()); err != nil {
-		t.Fatalf("getCommentUser() failed: %s", err)
+	cases := []struct {
+		name      string
+		fixture   string
+		wantLogin string
+		wantErr   bool
+	}{
+		{name: "slug present", fixture: payloadApp, wantLogin: "argodiff-prod[bot]"},
+		{name: "empty slug falls back to name", fixture: "payload-app-empty-slug.json", wantLogin: "ArgoDiff Prod[bot]"},
+		{name: "empty slug and name errors", fixture: "payload-app-empty.json", wantErr: true},
 	}
 
-	want := "argodiff-prod[bot]"
-	if commentLogin != want {
-		t.Errorf("commentLogin = %q, want %q (must come from App slug, not display name %q)", commentLogin, want, "ArgoDiff Prod")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			appServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/app" {
+					t.Errorf("Mock server not configured to serve path %s", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				payload, filePath, err := readFileToByteArray(tc.fixture)
+				if err != nil {
+					t.Fatalf("readFileToByteArray(%s) failed: %s", filePath, err)
+				}
+				w.WriteHeader(http.StatusOK)
+				w.Write(payload)
+			}))
+			defer appServer.Close()
+			baseURL := appServer.URL + "/"
+
+			origCommentClient := commentClient
+			origIsApp := commentClientIsApp
+			origAppsClient := appsClient
+			origCommentLogin := commentLogin
+			defer func() {
+				commentClient = origCommentClient
+				commentClientIsApp = origIsApp
+				appsClient = origAppsClient
+				mux.Lock()
+				commentLogin = origCommentLogin
+				mux.Unlock()
+			}()
+
+			// getCommentUser() requires commentClient to be set regardless of which path
+			// (App or PAT) it takes, so this test must set it independently of test order.
+			var err error
+			commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+			if err != nil {
+				t.Fatalf("Failed to create github client: %s", err)
+			}
+			appsClient, err = github.NewClient(github.WithURLs(&baseURL, &baseURL))
+			if err != nil {
+				t.Fatalf("Failed to create github client: %s", err)
+			}
+			commentClientIsApp = true
+			mux.Lock()
+			commentLogin = ""
+			mux.Unlock()
+
+			err = getCommentUser(context.Background())
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("getCommentUser() succeeded, want error (commentLogin ended up %q)", commentLogin)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("getCommentUser() failed: %s", err)
+			}
+			if commentLogin != tc.wantLogin {
+				t.Errorf("commentLogin = %q, want %q", commentLogin, tc.wantLogin)
+			}
+		})
 	}
 }
