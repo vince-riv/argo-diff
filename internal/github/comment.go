@@ -285,11 +285,13 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		return nil, fmt.Errorf("no github commenter client")
 	}
 	bypass := bypassGithubCheck()
+	var login string
 	if !isGithubAction && !bypass {
 		err := getCommentUser(ctx)
 		if err != nil {
 			return nil, err
 		}
+		login = getCommentLogin()
 	}
 	for i, checkComments := 0, true; checkComments; i++ {
 		checkComments = false
@@ -307,7 +309,7 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		log.Debug().Msgf("Checking %d comments in %s/%s#%d", len(comments), owner, repo, prNum)
 		for _, c := range comments {
 			if strings.Contains(*c.Body, commentIdentifier) {
-				if isGithubAction || bypass || *c.User.Login == getCommentLogin() {
+				if isGithubAction || bypass || *c.User.Login == login {
 					res = append(res, c)
 				}
 			}

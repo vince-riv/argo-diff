@@ -393,12 +393,24 @@ func TestGetCommentUserConcurrent(t *testing.T) {
 	}))
 	defer server.Close()
 
+	origCommentClient := commentClient
+	origIsApp := commentClientIsApp
+	origCommentLogin := commentLogin
+	defer func() {
+		commentClient = origCommentClient
+		commentClientIsApp = origIsApp
+		mux.Lock()
+		commentLogin = origCommentLogin
+		mux.Unlock()
+	}()
+
 	baseURL := server.URL + "/"
 	var err error
 	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
 	if err != nil {
 		t.Fatalf("Failed to create github client: %s", err)
 	}
+	commentClientIsApp = false
 
 	// Reset the singleton so this test actually exercises the populate-once path,
 	// regardless of what earlier tests in this package already cached.
