@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/go-github/v90/github"
@@ -364,6 +366,83 @@ func TestCommentExistingMultiNoComment(t *testing.T) {
 	}
 	if !strings.Contains(*comments[1].Body, "[Outdated argo-diff content]") {
 		t.Errorf("2nd Comment body doesn't match '[Outdated argo-diff content]': %s", *comments[1].Body)
+	}
+}
+
+// TestGetCommentUserConcurrent is the regression test for issue #296: concurrent
+// calls to getCommentUser() (as happen when the webhook server processes two PR
+// events at once) must populate commentLogin exactly once, and every read of it
+// must be race-free under `go test -race`.
+func TestGetCommentUserConcurrent(t *testing.T) {
+	var userCalls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/user" {
+			t.Errorf("Mock server not configured to serve path %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		atomic.AddInt32(&userCalls, 1)
+		payload, filePath, err := readFileToByteArray(payloadUser)
+		if err != nil {
+			t.Errorf("Failed to load %s: %s", filePath, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(payload)
+	}))
+	defer server.Close()
+
+	origCommentClient := commentClient
+	origIsApp := commentClientIsApp
+	origCommentLogin := commentLogin
+	defer func() {
+		commentClient = origCommentClient
+		commentClientIsApp = origIsApp
+		mux.Lock()
+		commentLogin = origCommentLogin
+		mux.Unlock()
+	}()
+
+	baseURL := server.URL + "/"
+	var err error
+	commentClient, err = github.NewClient(github.WithAuthToken("test1234"), github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		t.Fatalf("Failed to create github client: %s", err)
+	}
+	commentClientIsApp = false
+
+	// Reset the singleton so this test actually exercises the populate-once path,
+	// regardless of what earlier tests in this package already cached.
+	mux.Lock()
+	commentLogin = ""
+	mux.Unlock()
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	errs := make([]error, goroutines)
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			errs[idx] = getCommentUser(context.Background())
+			// Concurrent, lock-guarded reads alongside the concurrent writes above -
+			// this is what go test -race catches if the guarding regresses.
+			_ = getCommentLogin()
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("getCommentUser() goroutine %d failed: %s", i, err)
+		}
+	}
+	if got := getCommentLogin(); got == "" {
+		t.Error("expected commentLogin to be populated after concurrent getCommentUser() calls")
+	}
+	if calls := atomic.LoadInt32(&userCalls); calls != 1 {
+		t.Errorf("expected exactly 1 call to GET /user, got %d", calls)
 	}
 }
 

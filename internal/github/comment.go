@@ -132,19 +132,31 @@ func IsRefreshComment(comment string) bool {
 	return false
 }
 
+// getCommentLogin returns the cached commentLogin under a read lock. Every
+// read of commentLogin outside getCommentUser must go through this accessor
+// so it can never race with the writes in getCommentUser.
+func getCommentLogin() string {
+	mux.RLock()
+	defer mux.RUnlock()
+	return commentLogin
+}
+
 // Populates commentLogin singleton with the Github user associated with our github client
 func getCommentUser(ctx context.Context) error {
 	if commentClient == nil {
 		log.Error().Msg("Cannot call github API - I don't have a client set")
 		return fmt.Errorf("no github commenter client")
 	}
-	log.Debug().Msg("Calling Github API to determine comment user")
-	mux.RLock()
+	// Hold the write lock across the whole check-then-call-then-set sequence
+	// so two concurrent callers can't both observe an empty commentLogin and
+	// both hit the Github API. This only serializes the first call(s) after
+	// process start, since every call after that returns immediately below.
+	mux.Lock()
+	defer mux.Unlock()
 	if commentLogin != "" {
-		mux.RUnlock()
 		return nil
 	}
-	mux.RUnlock()
+	log.Debug().Msg("Calling Github API to determine comment user")
 	if commentClientIsApp {
 		app, resp, err := appsClient.Apps.Get(ctx, "")
 		if resp != nil {
@@ -168,9 +180,7 @@ func getCommentUser(ctx context.Context) error {
 			log.Error().Msg("Github App has neither slug nor name")
 			return fmt.Errorf("empty app info")
 		}
-		mux.Lock()
 		commentLogin = appLogin + "[bot]"
-		mux.Unlock()
 	} else {
 		user, resp, err := commentClient.Users.Get(ctx, "")
 		if resp != nil {
@@ -184,9 +194,7 @@ func getCommentUser(ctx context.Context) error {
 			log.Error().Msg("Empty user returned - not sure how I got here")
 			return fmt.Errorf("empty user info")
 		}
-		mux.Lock()
 		commentLogin = *user.Login
-		mux.Unlock()
 	}
 	log.Info().Msgf("Github Comment user name: %s", commentLogin)
 	return nil
@@ -277,11 +285,13 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		return nil, fmt.Errorf("no github commenter client")
 	}
 	bypass := bypassGithubCheck()
+	var login string
 	if !isGithubAction && !bypass {
 		err := getCommentUser(ctx)
 		if err != nil {
 			return nil, err
 		}
+		login = getCommentLogin()
 	}
 	for i, checkComments := 0, true; checkComments; i++ {
 		checkComments = false
@@ -299,7 +309,7 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		log.Debug().Msgf("Checking %d comments in %s/%s#%d", len(comments), owner, repo, prNum)
 		for _, c := range comments {
 			if strings.Contains(*c.Body, commentIdentifier) {
-				if isGithubAction || bypass || *c.User.Login == commentLogin {
+				if isGithubAction || bypass || *c.User.Login == login {
 					res = append(res, c)
 				}
 			}
