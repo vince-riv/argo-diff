@@ -53,7 +53,7 @@ go test ./...                          # all tests
 go test -run TestName ./internal/argocd/...
 ```
 
-Requires Go 1.25+ (see `go.mod`). Builds inject the version via ldflags
+Requires Go 1.26+ (see `go.mod`). Builds inject the version via ldflags
 (`-X 'main.Version=...'`, from `git describe`); a plain `go build`/`go run` falls back to running
 `git describe` itself, defaulting to `dev`.
 

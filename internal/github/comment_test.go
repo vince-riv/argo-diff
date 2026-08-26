@@ -119,11 +119,6 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 						return
 					}
 					payload = bytes.ReplaceAll(payload, []byte("%%_PR_NUM_%%"), []byte(urlPathParts[5]))
-					if err != nil {
-						w.WriteHeader(http.StatusInternalServerError)
-						t.Errorf("jsonFieldExtract() failed: %s", err)
-						return
-					}
 				}
 			} else {
 				statusCode = http.StatusMethodNotAllowed
