@@ -92,9 +92,9 @@ func Status(ctx context.Context, status, description, repoOwner, repoName, commi
 	// TODO add support for AvatarURL ?
 	// TODO add support for TargetURL ?
 	repoStatus := github.RepoStatus{
-		State:       &status,
-		Description: &description,
-		Context:     github.String(contextStr),
+		State:       github.Ptr(status),
+		Description: github.Ptr(description),
+		Context:     github.Ptr(contextStr),
 	}
 
 	if dryRun {

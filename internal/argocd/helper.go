@@ -62,7 +62,7 @@ func ConnectivityCheck() error {
 func appListToMap(appList []Application) map[string]Application {
 	argoAppMap := make(map[string]Application)
 	for _, app := range appList {
-		argoAppMap[app.ObjectMeta.Name] = app
+		argoAppMap[app.Name] = app
 	}
 	return argoAppMap
 }
@@ -72,19 +72,19 @@ func getApplicationChanges(ctx context.Context, app *Application, revision strin
 	var err error
 	appResChanges.ArgoApp = app
 	if revision != "" {
-		appResChanges.ChangedResources, err = diffApplication(ctx, app.ObjectMeta.Name, revision, nil, nil)
+		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, revision, nil, nil)
 	} else {
 		if len(revs) < 1 || len(revs) != len(pos) {
 			return appResChanges, fmt.Errorf("getApplicationChanges() called as multi-src with bad revs/pos count [%d/%d]", len(revs), len(pos))
 		}
-		appResChanges.ChangedResources, err = diffApplication(ctx, app.ObjectMeta.Name, "", revs, pos)
+		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, "", revs, pos)
 	}
 	return appResChanges, err
 }
 
 func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *Application, repoOwner, repoName, revision string) (ApplicationResourcesWithChanges, error) {
 	var appResChanges ApplicationResourcesWithChanges
-	appName := appCur.ObjectMeta.Name
+	appName := appCur.Name
 	curSources := appCur.Spec.GetSources()
 	newSources := appNew.Spec.GetSources()
 	if len(curSources) != len(newSources) {
@@ -292,9 +292,9 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	log.Debug().Msgf("Matching apps: %s", func() (s string) {
 		for _, app := range apps {
 			if s != "" {
-				s += ", " + app.ObjectMeta.Name
+				s += ", " + app.Name
 			} else {
-				s += app.ObjectMeta.Name
+				s += app.Name
 			}
 		}
 		return
@@ -354,17 +354,17 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	log.Debug().Msgf("Matching multi-source apps: %s", func() (s string) {
 		for _, app := range apps {
 			if s != "" {
-				s += ", " + app.ObjectMeta.Name
+				s += ", " + app.Name
 			} else {
-				s += app.ObjectMeta.Name
+				s += app.Name
 			}
 		}
 		return
 	}())
 	var wave3Apps []Application
 	for _, app := range apps {
-		if slices.Contains(multiSrcAppNamesDiffed, app.ObjectMeta.Name) {
-			log.Debug().Msgf("Skipping multi-source %s, we already diff'ed it", app.ObjectMeta.Name)
+		if slices.Contains(multiSrcAppNamesDiffed, app.Name) {
+			log.Debug().Msgf("Skipping multi-source %s, we already diff'ed it", app.Name)
 			continue
 		}
 		wave3Apps = append(wave3Apps, app)
@@ -406,7 +406,7 @@ func filterApplications(a []Application, eventInfo webhook.EventInfo, multiSourc
 			sources = []ApplicationSource{singleSrc}
 		}
 		for _, appSpecSource := range sources {
-			if checkSource(appSpecSource, app.ObjectMeta.Name, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
+			if checkSource(appSpecSource, app.Name, eventInfo, app.Spec.SyncPolicy != nil && app.Spec.SyncPolicy.Automated != nil) {
 				// Stop at the first matching source: an app is only diffed once, no
 				// matter how many of its sources point at the changed repo. A
 				// multi-source app in a monorepo commonly matches twice (eg: a chart
@@ -593,7 +593,7 @@ func argoAppsWithChanges(ctx context.Context, appName string, appResources []App
 		if err != nil {
 			log.Error().Err(err).Msg("Detected an argo application, but Unable to convert")
 		} else {
-			name := app.ObjectMeta.Name
+			name := app.Name
 			numSrcs := len(app.Spec.GetSources())
 			log.Trace().Msgf("argoAppsWithChanges(%s): argoApp %s w/ %d sources", appName, name, numSrcs)
 			if slices.Contains(argoAppNamesFound, name) && numSrcs > 0 {

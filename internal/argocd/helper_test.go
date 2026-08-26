@@ -734,15 +734,16 @@ func TestManifestIsArgoApplication(t *testing.T) {
 	}
 	for i, manifest := range manifests {
 		isArgoApp := manifestIsArgoApplication(manifest)
-		if i == 0 || i == 1 {
+		switch i {
+		case 0, 1:
 			if isArgoApp {
 				t.Errorf("Manifest index %d in %s marked as Argo Application, but isn't", i, filepath)
 			}
-		} else if i == 2 || i == 3 {
+		case 2, 3:
 			if !isArgoApp {
 				t.Errorf("Manifest index %d in %s not marked as Argo Application, but is", i, filepath)
 			}
-		} else {
+		default:
 			t.Errorf("Expected 4 manifests in %s", filepath)
 		}
 	}
