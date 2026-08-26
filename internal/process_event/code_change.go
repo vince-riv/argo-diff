@@ -165,7 +165,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	firstError := ""  // string of the first error we receive - used in commit status message
 	cMarkdown := github.CommentMarkdown{}
 	for _, a := range appResList {
-		appName := a.ArgoApp.ObjectMeta.Name
+		appName := a.ArgoApp.Name
 		appSyncStatus := a.ArgoApp.Status.Sync.Status
 		appHealthStatus := a.ArgoApp.Status.Health.Status
 		appHealthMsg := a.ArgoApp.Status.Health.Message

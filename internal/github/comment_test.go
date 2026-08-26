@@ -93,7 +93,7 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 						t.Errorf("readFileToByteArray() failed: %s", err)
 						return
 					}
-					payload = bytes.Replace(payload, []byte("%%_COMMENT_ID_%%"), []byte(urlPathParts[6]), -1)
+					payload = bytes.ReplaceAll(payload, []byte("%%_COMMENT_ID_%%"), []byte(urlPathParts[6]))
 					payload, err = jsonFieldExtract("body", reqBody, "body", payload)
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
@@ -118,7 +118,7 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 						t.Errorf("readFileToByteArray() failed: %s", err)
 						return
 					}
-					payload = bytes.Replace(payload, []byte("%%_PR_NUM_%%"), []byte(urlPathParts[5]), -1)
+					payload = bytes.ReplaceAll(payload, []byte("%%_PR_NUM_%%"), []byte(urlPathParts[5]))
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
 						t.Errorf("jsonFieldExtract() failed: %s", err)
@@ -134,23 +134,25 @@ func newHttpTestServer(t *testing.T) *httptest.Server {
 				statusCode = http.StatusOK
 				payload, filePath, err = readFileToByteArray(payloadUser)
 			case "/repos/vince-riv/argo-diff/issues/1/comments":
-				if r.Method == "GET" {
+				switch r.Method {
+				case "GET":
 					statusCode = http.StatusOK
 					payload, filePath, err = readFileToByteArray(payloadPr1Comments)
-				} else if r.Method == "POST" {
+				case "POST":
 					statusCode = http.StatusCreated
 					payload, filePath, err = readFileToByteArray(payloadPr1CreateComment)
-				} else {
+				default:
 					statusCode = http.StatusMethodNotAllowed
 				}
 			case "/repos/vince-riv/argo-diff/issues/2/comments":
-				if r.Method == "GET" {
+				switch r.Method {
+				case "GET":
 					statusCode = http.StatusOK
 					payload, filePath, err = readFileToByteArray(payloadPr2Comments)
-				} else if r.Method == "POST" {
+				case "POST":
 					statusCode = http.StatusCreated
 					payload, filePath, err = readFileToByteArray(payloadPr2CreateComment)
-				} else {
+				default:
 					statusCode = http.StatusMethodNotAllowed
 				}
 			case "/repos/vince-riv/argo-diff/issues/3/comments":
