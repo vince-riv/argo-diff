@@ -10,9 +10,21 @@ Two Helm charts with very different purposes:
 ## charts/argo-diff
 
 Templates render a Deployment (with `/healthz` liveness, readiness, and startup probes), Service,
-optional Ingress, ServiceAccount, and — when enabled — the ConfigMap and Secret holding argo-diff's
-environment variables. The Deployment consumes both via `envFrom` and annotates the pod with
+optional Ingress, ServiceAccount, and — when enabled — the ConfigMap, Secret, and PodDisruptionBudget.
+The Deployment consumes the ConfigMap/Secret via `envFrom` and annotates the pod with
 `checksum/config` / `checksum/secret` so a config change triggers a rollout.
+
+`deployment.strategy` overrides the Deployment's rollout strategy; left empty (the default), the
+Deployment omits the field and Kubernetes applies its own default (RollingUpdate, 25%/25%).
+
+`templates/pdb.yaml` (`podDisruptionBudget.enabled`) hard-fails the template render — via Helm's
+`fail`, not a Kubernetes-side error — in two cases: `minAvailable`/`maxUnavailable` both set
+(Kubernetes itself rejects a PDB spec with both fields populated), and at
+`deployment.replicas == 1` only when the given `minAvailable`/`maxUnavailable` would actually
+deadlock a node drain (`minAvailable >= 1`, or `maxUnavailable: 0`) — the harmless default
+(`maxUnavailable: 1`) still renders. Compare `minAvailable`/`maxUnavailable` as strings, not as
+Helm truthiness — Go templates treat `0` as falsy, so a bare truthiness check silently drops
+`maxUnavailable: 0` / `minAvailable: 0`.
 
 Configuration split:
 

@@ -1,7 +1,12 @@
 {{- if .Values.podDisruptionBudget.enabled -}}
+{{- $min := toString .Values.podDisruptionBudget.minAvailable }}
+{{- $max := toString .Values.podDisruptionBudget.maxUnavailable }}
 {{- if eq (int .Values.deployment.replicas) 1 }}
-{{/* allow scaling down to replicas=0 without erroring */}}
-{{- fail "podDisruptionBudget.enabled requires deployment.replicas > 1" }}
+{{/* allow scaling down to replicas=0 without erroring; only block a config that would
+   actually deadlock node drains at replicas=1 (minAvailable>=1, or maxUnavailable=0) */}}
+{{- if or (and (ne $min "") (ne $min "0")) (eq $max "0") }}
+{{- fail "podDisruptionBudget at deployment.replicas=1 with this minAvailable/maxUnavailable blocks node drains forever" }}
+{{- end }}
 {{- end }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -15,13 +20,13 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- if and .Values.podDisruptionBudget.minAvailable .Values.podDisruptionBudget.maxUnavailable }}
+  {{- if and (ne $min "") (ne $max "") }}
   {{- fail "podDisruptionBudget.minAvailable and podDisruptionBudget.maxUnavailable are mutually exclusive; set only one" }}
   {{- end }}
-  {{- if .Values.podDisruptionBudget.minAvailable }}
-  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- if ne $min "" }}
+  minAvailable: {{ $min }}
   {{- else }}
-  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable | default 1 }}
+  maxUnavailable: {{ $max | default "1" }}
   {{- end }}
   {{- with .Values.podDisruptionBudget.unhealthyPodEvictionPolicy }}
   unhealthyPodEvictionPolicy: {{ . }}

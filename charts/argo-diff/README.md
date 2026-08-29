@@ -58,6 +58,7 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | deployment.revisionHistoryLimit | int | `5` |  |
 | deployment.securityContext | object | `{}` |  |
 | deployment.startupProbe | object | `{"failureThreshold":10,"httpGet":{"path":"/healthz","port":"http"},"periodSeconds":2}` | Configuration for startup check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
+| deployment.strategy | object | `{}` | Rollout strategy for the Deployment (See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy). Defaults to Kubernetes' own default (RollingUpdate, 25% maxSurge/maxUnavailable) when left empty |
 | deployment.tolerations | list | `[]` |  |
 | deployment.volumeMounts | list | `[]` | Additional volumeMounts on the output Deployment definition. |
 | deployment.volumes | list | `[]` | Additional volumes on the output Deployment definition. |
@@ -77,6 +78,11 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | logLevel | string | `"info"` |  |
 | nameOverride | string | `""` |  |
 | namespaceOverride | string | `""` |  |
+| podDisruptionBudget.annotations | object | `{}` | Annotations to add to the PodDisruptionBudget |
+| podDisruptionBudget.enabled | bool | `false` | Create a PodDisruptionBudget |
+| podDisruptionBudget.maxUnavailable | string | `""` | Maximum number/percentage of pods that can be unavailable. Mutually exclusive with minAvailable |
+| podDisruptionBudget.minAvailable | string | `""` | Minimum number/percentage of pods that must remain available. Mutually exclusive with maxUnavailable |
+| podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` | Eviction policy for unhealthy pods (IfHealthyBudget or AlwaysAllow). Requires Kubernetes 1.27+ |
 | secret.annotations | object | `{}` |  |
 | secret.create | bool | `true` | Have Helm create Secret from values. If disabled, you need to manage sensitive environment variables |
 | secret.name | string | `""` | Override the name of the secret passed to deployment's envFrom. Defaults to release name. Should contain the following keys ARGOCD_AUTH_TOKEN, GITHUB_WEBHOOK_SECRET, and GITHUB_PERSONAL_ACCESS_TOKEN/GITHUB_APP_PRIVATE_KEY |
