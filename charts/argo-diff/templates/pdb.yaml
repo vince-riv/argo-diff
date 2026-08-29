@@ -1,0 +1,32 @@
+{{- if .Values.podDisruptionBudget.enabled -}}
+{{- if eq (int .Values.deployment.replicas) 1 }}
+{{/* allow scaling down to replicas=0 without erroring */}}
+{{- fail "podDisruptionBudget.enabled requires deployment.replicas > 1" }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "argo-diff.fullname" . }}
+  namespace: {{ include "argo-diff.namespace" . }}
+  labels:
+    {{- include "argo-diff.labels" . | nindent 4 }}
+  {{- with .Values.podDisruptionBudget.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if and .Values.podDisruptionBudget.minAvailable .Values.podDisruptionBudget.maxUnavailable }}
+  {{- fail "podDisruptionBudget.minAvailable and podDisruptionBudget.maxUnavailable are mutually exclusive; set only one" }}
+  {{- end }}
+  {{- if .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable | default 1 }}
+  {{- end }}
+  {{- with .Values.podDisruptionBudget.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "argo-diff.selectorLabels" . | nindent 6 }}
+{{- end }}

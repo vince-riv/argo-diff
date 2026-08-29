@@ -1,0 +1,54 @@
+---
+suite: pdb tests
+templates:
+  - pdb.yaml
+tests:
+  - it: is enabled
+    set:
+      podDisruptionBudget.enabled: true
+      deployment.replicas: 2
+    template: pdb.yaml
+    asserts:
+      - containsDocument:
+          apiVersion: policy/v1
+          kind: PodDisruptionBudget
+          name: RELEASE-NAME-argo-diff
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - notExists:
+          path: spec.minAvailable
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: argo-diff
+            app.kubernetes.io/instance: RELEASE-NAME
+  - it: minAvailable only
+    set:
+      podDisruptionBudget.enabled: true
+      deployment.replicas: 2
+      podDisruptionBudget.minAvailable: 2
+    template: pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+      - notExists:
+          path: spec.maxUnavailable
+  - it: fails when both minAvailable and maxUnavailable are set
+    set:
+      podDisruptionBudget.enabled: true
+      deployment.replicas: 2
+      podDisruptionBudget.minAvailable: 2
+      podDisruptionBudget.maxUnavailable: 1
+    template: pdb.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "podDisruptionBudget.minAvailable and podDisruptionBudget.maxUnavailable are mutually exclusive; set only one"
+  - it: fails when replicas==1 (default)
+    set:
+      podDisruptionBudget.enabled: true
+    template: pdb.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "podDisruptionBudget.enabled requires deployment.replicas > 1"
