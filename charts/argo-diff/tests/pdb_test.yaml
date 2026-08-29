@@ -3,6 +3,11 @@ suite: pdb tests
 templates:
   - pdb.yaml
 tests:
+  - it: is disabled by default
+    template: pdb.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
   - it: is enabled
     set:
       podDisruptionBudget.enabled: true
@@ -45,10 +50,78 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "podDisruptionBudget.minAvailable and podDisruptionBudget.maxUnavailable are mutually exclusive; set only one"
-  - it: fails when replicas==1 (default)
+  - it: renders at replicas==1 with default maxUnavailable
     set:
       podDisruptionBudget.enabled: true
     template: pdb.yaml
     asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+  - it: fails when replicas==1 and maxUnavailable is zero
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.maxUnavailable: 0
+    template: pdb.yaml
+    asserts:
       - failedTemplate:
-          errorMessage: "podDisruptionBudget.enabled requires deployment.replicas > 1"
+          errorMessage: "podDisruptionBudget at deployment.replicas=1 with this minAvailable/maxUnavailable blocks node drains forever"
+  - it: fails when replicas==1 and minAvailable is set
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: 1
+    template: pdb.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "podDisruptionBudget at deployment.replicas=1 with this minAvailable/maxUnavailable blocks node drains forever"
+  - it: maxUnavailable zero is preserved
+    set:
+      podDisruptionBudget.enabled: true
+      deployment.replicas: 3
+      podDisruptionBudget.maxUnavailable: 0
+    template: pdb.yaml
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 0
+  - it: minAvailable zero is preserved
+    set:
+      podDisruptionBudget.enabled: true
+      deployment.replicas: 3
+      podDisruptionBudget.minAvailable: 0
+    template: pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 0
+      - notExists:
+          path: spec.maxUnavailable
+  - it: fails when minAvailable set with maxUnavailable zero
+    set:
+      podDisruptionBudget.enabled: true
+      deployment.replicas: 3
+      podDisruptionBudget.minAvailable: 2
+      podDisruptionBudget.maxUnavailable: 0
+    template: pdb.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "podDisruptionBudget.minAvailable and podDisruptionBudget.maxUnavailable are mutually exclusive; set only one"
+  - it: renders at replicas==0 (scale-to-zero)
+    set:
+      podDisruptionBudget.enabled: true
+      deployment.replicas: 0
+    template: pdb.yaml
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+  - it: unhealthyPodEvictionPolicy is set
+    set:
+      podDisruptionBudget.enabled: true
+      deployment.replicas: 2
+      podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
+    template: pdb.yaml
+    asserts:
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: AlwaysAllow
