@@ -26,6 +26,12 @@ deadlock a node drain (`minAvailable >= 1`, or `maxUnavailable: 0`) — the harm
 Helm truthiness — Go templates treat `0` as falsy, so a bare truthiness check silently drops
 `maxUnavailable: 0` / `minAvailable: 0`.
 
+The `replicas == 1` guard also has to handle percentages. Kubernetes scales a percentage against
+the replica count and rounds *up*, so at one replica every non-zero percentage collapses to `1` and
+behaves like the integer — `minAvailable: 50%` deadlocks, `maxUnavailable: 50%` does not. Only an
+explicit zero differs, so the guard strips a trailing `%` and treats `"0"` and `"0%"` alike. Above
+one replica percentages are left to Kubernetes; the guard does not run.
+
 Configuration split:
 
 - **ConfigMap** (`config.configMapCreate`): non-sensitive vars — `ARGOCD_SERVER_ADDR`,
