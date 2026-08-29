@@ -1,10 +1,15 @@
 {{- if .Values.podDisruptionBudget.enabled -}}
 {{- $min := toString .Values.podDisruptionBudget.minAvailable }}
 {{- $max := toString .Values.podDisruptionBudget.maxUnavailable }}
+{{/* Kubernetes scales a percentage against the replica count and rounds up, so at one replica
+   every non-zero percentage behaves like its integer equivalent. Only an explicit zero differs,
+   so strip the '%' before testing for it and treat "0" and "0%" alike. */}}
+{{- $minIsZero := eq (trimSuffix "%" $min) "0" }}
+{{- $maxIsZero := eq (trimSuffix "%" $max) "0" }}
 {{- if eq (int .Values.deployment.replicas) 1 }}
 {{/* allow scaling down to replicas=0 without erroring; only block a config that would
    actually deadlock node drains at replicas=1 (minAvailable>=1, or maxUnavailable=0) */}}
-{{- if or (and (ne $min "") (ne $min "0")) (eq $max "0") }}
+{{- if or (and (ne $min "") (not $minIsZero)) $maxIsZero }}
 {{- fail "podDisruptionBudget at deployment.replicas=1 with this minAvailable/maxUnavailable blocks node drains forever" }}
 {{- end }}
 {{- end }}

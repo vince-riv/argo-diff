@@ -74,6 +74,44 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "podDisruptionBudget at deployment.replicas=1 with this minAvailable/maxUnavailable blocks node drains forever"
+  - it: fails when replicas==1 and maxUnavailable is zero percent
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.maxUnavailable: "0%"
+    template: pdb.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "podDisruptionBudget at deployment.replicas=1 with this minAvailable/maxUnavailable blocks node drains forever"
+  - it: fails when replicas==1 and minAvailable is a non-zero percentage
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: "50%"
+    template: pdb.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "podDisruptionBudget at deployment.replicas=1 with this minAvailable/maxUnavailable blocks node drains forever"
+  - it: renders at replicas==1 with minAvailable zero percent
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: "0%"
+    template: pdb.yaml
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: "0%"
+      - notExists:
+          path: spec.maxUnavailable
+  - it: renders at replicas==1 with a non-zero maxUnavailable percentage
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.maxUnavailable: "50%"
+    template: pdb.yaml
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: "50%"
+      - notExists:
+          path: spec.minAvailable
   - it: maxUnavailable zero is preserved
     set:
       podDisruptionBudget.enabled: true
