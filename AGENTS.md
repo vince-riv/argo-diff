@@ -127,6 +127,8 @@ fails if `action.yml` is not pinned to the tagged version.
   ```
 
 - Coding agents **must** add the aforementioned `Assisted-by:` trailer to Pull Requests summaries.
+- Do **not** hard-wrap paragraphs in the raw markdown of Pull Request summaries — let each
+  paragraph be one long line and rely on soft wrapping.
 - **Never add a `Signed-off-by:` trailer** to commits or pull requests in this repository.
 
 ### Deployment surfaces
