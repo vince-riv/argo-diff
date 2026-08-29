@@ -120,6 +120,14 @@ deployment:
   replicas: 1
   revisionHistoryLimit: 5
 
+  # deployment.strategy -- Rollout strategy for the Deployment (See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy).
+  # Defaults to Kubernetes' own default (RollingUpdate, 25% maxSurge/maxUnavailable) when left empty
+  strategy: {}
+  # type: RollingUpdate
+  # rollingUpdate:
+  #   maxSurge: 1
+  #   maxUnavailable: 0
+
   # deployment.livenessProbe -- Configuration for liveness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
   livenessProbe:
     httpGet:
@@ -202,3 +210,18 @@ service:
   annotations: {}
   type: ClusterIP
   port: 8080
+
+podDisruptionBudget:
+  # podDisruptionBudget.enabled -- Create a PodDisruptionBudget
+  enabled: false
+  # podDisruptionBudget.annotations -- Annotations to add to the PodDisruptionBudget
+  annotations: {}
+  # podDisruptionBudget.minAvailable -- Minimum number/percentage of pods that must remain available.
+  # Mutually exclusive with maxUnavailable
+  minAvailable: ""
+  # podDisruptionBudget.maxUnavailable -- Maximum number/percentage of pods that can be unavailable.
+  # Mutually exclusive with minAvailable
+  maxUnavailable: ""
+  # podDisruptionBudget.unhealthyPodEvictionPolicy -- Eviction policy for unhealthy pods
+  # (IfHealthyBudget or AlwaysAllow). Requires Kubernetes 1.27+
+  unhealthyPodEvictionPolicy: ""
