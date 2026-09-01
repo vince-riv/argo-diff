@@ -13,6 +13,8 @@ const testDataDir = "webhook_testdata"
 const payloadPrClose = "payload-pr-close.json"
 const payloadPrOpen = "payload-pr-open.json"
 const payloadPrSync = "payload-pr-sync.json"
+const payloadPrEditedBase = "payload-pr-edited-base.json"
+const payloadPrEditedTitle = "payload-pr-edited-title.json"
 const payloadCommentCreated = "payload-comment-created.json"
 const payloadCommentCreatedArgoDiff = "payload-comment-argodiff-created.json"
 
@@ -34,7 +36,7 @@ func readFileToByteArray(fileName string) ([]byte, string, error) {
 
 func TestLoadPullRequestEvents(t *testing.T) {
 	var result EventInfo
-	payloadFiles := []string{payloadPrClose, payloadPrOpen, payloadPrSync}
+	payloadFiles := []string{payloadPrClose, payloadPrOpen, payloadPrSync, payloadPrEditedBase, payloadPrEditedTitle}
 	for _, payloadFile := range payloadFiles {
 		payload, filePath, err := readFileToByteArray(payloadFile)
 		if err != nil {
@@ -44,7 +46,7 @@ func TestLoadPullRequestEvents(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to load payload from %s: %v", filePath, err)
 		}
-		if payloadFile == payloadPrClose {
+		if payloadFile == payloadPrClose || payloadFile == payloadPrEditedTitle {
 			if !result.Ignore {
 				t.Errorf("ProcessPullRequest() Expected to ignore this event. Payload %s", filePath)
 			}
@@ -62,6 +64,25 @@ func TestLoadPullRequestEvents(t *testing.T) {
 				t.Errorf("ProcessPullRequest() Expected to NOT set refresh flag. Payload %s", filePath)
 			}
 		}
+	}
+}
+
+// TestPullRequestBaseRetarget covers the case where GitHub retargets a stacked PR onto a new
+// base branch (an "edited" action with changes.base.ref.from set) after the PR's original base
+// branch merges. TestLoadPullRequestEvents already checks Ignore/Refresh/non-empty fields for
+// this fixture; this test adds the one assertion that is specific to a retarget: BaseRef must
+// reflect the new base, not just be non-empty or merely different from the old one.
+func TestPullRequestBaseRetarget(t *testing.T) {
+	payload, filePath, err := readFileToByteArray(payloadPrEditedBase)
+	if err != nil {
+		t.Fatalf("Failed to read %s: %v", payloadPrEditedBase, err)
+	}
+	result, err := ProcessPullRequest(payload)
+	if err != nil {
+		t.Fatalf("Failed to load payload from %s: %v", filePath, err)
+	}
+	if result.BaseRef != "main" {
+		t.Errorf("ProcessPullRequest() Expected BaseRef to be the new base 'main', got %q. Payload %s", result.BaseRef, filePath)
 	}
 }
 
