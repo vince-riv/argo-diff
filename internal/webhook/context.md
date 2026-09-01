@@ -32,8 +32,8 @@ when `Refresh` is false, since a refresh re-reads them from the API.
 - `ProcessPullRequest()` acts on the `opened` and `synchronize` actions, and on `edited` only when
   `changes.base.ref.from` is set — that is how GitHub reports a base-branch retarget (eg: when a
   stacked PR's parent branch merges and GitHub repoints it at `main`), as opposed to an ordinary
-  title/body edit, which also sends `edited` but leaves `changes.base` empty. `baseRefChanged()`
-  reads that field through nil-safe generated getters, so it needs no extra nil checks. Every other
+  title/body edit, which also sends `edited` but leaves `changes.base` empty. That check reads the
+  field through nil-safe generated getters inline, so it needs no extra nil checks. Every other
   field is read through raw pointer dereferences — a malformed payload panics rather than erroring.
 - `ProcessComment()` handles `issue_comment`: action must be `created`, the issue must be a PR
   (`PullRequestLinks != nil`), and the body must satisfy `github.IsRefreshComment()` (`argo diff` /
@@ -50,9 +50,10 @@ compares with `hmac.Equal`. It is skipped entirely in dev mode by the server.
 `webhook_testdata/` holds real captured payloads: `payload-pr-open.json`, `payload-pr-sync.json`,
 `payload-pr-close.json`, `payload-comment-created.json`, `payload-comment-argodiff-created.json`.
 `payload-pr-edited-base.json` and `payload-pr-edited-title.json` are **derived**, not captured —
-copies of `payload-pr-sync.json` with `action` changed to `edited` and a `changes` block added (base
-retarget vs. title-only) to exercise `baseRefChanged()`. `process_test.go` asserts which of them are
-ignored vs. actionable; `signature_test.go` covers the bad-length, bad-prefix, and valid cases.
+copies of `payload-pr-sync.json` with `action` changed to `edited`, the sync-only `before`/`after`
+keys removed, and a `changes` block added (base retarget vs. title-only) to exercise the base-retarget
+check. `process_test.go` asserts which of them are ignored vs. actionable; `signature_test.go` covers
+the bad-length, bad-prefix, and valid cases.
 
 The `github.com/google/go-github/v90` types are used to unmarshal payloads — a major-version bump of
 that dependency changes this import path.
