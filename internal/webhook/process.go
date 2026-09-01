@@ -58,6 +58,15 @@ func validateEventInfo(e EventInfo) error {
 	return nil
 }
 
+// baseRefChanged reports whether an "edited" pull_request event moved the PR's base branch.
+// GitHub sends the "edited" action for title and body edits too, but it only fills in
+// changes.base.ref.from when the base itself changed — which is what happens when GitHub
+// retargets a stacked PR onto main after its parent branch merges. All the accessors used
+// here are nil-safe, so a payload with no base change simply yields "".
+func baseRefChanged(prEvent *github.PullRequestEvent) bool {
+	return prEvent.GetChanges().GetBase().GetRef().GetFrom() != ""
+}
+
 // Processes a pull_request event received from github
 func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	prInfo := NewEventInfo()
@@ -74,14 +83,20 @@ func ProcessPullRequest(payload []byte) (EventInfo, error) {
 	prInfo.RepoOwner = *prEvent.Repo.Owner.Login
 	prInfo.RepoName = *prEvent.Repo.Name
 	prInfo.PrNum = *prEvent.Number
-	if *prEvent.Action != "opened" && *prEvent.Action != "synchronize" {
-		log.Info().Msg(fmt.Sprintf("Ignoring %s action for PR %s#%d", *prEvent.Action, *prEvent.Repo, *prEvent.Number))
+	action := *prEvent.Action
+	isBaseRetarget := action == "edited" && baseRefChanged(&prEvent)
+	if action != "opened" && action != "synchronize" && !isBaseRetarget {
+		log.Info().Msg(fmt.Sprintf("Ignoring %s action for PR %s#%d", action, prEvent.Repo.GetFullName(), *prEvent.Number))
 		return prInfo, nil
+	}
+	if isBaseRetarget {
+		log.Info().Msgf("PR %s#%d retargeted from %s to %s; treating as actionable",
+			prEvent.Repo.GetFullName(), *prEvent.Number, prEvent.GetChanges().GetBase().GetRef().GetFrom(), *prEvent.PullRequest.Base.Ref)
 	}
 	prInfo.Ignore = false
 	prInfo.Sha = *prEvent.PullRequest.Head.SHA
 	prInfo.RepoDefaultRef = *prEvent.Repo.DefaultBranch
-	prInfo.BaseRef = *prEvent.PullRequest.Base.Ref // FUTURE USE
+	prInfo.BaseRef = *prEvent.PullRequest.Base.Ref
 	prInfo.ChangeRef = *prEvent.PullRequest.Head.Ref
 	log.Debug().Msgf("Returning EventInfo: %+v", prInfo)
 	return prInfo, validateEventInfo(prInfo)

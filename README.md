@@ -215,8 +215,12 @@ jobs:
 > and it reads the pull request's current head and base from the API on every run, so the run triggered
 > by the retarget diffs against the new base.
 
-> **Note:** the deployed webhook service acts on the `opened` and `synchronize` actions only, so it does
-> not pick up these retargets. Comment `argo diff` on a retargeted pull request to run it by hand.
+> **Note:** the deployed webhook service also handles this case. It acts on the `opened` and
+> `synchronize` actions, and on `edited` when the payload's `changes.base.ref.from` field is set —
+> the same signal used above — so a stacked pull request's retarget triggers a run there too, with no
+> extra webhook configuration needed. An ordinary title or body edit still sends `edited` but leaves
+> that field empty, so it is ignored as before. If a retarget is ever missed, comment `argo diff` on
+> the pull request to trigger a run by hand.
 
 > **Note:** Releases were previously published under an `actions-vX.Y.Z` tag prefix (with a floating
 > `actions-vX` major tag). Those tags are still maintained alongside the plain `vX`/`X.Y.Z` tags shown
