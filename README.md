@@ -177,6 +177,8 @@ added to the repository's secrets:
 on:
   pull_request:
     branches: [main]
+    # `edited` covers stacked PRs: GitHub retargets them when their parent merges (see note below)
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   pull-requests: write
@@ -185,6 +187,8 @@ jobs:
   argo-diff:
     runs-on: [self-hosted]  # remove when running on GitHub's public runners and ArgoCD is publicly available
     name: Argo Diff
+    # run on every edit that changed the base branch, and skip title/body edits
+    if: github.event.action != 'edited' || github.event.changes.base.ref.from != ''
     steps:
       - name: ArgoCD Diff
         id: argo-diff
@@ -200,6 +204,19 @@ jobs:
           log_level: trace
           repo_default_ref: main
 ```
+
+> **Stacked pull requests:** when a pull request's base branch merges, GitHub retargets the pull
+> requests stacked on top of it. That retarget arrives as a `pull_request` event with the `edited`
+> action, not `synchronize`, so a workflow on the default activity types never runs on a stacked pull
+> request — its earlier events were filtered out by `branches: [main]` while the base was still a
+> feature branch. Listening to `edited` closes that gap. Keep the `if` condition alongside it: GitHub
+> also sends `edited` for title and body edits, and it populates `changes.base.ref.from` only when the
+> base branch itself changed. argo-diff itself does not filter on the action type under GitHub Actions,
+> and it reads the pull request's current head and base from the API on every run, so the run triggered
+> by the retarget diffs against the new base.
+
+> **Note:** the deployed webhook service acts on the `opened` and `synchronize` actions only, so it does
+> not pick up these retargets. Comment `argo diff` on a retargeted pull request to run it by hand.
 
 > **Note:** Releases were previously published under an `actions-vX.Y.Z` tag prefix (with a floating
 > `actions-vX` major tag). Those tags are still maintained alongside the plain `vX`/`X.Y.Z` tags shown
