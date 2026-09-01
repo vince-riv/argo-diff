@@ -69,7 +69,9 @@ func TestLoadPullRequestEvents(t *testing.T) {
 
 // TestPullRequestBaseRetarget covers the case where GitHub retargets a stacked PR onto a new
 // base branch (an "edited" action with changes.base.ref.from set) after the PR's original base
-// branch merges. This must be treated as actionable, distinct from ordinary title/body edits.
+// branch merges. TestLoadPullRequestEvents already checks Ignore/Refresh/non-empty fields for
+// this fixture; this test adds the one assertion that is specific to a retarget: BaseRef must
+// reflect the new base, not just be non-empty or merely different from the old one.
 func TestPullRequestBaseRetarget(t *testing.T) {
 	payload, filePath, err := readFileToByteArray(payloadPrEditedBase)
 	if err != nil {
@@ -79,17 +81,8 @@ func TestPullRequestBaseRetarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load payload from %s: %v", filePath, err)
 	}
-	if result.Ignore {
-		t.Errorf("ProcessPullRequest() Expected to NOT ignore a base-retarget edited event. Payload %s", filePath)
-	}
-	if result.BaseRef == "" {
-		t.Errorf("ProcessPullRequest() Expected BaseRef to be set for a base-retarget event. Payload %s", filePath)
-	}
-	if result.BaseRef == "feature/parent-branch" {
-		t.Errorf("ProcessPullRequest() Expected BaseRef to reflect the new base, not the old one. Payload %s", filePath)
-	}
-	if result.Refresh {
-		t.Errorf("ProcessPullRequest() Expected to NOT set refresh flag for a base-retarget event. Payload %s", filePath)
+	if result.BaseRef != "main" {
+		t.Errorf("ProcessPullRequest() Expected BaseRef to be the new base 'main', got %q. Payload %s", result.BaseRef, filePath)
 	}
 }
 
