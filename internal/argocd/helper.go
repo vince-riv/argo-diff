@@ -72,12 +72,12 @@ func getApplicationChanges(ctx context.Context, app *Application, revision strin
 	var err error
 	appResChanges.ArgoApp = app
 	if revision != "" {
-		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, revision, nil, nil)
+		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, app.Namespace, revision, nil, nil)
 	} else {
 		if len(revs) < 1 || len(revs) != len(pos) {
 			return appResChanges, fmt.Errorf("getApplicationChanges() called as multi-src with bad revs/pos count [%d/%d]", len(revs), len(pos))
 		}
-		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, "", revs, pos)
+		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, app.Namespace, "", revs, pos)
 	}
 	return appResChanges, err
 }
@@ -165,7 +165,7 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 		return res
 	}
 	res.diffResult = &appResChanges
-	appsWithChanges, err := argoAppsWithChanges(ctx, app.Name, appResChanges.ChangedResources, eventInfo.Sha)
+	appsWithChanges, err := argoAppsWithChanges(ctx, app.Name, app.Namespace, appResChanges.ChangedResources, eventInfo.Sha)
 	if err != nil {
 		if ctx.Err() != nil {
 			// This app's diff turned up nested Applications but we ran out of
@@ -558,7 +558,7 @@ func genericManifestToArgoApplication(manifest K8sManifest) (Application, error)
 	return app, nil
 }
 
-func argoAppsWithChanges(ctx context.Context, appName string, appResources []AppResource, revision string) ([]Application, error) {
+func argoAppsWithChanges(ctx context.Context, appName string, appNamespace string, appResources []AppResource, revision string) ([]Application, error) {
 	log.Trace().Msgf("argoAppsWithChanges() scanning %s at %s for argo apps", appName, revision)
 	argoAppNamesFound := []string{}
 	argoApps := []Application{}
@@ -577,7 +577,7 @@ func argoAppsWithChanges(ctx context.Context, appName string, appResources []App
 	}
 	// generate full manifests for our application at the specified revision
 	log.Debug().Msgf("argoAppsWithChanges(%s) - getting manifests at revision %s", appName, revision)
-	manifests, err := getApplicationManifests(ctx, appName, revision)
+	manifests, err := getApplicationManifests(ctx, appName, appNamespace, revision)
 	if err != nil {
 		log.Debug().Err(err).Msgf("argoAppsWithChanges() - getApplicationManifests(%s, %s) failed", appName, revision)
 		return argoApps, err
