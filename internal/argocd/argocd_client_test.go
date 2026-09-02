@@ -188,7 +188,7 @@ func TestDiffApplicationExitCodeHandling(t *testing.T) {
 		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 			return diffOutput, makeExitError(t, nil)
 		}
-		appResList, err := diffApplication(context.Background(), "argo-diff", "HEAD", nil, nil)
+		appResList, err := diffApplication(context.Background(), "argo-diff", "argocd", "HEAD", nil, nil)
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -204,7 +204,7 @@ func TestDiffApplicationExitCodeHandling(t *testing.T) {
 		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 			return nil, makeExitError(t, []byte("FATA[0000] failed to generate manifest"))
 		}
-		appResList, err := diffApplication(context.Background(), "argo-diff", "HEAD", nil, nil)
+		appResList, err := diffApplication(context.Background(), "argo-diff", "argocd", "HEAD", nil, nil)
 		if err == nil {
 			t.Fatal("expected an error for exit 1 with empty stdout, got nil")
 		}
@@ -273,6 +273,100 @@ func writeArgvEchoScript(t *testing.T) string {
 		t.Fatalf("failed to write fake argocd script: %v", err)
 	}
 	return path
+}
+
+func TestDiffApplicationAppNamespaceArg(t *testing.T) {
+	t.Run("--app-namespace passed for default argocd namespace", func(t *testing.T) {
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			captured = args
+			return nil, nil
+		}
+		_, _ = diffApplication(context.Background(), "my-app", "argocd", "abc123", nil, nil)
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in args %v", captured)
+		}
+		if captured[nsIdx+1] != "argocd" {
+			t.Errorf("expected --app-namespace value 'argocd', got %q", captured[nsIdx+1])
+		}
+	})
+
+	t.Run("--app-namespace passed for non-default namespace", func(t *testing.T) {
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			captured = args
+			return nil, nil
+		}
+		_, _ = diffApplication(context.Background(), "my-app", "non-default-namespace", "abc123", nil, nil)
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in args %v", captured)
+		}
+		if captured[nsIdx+1] != "non-default-namespace" {
+			t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
+		}
+	})
+
+	t.Run("--app-namespace passed in multi-source path", func(t *testing.T) {
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			captured = args
+			return nil, nil
+		}
+		_, _ = diffApplication(context.Background(), "my-app", "non-default-namespace", "", []string{"abc123"}, []int{1})
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in multi-source args %v", captured)
+		}
+		if captured[nsIdx+1] != "non-default-namespace" {
+			t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
+		}
+	})
+}
+
+func TestGetApplicationManifestsAppNamespaceArg(t *testing.T) {
+	t.Run("--app-namespace passed for default argocd namespace", func(t *testing.T) {
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			captured = args
+			return []byte(""), nil
+		}
+		_, _ = getApplicationManifests(context.Background(), "my-app", "argocd", "abc123")
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in args %v", captured)
+		}
+		if captured[nsIdx+1] != "argocd" {
+			t.Errorf("expected --app-namespace value 'argocd', got %q", captured[nsIdx+1])
+		}
+	})
+
+	t.Run("--app-namespace passed for non-default namespace", func(t *testing.T) {
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			captured = args
+			return []byte(""), nil
+		}
+		_, _ = getApplicationManifests(context.Background(), "my-app", "non-default-namespace", "abc123")
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in args %v", captured)
+		}
+		if captured[nsIdx+1] != "non-default-namespace" {
+			t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
+		}
+	})
 }
 
 func TestAppManifestHelper(t *testing.T) {

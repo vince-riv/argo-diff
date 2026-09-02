@@ -194,9 +194,9 @@ func appManifestHelper(input []byte) ([]K8sManifest, error) {
 	return manifests, nil
 }
 
-func getApplicationManifests(ctx context.Context, appName, revision string) ([]K8sManifest, error) {
+func getApplicationManifests(ctx context.Context, appName, appNamespace, revision string) ([]K8sManifest, error) {
 	// argocd app manifests argo-diff --revision HEAD
-	output, err := execArgoCdCli(ctx, []string{"app", "manifests", appName, "--revision", revision})
+	output, err := execArgoCdCli(ctx, []string{"app", "manifests", appName, "--app-namespace", appNamespace, "--revision", revision})
 	if err != nil {
 		log.Error().Err(err).Msgf("Get Argo application manifests for %s failed", appName)
 		return nil, err
@@ -209,14 +209,14 @@ func getApplicationManifests(ctx context.Context, appName, revision string) ([]K
 	return manifests, nil
 }
 
-func diffApplication(ctx context.Context, appName string, revision string, revisions []string, srcPos []int) ([]AppResource, error) {
+func diffApplication(ctx context.Context, appName string, appNamespace string, revision string, revisions []string, srcPos []int) ([]AppResource, error) {
 	var appResList []AppResource
 	log.Trace().Msg("diffApplication() called")
 	// argocd app diff argo-diff --revision XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX [--refresh]
 	// argocd app diff argo-diff --revisions XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX --source-positions 1 --revisions a.b.c --source-positions 2
-	args := []string{"app", "diff", appName, "--revision", revision}
+	args := []string{"app", "diff", appName, "--app-namespace", appNamespace, "--revision", revision}
 	if len(revisions) > 0 {
-		args = []string{"app", "diff", appName}
+		args = []string{"app", "diff", appName, "--app-namespace", appNamespace}
 		for _, rev := range revisions {
 			args = append(args, "--revisions")
 			args = append(args, rev)
