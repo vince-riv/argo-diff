@@ -714,12 +714,39 @@ func TestArgoAppsWithChanges(t *testing.T) {
 		AppResource{ApiVersion: "v1", Group: "apps", Kind: "Deployment", Namespace: "test", Name: "testdeploy"},
 		AppResource{ApiVersion: "v1", Group: "", Kind: "ConfigMap", Namespace: "test", Name: "testcm"},
 	}
-	result, err := argoAppsWithChanges(ctx, "testapp", appResources, "abcdef")
+	result, err := argoAppsWithChanges(ctx, "testapp", "argocd", appResources, "abcdef")
 	if err != nil {
 		t.Errorf("argoAppsWithChanges() erroed: %v", err)
 	}
 	if len(result) != 0 {
 		t.Errorf("Expected no results, got %d", len(result))
+	}
+}
+
+func TestArgoAppsWithChangesNamespacePropagation(t *testing.T) {
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+
+	// Include an argoproj.io/Application resource so argoAppsWithChanges proceeds
+	// past the early-exit and calls getApplicationManifests.
+	appResources := []AppResource{
+		{ApiVersion: "argoproj.io/v1alpha1", Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "argocd", Name: "child-app"},
+	}
+
+	var captured []string
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		captured = args
+		return []byte(""), nil // empty manifests — no nested apps discovered
+	}
+
+	_, _ = argoAppsWithChanges(context.Background(), "parent-app", "non-default-namespace", appResources, "abc123")
+
+	nsIdx := slices.Index(captured, "--app-namespace")
+	if nsIdx == -1 {
+		t.Fatalf("expected --app-namespace in getApplicationManifests args %v", captured)
+	}
+	if captured[nsIdx+1] != "non-default-namespace" {
+		t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
 	}
 }
 
