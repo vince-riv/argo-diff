@@ -129,6 +129,21 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		eventInfo.ChangedFiles = changedFiles
 	}
 
+	// ARGO_DIFF_SKIP_UNMATCHED_EVENTS: check for a matching ArgoCD application before posting commit status
+	if strings.ToLower(strings.TrimSpace(os.Getenv("ARGO_DIFF_SKIP_UNMATCHED_EVENTS"))) == "true" {
+		matched, err := argocd.HasMatchingApplications(ctx, eventInfo)
+		if err != nil {
+			log.Error().Err(err).Msg("argocd.HasMatchingApplications() failed")
+			_ = github.Status(ctx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+			*callerErr = err
+			return
+		}
+		if !matched {
+			log.Debug().Msgf("Skipping commit status; No ArgoCD application matches %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+			return
+		}
+	}
+
 	// set commit status to PENDING
 	err = github.Status(ctx, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 	if err != nil {

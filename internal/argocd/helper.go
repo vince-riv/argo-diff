@@ -388,6 +388,35 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	return appResList, notDiffed, nil
 }
 
+// HasMatchingApplications reports whether any ArgoCD application matches eventInfo, without
+// diffing anything. It reuses the same listing + filtering (including the
+// manifest-generate-paths path filter) that GetApplicationChanges uses for its wave 1
+// (single-source) and wave 3 (multi-source) matching, so a false result here guarantees
+// GetApplicationChanges would return an empty appResList and no error. It does not discover
+// nested app-of-apps children queued only during diffing, but those are only ever queued by
+// an already-matching parent app, which this function would already have found.
+func HasMatchingApplications(ctx context.Context, eventInfo webhook.EventInfo) (bool, error) {
+	argoApps, err := listApplications(ctx)
+	if err != nil {
+		return false, err
+	}
+	if len(argoApps.Items) == 0 {
+		return false, fmt.Errorf("empty ArgoCD app list")
+	}
+	apps, err := filterApplications(argoApps.Items, eventInfo, false)
+	if err != nil {
+		return false, err
+	}
+	if len(apps) > 0 {
+		return true, nil
+	}
+	multiApps, err := filterApplications(argoApps.Items, eventInfo, true)
+	if err != nil {
+		return false, err
+	}
+	return len(multiApps) > 0, nil
+}
+
 // Returns a list of Applications whose git URLs match repo owner & name
 // eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.RepoDefaultRef, eventInfo.ChangeRef, eventInfo.BaseRef string
 func filterApplications(a []Application, eventInfo webhook.EventInfo, multiSource bool) ([]Application, error) {
