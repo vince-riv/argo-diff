@@ -46,6 +46,7 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | config.github.auth.token | string | `""` | Value of Github Personal Access Token. Populates GITHUB_TOKEN |
 | config.github.webhook.sharedSecret | string | `""` | Shared secret key for Github webhook events |
 | config.maxWorkers | string | `""` | Max number of ArgoCD applications diffed concurrently (capped at 32). Defaults to 4 |
+| config.refreshCommentKeywords | string | `""` | Comma-separated list of PR comments that re-trigger argo-diff, replacing the default "argo diff,argo-diff" |
 | deployment.affinity | object | `{}` |  |
 | deployment.annotations | object | `{}` |  |
 | deployment.livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"},"initialDelaySeconds":2,"periodSeconds":10}` | Configuration for liveness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |

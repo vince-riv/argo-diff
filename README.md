@@ -145,7 +145,7 @@ Configure organization-level (or repository-level) webhook notifications to argo
 should map to the ingress configured in your cluster, and the secret should be the webhook secret
 generated above. Enable these event types:
 
-- **Issue comments** — lets a comment of `argo diff` re-trigger argo-diff on the pull request.
+- **Issue comments** — lets a comment of `argo diff` (customizable via `ARGO_DIFF_REFRESH_COMMENT_KEYWORDS`) re-trigger argo-diff on the pull request.
 - **Pull requests**
 
 > **Note:** argo-diff only supports pull request events. Push events to branches are ignored.
@@ -253,6 +253,7 @@ the accepted environment variables and their respective GitHub Actions inputs.
 | ARGO_DIFF_CONTEXT_STR            | context_str                 | no               |          | Unique identifier of the argo-diff instance. Use when deploying multiple instances (eg: one per cluster); a brief cluster nickname is recommended. |
 | ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH | N/A                   | no               | `false`  | Set to `true` to disable matching ArgoCD application sources on non-`github.com` git hosts (GitHub Enterprise, AWS CodeConnections, GitLab, mirrors, etc.) by `owner/repo` path suffix; matching on `github.com` URLs is unaffected. |
 | ARGO_DIFF_MAX_WORKERS            | max_workers                 | no               | `4`      | Max number of ArgoCD applications diffed concurrently (capped at 32). Raising this speeds up runs that match many applications, at the cost of more concurrent load on the ArgoCD repo-server; pair a higher value with a longer `argocd` CLI `--timeout` via `ARGOCD_OPTS` if the repo-server is slow under that load. |
+| ARGO_DIFF_REFRESH_COMMENT_KEYWORDS | refresh_comment_keywords   | no               | `argo diff,argo-diff` | Comma-separated list of PR comments (case-insensitive, trimmed) that re-trigger argo-diff, replacing the default keywords. Each keyword also matches with a trailing `ARGO_DIFF_CONTEXT_STR` suffix (eg: `argo diff prod`). |
 | ARGO_DIFF_TIMEOUT                | timeout                     | no               | `3m`     | How long argo-diff may spend generating diffs for a single event, as a Go duration (eg: `5m`, `90s`); a bare integer is treated as seconds. Raise this when a change matches many ArgoCD applications, since each one costs a round trip to the argocd server. Reporting results to GitHub gets up to 30 seconds on top of this, so a run can take that much longer than the value set here. Any applications left undiffed when the time runs out are named in a warning in the PR comment, and the run is failed — a failed step under GitHub Actions (commit statuses are skipped there), or a `failure` commit status when deployed as a service. |
 | COMMENT_LINE_MAX_CHARS           | comment_line_max_chars      | no               | `175`    | Individual lines in argo-diff PR comments longer than this are truncated. |
 | GITHUB_APP_ID                    | N/A                         | no               |          | GitHub Application Id (see deployment instructions). |

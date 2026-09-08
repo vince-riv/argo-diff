@@ -19,15 +19,16 @@ import (
 )
 
 var (
-	commentClient      *github.Client
-	appsClient         *github.Client
-	commentClientIsApp bool
-	commentPreamble    string
-	contextStr         string
-	commentIdentifier  string
-	commentLogin       string
-	isGithubAction     bool
-	mux                *sync.RWMutex
+	commentClient          *github.Client
+	appsClient             *github.Client
+	commentClientIsApp     bool
+	commentPreamble        string
+	contextStr             string
+	refreshCommentKeywords []string
+	commentIdentifier      string
+	commentLogin           string
+	isGithubAction         bool
+	mux                    *sync.RWMutex
 )
 
 func init() {
@@ -35,6 +36,16 @@ func init() {
 	mux = &sync.RWMutex{}
 	isGithubAction = os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
 	contextStr = strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
+	refreshCommentKeywordsRaw := strings.TrimSpace(os.Getenv("ARGO_DIFF_REFRESH_COMMENT_KEYWORDS"))
+	if refreshCommentKeywordsRaw == "" {
+		refreshCommentKeywordsRaw = "argo diff,argo-diff"
+	}
+	for _, keyword := range strings.Split(refreshCommentKeywordsRaw, ",") {
+		keyword = strings.ToLower(strings.TrimSpace(keyword))
+		if keyword != "" {
+			refreshCommentKeywords = append(refreshCommentKeywords, keyword)
+		}
+	}
 	commentPreamble = strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE"))
 	if commentPreamble == "" {
 		commentPreamble = contextStr
@@ -118,16 +129,16 @@ func ConnectivityCheck() error {
 	return getCommentUser(ctx)
 }
 
+// IsRefreshComment reports whether a PR comment should trigger a refresh. It matches any keyword in
+// refreshCommentKeywords (parsed once in init() from ARGO_DIFF_REFRESH_COMMENT_KEYWORDS, default
+// "argo diff,argo-diff"), each optionally followed by a trailing ARGO_DIFF_CONTEXT_STR suffix
+// (eg: "argo diff prod") so one comment can target a single instance in a multi-instance setup.
 func IsRefreshComment(comment string) bool {
 	input := strings.ToLower(strings.TrimSpace(comment))
-	if input == "argo diff" || input == "argo-diff" {
-		return true
-	}
-	if input == "argo diff "+strings.ToLower(contextStr) {
-		return true
-	}
-	if input == "argo-diff "+strings.ToLower(contextStr) {
-		return true
+	for _, keyword := range refreshCommentKeywords {
+		if input == keyword || input == keyword+" "+strings.ToLower(contextStr) {
+			return true
+		}
 	}
 	return false
 }
