@@ -37,8 +37,9 @@ when `Refresh` is false, since a refresh re-reads them from the API.
   field is read through raw pointer dereferences — a malformed payload panics rather than erroring.
 - `ProcessComment()` handles `issue_comment`: action must be `created`, the issue must be a PR
   (`PullRequestLinks != nil`), and the body must satisfy `github.IsRefreshComment()` (`argo diff` /
-  `argo-diff`, optionally suffixed with the context string). It sets `Refresh: true`, leaving the
-  sha and refs to be resolved from the API. This is the only import of `internal/github` from here.
+  `argo-diff` by default, overridable via `ARGO_DIFF_REFRESH_COMMENT_KEYWORDS`, optionally suffixed
+  with the context string). It sets `Refresh: true`, leaving the sha and refs to be resolved from the
+  API. This is the only import of `internal/github` from here.
 
 ## Signatures
 

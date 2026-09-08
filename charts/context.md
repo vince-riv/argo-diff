@@ -36,39 +36,18 @@ Configuration split:
 
 - **ConfigMap** (`config.configMapCreate`): non-sensitive vars — `ARGOCD_SERVER_ADDR`,
   `ARGOCD_GRPC_WEB*`, `ARGOCD_SERVER_INSECURE`, `ARGOCD_SERVER_PLAINTEXT`, `ARGOCD_UI_BASE_URL`,
-  `ARGO_DIFF_COMMENT_PREAMBLE`, `ARGO_DIFF_COMMENT_NOTICE`, `ARGO_DIFF_COMMENT_COLLAPSE`,
-  `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT`, `ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT`,
-  `ARGO_DIFF_COMMENT_INDEX_COUNT`, `ARGO_DIFF_COMMENT_MAX_CHARS`, `ARGO_DIFF_CONTEXT_STR`,
+  `ARGO_DIFF_COMMENT_PREAMBLE`, `ARGO_DIFF_CONTEXT_STR`, `ARGO_DIFF_REFRESH_COMMENT_KEYWORDS`,
   `COMMENT_LINE_MAX_CHARS`, `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`.
-
-  `config.commentIndexCount` is the one key `templates/configmap.yaml` does **not** emit with a
-  plain `{{- with }}`: `0` is meaningful for it ("never render the index") and `with`/`or` treat a
-  numeric `0` as unset, so the template normalizes it to a string first.
 - **Secret** (`secret.create`): `ARGOCD_AUTH_TOKEN`, `GITHUB_TOKEN`, `GITHUB_APP_PRIVATE_KEY`,
   `GITHUB_WEBHOOK_SECRET`.
 
 Set `configMapCreate: false` / `secret.create: false` to manage those objects yourself and point at
 them with `config.configMapName` / `secret.name`.
 
-**Not every argo-diff env var has a typed values key** — `ARGO_DIFF_TIMEOUT` and
-`ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH`, for example, have none. Adding one means touching
-`values.yaml` (with its `# key -- description` comment for helm-docs), `templates/configmap.yaml`,
-`tests/configmap_test.yaml`, and the README table — so most new variables don't get one. Instead,
-`deployment.env` (raw `core/v1` `EnvVar` entries) and `deployment.envFrom` (raw `core/v1`
-`EnvFromSource` entries) in `templates/deployment.yaml` pass straight through to the container spec.
-`deployment.env` entries are appended after the chart's own (`LOG_LEVEL`, and `ARGOCD_CLI_CMD_NAME`
-when `argocdCli.image.tag` is set), but a same-named entry there does not render twice — the
-template checks `deployment.env` for that name first and omits the chart's own entry for it, since
-Kubernetes rejects a container spec with two `env` entries sharing a name under server-side apply.
-`deployment.envFrom` entries are appended after the chart's own ConfigMap/Secret refs and win on key
-collisions against those two — but never against `LOG_LEVEL`/`ARGOCD_CLI_CMD_NAME`, since Kubernetes
-always resolves every `envFrom` source before applying the container's own `env:` entries; only
-`deployment.env` can override those. This is the escape hatch for everything the typed `config.*`
-keys don't cover, and it also lets an operator layer extra ConfigMaps/Secrets on top of the
-chart-managed one — something `config.configMapCreate: false` cannot do, since that gives up every
-typed `config.*` key at once. One gap: the pod's `checksum/config` / `checksum/secret` annotations
-only hash the chart's own `configmap.yaml` / `secret.yaml`, so a change to a ConfigMap or Secret
-referenced through `deployment.envFrom` does not by itself trigger a rollout.
+**Not every argo-diff env var has a values key** — `ARGO_DIFF_TIMEOUT` and
+`ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH`, for example, currently require an externally managed
+ConfigMap. Adding one means touching `values.yaml` (with its `# key -- description` comment for
+helm-docs), `templates/configmap.yaml`, `tests/configmap_test.yaml`, and the README table.
 
 ### Pinning the argocd CLI version (`argocdCli.*`)
 
