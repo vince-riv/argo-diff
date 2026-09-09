@@ -56,6 +56,11 @@ directly breaks comment reuse for any App whose name isn't already slug-shaped.
 - `maxResourceDiffLen` = 260000 — a single resource diff over that renders as
   `<<< DIFF TOO LARGE TO DISPLAY >>>`.
 - Individual lines longer than `COMMENT_LINE_MAX_CHARS` (default 175) get `...[TRUNCATED]`.
+- `ArgoAppMarkdown.WarnStr` renders as a fenced block above the app's diffs (`OverviewStr()`), and
+  carries both `argocd`'s fatal `WarnStr` and its advisory `NoticeStr` (see
+  `internal/argocd/context.md`). `OverviewStr()` forces a newline before the closing fence: the
+  string is error text that may not end in one, and an unclosed fence swallows every diff below it
+  — which matters now that a notice can sit above diffs that are still worth reading.
 - `ARGOCD_UI_BASE_URL` adds a link to each app; the app path is hardcoded to `/applications/argocd/`.
 - Sync/health statuses render with emoji via `syncString()` / `healthString()`.
 

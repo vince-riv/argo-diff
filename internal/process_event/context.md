@@ -36,7 +36,14 @@ into an exit code.
   `*callerErr`, and prepends a `> [!WARNING]` block naming them — capped at 20 names by
   `timeoutMarkdown()` so a change matching hundreds of apps can't crowd out the diffs. Reporting
   success on a partial diff is worse than failing.
-- An application with `WarnStr` (its diff failed) counts as an error → `StatusFailure`.
+- An application with `WarnStr` (its diff failed) is **fatal**: it counts as an error →
+  `StatusFailure` + `*callerErr`, and its diffs are suppressed in favor of `Error: <WarnStr>`.
+- An application with `NoticeStr` is **advisory**: its diffs render as normal with the notice above
+  them (`ArgoAppMarkdown.WarnStr` → `OverviewStr()`), and `errorCount`, `firstError`, the status and
+  `*callerErr` are all untouched. Used when the diff is good but something alongside it degraded —
+  today, an app-of-apps whose children couldn't be enumerated. It needs no term in the
+  "should we comment at all" condition: `NoticeStr` is only ever set on an app that already has
+  changed resources, so it implies `changeCount > 0`.
 - No changes, no warnings, and nothing skipped → `github.Comment()` is called with an **empty**
   body list, which clears out any stale argo-diff comments.
 - `unknownCount` is vestigial: it is declared and reported but never incremented.

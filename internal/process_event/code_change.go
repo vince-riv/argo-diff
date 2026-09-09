@@ -181,7 +181,10 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 			log.Trace().Msgf("%s has %d Changed Resources", appName, len(a.ChangedResources))
 			if len(a.ChangedResources) > 0 {
 				changeCount++
-				appMarkdown := cMarkdown.AppMarkdown(appName, "", appSyncStatus, appHealthStatus, appHealthMsg)
+				// NoticeStr is advisory: it renders above this app's diffs (see
+				// ArgoAppMarkdown.OverviewStr) without touching errorCount,
+				// firstError or the commit status, unlike WarnStr above.
+				appMarkdown := cMarkdown.AppMarkdown(appName, a.NoticeStr, appSyncStatus, appHealthStatus, appHealthMsg)
 				for _, ar := range a.ChangedResources {
 					appMarkdown.AddResourceDiff(ar.Group, ar.Kind, ar.Name, ar.Namespace, ar.DiffStr)
 				}
@@ -236,7 +239,9 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 	cMarkdown.Preamble = markdownStart
 	if changeCount == 0 && firstError == "" && len(notDiffed) == 0 {
-		// if there are no changes or warnings, don't comment (but clear out any existing comments)
+		// if there are no changes or warnings, don't comment (but clear out any existing comments).
+		// NoticeStr needs no term here: it's only ever set on an app that already
+		// has changed resources, so it implies changeCount > 0.
 		_, _ = github.Comment(reportCtx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, []string{})
 	} else {
 		_, _ = github.Comment(reportCtx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())

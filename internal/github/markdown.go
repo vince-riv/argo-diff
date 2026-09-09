@@ -216,7 +216,14 @@ func (a ArgoAppMarkdown) OverviewStr(continued bool) string {
 	md += syncString(a.SyncStatus) + "\n"
 	md += healthString(a.HealthStatus, a.HealthMsg) + "\n\n"
 	if a.WarnStr != "" {
-		md += "```\n" + a.WarnStr + "```\n\n"
+		// The closing fence has to start its own line. Warning/notice strings are
+		// built from error text that may or may not end in a newline, and without
+		// this the fence never closes - swallowing every diff rendered below it.
+		md += "```\n" + a.WarnStr
+		if !strings.HasSuffix(a.WarnStr, "\n") {
+			md += "\n"
+		}
+		md += "```\n\n"
 	}
 	return md
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -375,6 +376,75 @@ func TestGetApplicationChangesOutOfTimeEnumeratingNestedApps(t *testing.T) {
 	want := []string{"nested apps of argo-diff"}
 	if !slices.Equal(notDiffed, want) {
 		t.Errorf("notDiffed = %v, want %v", notDiffed, want)
+	}
+	// the deadline path stays on notDiffed; NoticeStr is for the non-timeout
+	// failure only, so reporting can't describe a real error as a timeout or
+	// vice versa
+	if len(appResList) == 1 && appResList[0].NoticeStr != "" {
+		t.Errorf("NoticeStr = %q, want empty when the deadline is what stopped nested app enumeration", appResList[0].NoticeStr)
+	}
+}
+
+// An app-of-apps whose children can't be enumerated while ctx still has time
+// left is a degraded, not failed, result: the parent's own diff is good and
+// must still be reported, with an advisory NoticeStr instead of a notDiffed
+// entry (which reporting renders as a timeout) or a WarnStr (which suppresses
+// the diffs entirely).
+func TestGetApplicationChangesNestedAppDiscoveryFailureSetsNotice(t *testing.T) {
+	const repoURL = "https://github.com/acme/widgets.git"
+
+	appListJSON, err := json.Marshal(buildTestApps(1, repoURL)) // pool-app-0
+	if err != nil {
+		t.Fatalf("failed to marshal test apps: %v", err)
+	}
+
+	manifestCalls := 0
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		if len(args) < 2 {
+			return nil, fmt.Errorf("unexpected argocd args: %v", args)
+		}
+		switch args[1] {
+		case "list":
+			return appListJSON, nil
+		case "diff":
+			// a changed argoproj.io/Application sends us down the nested-app path
+			return nestedAppDiffFixture("pool-app-0-child"), makeExitError(t, nil)
+		case "manifests":
+			manifestCalls++
+			// a real failure, with plenty of time left on ctx
+			return nil, fmt.Errorf("rpc error: code = Unknown desc = repository not accessible")
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "acme", RepoName: "widgets", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main", Sha: "abcdef"}
+	appResList, notDiffed, err := GetApplicationChanges(context.Background(), evtInfo)
+	if err != nil {
+		t.Fatalf("GetApplicationChanges() err'd: %v", err)
+	}
+	if manifestCalls != 1 {
+		t.Errorf("expected 1 `argocd app manifests` call, got %d", manifestCalls)
+	}
+	if len(notDiffed) != 0 {
+		t.Errorf("notDiffed = %v, want empty: nothing timed out", notDiffed)
+	}
+	if len(appResList) != 1 {
+		t.Fatalf("expected the parent app's diff in the results, got %d results", len(appResList))
+	}
+	got := appResList[0]
+	if got.NoticeStr == "" {
+		t.Error("NoticeStr is empty, want an advisory naming the app whose children couldn't be enumerated")
+	}
+	if !strings.Contains(got.NoticeStr, "pool-app-0") {
+		t.Errorf("NoticeStr = %q, want it to name pool-app-0", got.NoticeStr)
+	}
+	if got.WarnStr != "" {
+		t.Errorf("WarnStr = %q, want empty: the app's own diff succeeded", got.WarnStr)
+	}
+	if len(got.ChangedResources) != 1 {
+		t.Errorf("got %d changed resources, want the parent's own diff to survive", len(got.ChangedResources))
 	}
 }
 

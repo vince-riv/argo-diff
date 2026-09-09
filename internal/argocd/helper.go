@@ -173,6 +173,12 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 			// one entry anyway: without it the run reports as complete while
 			// every nested application diff is missing.
 			res.notDiffed = append(res.notDiffed, fmt.Sprintf("nested apps of %s", app.Name))
+		} else {
+			// Not a deadline: this app's own diff is good and already in
+			// res.diffResult, only its app-of-apps children are missing. That's
+			// advisory, not fatal - notDiffed would report it as a timeout and
+			// fail the run, and WarnStr would suppress the diff we do have.
+			appResChanges.NoticeStr = fmt.Sprintf("Unable to discover app-of-apps children of %s: %s", app.Name, err.Error())
 		}
 		log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.Name)
 		return res

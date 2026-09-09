@@ -16,7 +16,15 @@ type AppResource struct {
 type ApplicationResourcesWithChanges struct {
 	ArgoApp          *Application
 	ChangedResources []AppResource
-	WarnStr          string
+	// WarnStr is fatal: the application's diff itself failed, so there are no
+	// trustworthy ChangedResources to show. The reporter suppresses this app's
+	// diffs, counts it as an error, and fails the run.
+	WarnStr string
+	// NoticeStr is advisory: the diff succeeded and ChangedResources are good,
+	// but something alongside it degraded (eg: this app-of-apps' children
+	// couldn't be enumerated). The reporter renders it above this app's diffs
+	// and the run still succeeds.
+	NoticeStr string
 }
 
 type K8sManifest struct {
