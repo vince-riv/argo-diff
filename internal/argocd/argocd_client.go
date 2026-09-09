@@ -14,10 +14,17 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/rs/zerolog/log"
 	"sigs.k8s.io/yaml"
 )
+
+// appNamespaceManifestsMinVersion is the minimum argocd CLI client version
+// that accepts --app-namespace on `argocd app manifests`. `argocd app diff`
+// has accepted it since v2.5.0 (below minVersion), so only `app manifests`
+// needs gating.
+const appNamespaceManifestsMinVersion = "3.5.0"
 
 var (
 	httpBearerToken       string
@@ -120,28 +127,31 @@ func listApplications(ctx context.Context) (*ApplicationList, error) {
 	return &apps, nil
 }
 
-// ParseArgoCDVersion extracts the client and server version from the output of "argocd version".
-// It trims everything after the '+' sign, including the sign itself.
-func parseArgoCDVersion(output []byte) (clientVersion, serverVersion string, err error) {
+// extractVersionField scans output for a line of the form "<prefix> <value>"
+// (as printed by `argocd version`/`argocd version --client`, e.g.
+// "argocd: v2.13.1+abcdef") and returns value with any "+build" suffix
+// trimmed. ok is false if no such line is found.
+func extractVersionField(output []byte, prefix string) (value string, ok bool) {
 	lines := bytes.Split(output, []byte("\n"))
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(string(line))
-		if strings.HasPrefix(trimmed, "argocd:") {
-			// Extract client version
+		if strings.HasPrefix(trimmed, prefix) {
 			parts := strings.SplitN(trimmed, " ", 2)
 			if len(parts) == 2 {
-				clientVersion = strings.TrimSpace(parts[1])
-				clientVersion = strings.Split(clientVersion, "+")[0]
-			}
-		} else if strings.HasPrefix(trimmed, "argocd-server:") {
-			// Extract server version
-			parts := strings.SplitN(trimmed, " ", 2)
-			if len(parts) == 2 {
-				serverVersion = strings.TrimSpace(parts[1])
-				serverVersion = strings.Split(serverVersion, "+")[0]
+				value = strings.TrimSpace(parts[1])
+				value = strings.Split(value, "+")[0]
+				return value, true
 			}
 		}
 	}
+	return "", false
+}
+
+// ParseArgoCDVersion extracts the client and server version from the output of "argocd version".
+// It trims everything after the '+' sign, including the sign itself.
+func parseArgoCDVersion(output []byte) (clientVersion, serverVersion string, err error) {
+	clientVersion, _ = extractVersionField(output, "argocd:")
+	serverVersion, _ = extractVersionField(output, "argocd-server:")
 	if clientVersion == "" || serverVersion == "" {
 		return "", "", fmt.Errorf("failed to parse client or server version from output")
 	}
@@ -156,6 +166,60 @@ func argocdVersion(ctx context.Context) (string, string, error) {
 		return "", "", err
 	}
 	return parseArgoCDVersion(output)
+}
+
+// parseArgoCDClientVersion extracts the client version from the output of
+// "argocd version --client", which prints only the client block (no
+// "argocd-server:" line).
+func parseArgoCDClientVersion(output []byte) (string, error) {
+	clientVersion, ok := extractVersionField(output, "argocd:")
+	if !ok {
+		return "", fmt.Errorf("failed to parse client version from output")
+	}
+	return clientVersion, nil
+}
+
+func argocdClientVersion(ctx context.Context) (string, error) {
+	// argocd version --client - inspects only the local CLI binary and makes
+	// no network round-trip to the ArgoCD server, unlike argocdVersion()
+	// above. This is not a substitute for ConnectivityCheck().
+	output, err := execArgoCdCli(ctx, []string{"version", "--client"})
+	if err != nil {
+		log.Error().Err(err).Msg("argocd version --client failed")
+		return "", err
+	}
+	return parseArgoCDClientVersion(output)
+}
+
+var (
+	clientVersionMu                     sync.Mutex
+	cachedSupportsManifestsAppNamespace *bool
+)
+
+// supportsManifestsAppNamespace reports whether the pinned argocd CLI is new
+// enough (>=3.5.0) to accept --app-namespace on `argocd app manifests`. An
+// operator can pin an older CLI via ARGOCD_CLI_CMD_NAME; without this check,
+// app-of-apps discovery for apps outside the CLI's default namespace would
+// pass a flag the CLI doesn't understand.
+//
+// The result is cached process-wide after the first successful lookup,
+// since the pinned CLI's version cannot change during the process lifetime.
+// A failed lookup is not cached, so a transient error is retried on the next
+// call rather than permanently disabling app-namespace support.
+func supportsManifestsAppNamespace(ctx context.Context) bool {
+	clientVersionMu.Lock()
+	defer clientVersionMu.Unlock()
+	if cachedSupportsManifestsAppNamespace != nil {
+		return *cachedSupportsManifestsAppNamespace
+	}
+	v, err := argocdClientVersion(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to determine argocd CLI client version; omitting --app-namespace from `argocd app manifests` (app-of-apps discovery will only find nested apps in the CLI's default namespace)")
+		return false
+	}
+	supported := versionAtLeast(v, appNamespaceManifestsMinVersion)
+	cachedSupportsManifestsAppNamespace = &supported
+	return supported
 }
 
 /*
@@ -196,7 +260,11 @@ func appManifestHelper(input []byte) ([]K8sManifest, error) {
 
 func getApplicationManifests(ctx context.Context, appName, appNamespace, revision string) ([]K8sManifest, error) {
 	// argocd app manifests argo-diff --revision HEAD
-	output, err := execArgoCdCli(ctx, []string{"app", "manifests", appName, "--app-namespace", appNamespace, "--revision", revision})
+	args := []string{"app", "manifests", appName, "--revision", revision}
+	if supportsManifestsAppNamespace(ctx) {
+		args = append(args, "--app-namespace", appNamespace)
+	}
+	output, err := execArgoCdCli(ctx, args)
 	if err != nil {
 		log.Error().Err(err).Msgf("Get Argo application manifests for %s failed", appName)
 		return nil, err

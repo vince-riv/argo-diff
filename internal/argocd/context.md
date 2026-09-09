@@ -49,6 +49,18 @@ own args, via a fake `argocd` shell script pointed to by `ARGOCD_CLI_CMD_NAME`. 
   raw YAML and an `unstructured.Unstructured` decode.
 - `parseArgoCDVersion()` reads the `argocd:` / `argocd-server:` lines and trims the `+sha` suffix.
 
+### App-in-any-namespace (`--app-namespace`)
+
+`argocd app diff` has accepted `--app-namespace` since v2.5.0 (below `minVersion`), so
+`diffApplication()` always passes it. `argocd app manifests` only gained it in v3.5.0
+(argoproj/argo-cd#27942) — since operators can pin an older CLI via `ARGOCD_CLI_CMD_NAME`,
+`getApplicationManifests()` gates the flag behind `supportsManifestsAppNamespace()`, which lazily
+resolves `argocd version --client` (client-only, **no server round-trip** — not a substitute for
+`ConnectivityCheck()`) and caches a successful result process-wide via `cachedSupportsManifestsAppNamespace`
+(a failed lookup is *not* cached, so it's retried on the next call). If the pinned CLI is `<3.5.0`,
+the flag is omitted entirely and app-of-apps discovery falls back to the CLI's implicit default
+namespace — nested Applications outside that namespace won't be found on an old CLI.
+
 ## Matching applications to a change
 
 `GetApplicationChanges(ctx, eventInfo)` is the one entry point `process_event` calls. It:

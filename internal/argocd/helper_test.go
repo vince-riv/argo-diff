@@ -693,18 +693,36 @@ func TestGetApplicationChangesNotDiffedGroupedWithParent(t *testing.T) {
 	}
 }
 
-func TestVersionCheck(t *testing.T) {
-	if !versionCheck("2.12.1") {
+func TestVersionAtLeastAgainstMinVersion(t *testing.T) {
+	if !versionAtLeast("2.12.1", minVersion) {
 		t.Error("v2.12.1 should pass")
 	}
-	if versionCheck("2.11.100") {
-		t.Error("v2.12.100 should not pass")
+	if versionAtLeast("2.11.100", minVersion) {
+		t.Error("v2.11.100 should not pass")
 	}
-	if !versionCheck("2.13.0") {
+	if !versionAtLeast("2.13.0", minVersion) {
 		t.Error("v2.13.0 should pass")
 	}
-	if versionCheck("1.150.0") {
+	if versionAtLeast("1.150.0", minVersion) {
 		t.Error("v1.150.0 should not pass")
+	}
+}
+
+func TestVersionAtLeastMalformed(t *testing.T) {
+	// A version string with fewer than 3 dot-separated components (or a
+	// non-numeric component) must fail safe rather than panic on an
+	// out-of-range index - this is now reachable at request time (not just
+	// process startup) via supportsManifestsAppNamespace(), which parses
+	// whatever the pinned argocd CLI reports for its own version.
+	cases := []string{"3.5", "3", "", "v3.x.0", "3.5.0-rc1.extra.junk"}
+	for _, v := range cases {
+		if versionAtLeast(v, "3.5.0") {
+			t.Errorf("versionAtLeast(%q, \"3.5.0\") = true, want false (malformed input)", v)
+		}
+	}
+	// A malformed `required` argument must fail safe too.
+	if versionAtLeast("3.5.0", "3.5") {
+		t.Error(`versionAtLeast("3.5.0", "3.5") = true, want false (malformed required)`)
 	}
 }
 
@@ -724,6 +742,7 @@ func TestArgoAppsWithChanges(t *testing.T) {
 }
 
 func TestArgoAppsWithChangesNamespacePropagation(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
 	orig := execArgoCdCli
 	defer func() { execArgoCdCli = orig }()
 
@@ -734,10 +753,7 @@ func TestArgoAppsWithChangesNamespacePropagation(t *testing.T) {
 	}
 
 	var captured []string
-	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
-		captured = args
-		return []byte(""), nil // empty manifests — no nested apps discovered
-	}
+	execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.5.2", &captured) // empty manifests — no nested apps discovered
 
 	_, _ = argoAppsWithChanges(context.Background(), "parent-app", "non-default-namespace", appResources, "abc123")
 

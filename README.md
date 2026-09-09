@@ -240,7 +240,7 @@ the accepted environment variables and their respective GitHub Actions inputs.
 | APP_ENV                          | N/A                         | no               |          | Set to `dev` during local development. |
 | ARGOCD_AUTH_TOKEN                | argocd_auth_token           | yes              |          | Bearer token for ArgoCD (value passed to `--auth-token`). |
 | ARGOCD_APP_DIFF_SERVER_SIDE_DIFF | argocd_app_server_side_diff | no               |          | Set `--server-side-diff` for `argocd app diff` (`true`/`false`). |
-| ARGOCD_CLI_CMD_NAME              | N/A                         | no               | `argocd` | Overrides the `argocd` CLI command name (e.g., to use a specific argocd version); accepts either a bare command name on `PATH` or an absolute path to the binary. |
+| ARGOCD_CLI_CMD_NAME              | N/A                         | no               | `argocd` | Overrides the `argocd` CLI command name (e.g., to use a specific argocd version); accepts either a bare command name on `PATH` or an absolute path to the binary.  Support for diffing Applications in a non-default namespace (most commonly `argocd`) requires CLI version >= 3.5.0. |
 | ARGOCD_GRPC_WEB                  | argocd_grpc_web             | no               | `false`  | Set `--grpc-web` flag for argocd cli (`true`/`false`). |
 | ARGOCD_GRPC_WEB_ROOT_PATH        | argocd_grpc_web_root_path   | no               |          | Value for `--grpc-web-root-path` for argocd cli. |
 | ARGOCD_OPTS                      | argocd_opts                 | no               |          | Additional flags for argocd cli. |
