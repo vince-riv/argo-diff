@@ -43,8 +43,17 @@ spec:
               value: ""
             - name: GITHUB_APP_INSTALLATION_ID
               value: ""
-            - name: GITHUB_STATUS_CONTEXT_STR
+            - name: ARGO_DIFF_CONTEXT_STR
               value: ""
+            # Optional PR comment tuning - see the environment variable table in README.md
+            #- name: ARGO_DIFF_COMMENT_NOTICE
+            #  value: "argo-diff is being migrated to the new cluster on 1 Oct"
+            #- name: ARGO_DIFF_COMMENT_COLLAPSE
+            #  value: "auto"
+            #- name: ARGO_DIFF_COMMENT_INDEX_COUNT
+            #  value: "2"
+            #- name: ARGO_DIFF_COMMENT_MAX_CHARS
+            #  value: "262144"
           envFrom:
             - secretRef:
                 name: argo-diff-env

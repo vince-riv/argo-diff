@@ -36,8 +36,13 @@ Configuration split:
 
 - **ConfigMap** (`config.configMapCreate`): non-sensitive vars — `ARGOCD_SERVER_ADDR`,
   `ARGOCD_GRPC_WEB*`, `ARGOCD_SERVER_INSECURE`, `ARGOCD_SERVER_PLAINTEXT`, `ARGOCD_UI_BASE_URL`,
-  `ARGO_DIFF_COMMENT_PREAMBLE`, `ARGO_DIFF_CONTEXT_STR`, `COMMENT_LINE_MAX_CHARS`, `GITHUB_APP_ID`,
-  `GITHUB_APP_INSTALLATION_ID`.
+  `ARGO_DIFF_COMMENT_PREAMBLE`, `ARGO_DIFF_COMMENT_NOTICE`, `ARGO_DIFF_COMMENT_COLLAPSE`,
+  `ARGO_DIFF_COMMENT_INDEX_COUNT`, `ARGO_DIFF_COMMENT_MAX_CHARS`, `ARGO_DIFF_CONTEXT_STR`,
+  `COMMENT_LINE_MAX_CHARS`, `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`.
+
+  `config.commentIndexCount` is the one key `templates/configmap.yaml` does **not** emit with a
+  plain `{{- with }}`: `0` is meaningful for it ("never render the index") and `with`/`or` treat a
+  numeric `0` as unset, so the template normalizes it to a string first.
 - **Secret** (`secret.create`): `ARGOCD_AUTH_TOKEN`, `GITHUB_TOKEN`, `GITHUB_APP_PRIVATE_KEY`,
   `GITHUB_WEBHOOK_SECRET`.
 

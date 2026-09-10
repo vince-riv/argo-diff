@@ -116,6 +116,29 @@ application. When the deadline hits while enumerating an app-of-apps' children, 
 `"nested apps of <name>"` entry is recorded — without it the run would look complete while every
 nested diff was missing.
 
+## Fatal vs advisory problems
+
+`ApplicationResourcesWithChanges` carries two problem strings, and they are not interchangeable:
+
+- **`WarnStr` — fatal.** The application's own diff failed, so `ChangedResources` is untrustworthy.
+  `process_event` suppresses the app's diffs, counts it as an error, and fails the run.
+- **`NoticeStr` — advisory.** The diff succeeded and `ChangedResources` is good, but something
+  alongside it degraded. `process_event` renders it above the app's diffs and the run still
+  succeeds.
+
+The one producer today is `processTopLevelApp()`: when `argoAppsWithChanges()` fails while `ctx`
+still has time left, the parent's own diff is already in `res.diffResult`, but its app-of-apps
+children are gone. Note **which** children: `argoAppsWithChanges()` returns `nil` early when it
+finds no changed `argoproj.io/Application` resources, so its only error path is reached *after*
+confirming there are children with changes. The notice therefore says their diffs are missing from
+the comment — "couldn't discover them" on its own reads as "there were none".
+
+That is `NoticeStr`, not `notDiffed` (which reporting renders as "argo-diff ran out of time" and
+turns into a `*callerErr`) and not `WarnStr` (which would throw away the diff that did work).
+`res.diffResult` points at the same local `appResChanges`, so setting the field after the pointer
+is taken is enough. The `ctx.Err() != nil` half of that branch is
+unchanged and still uses `notDiffed`.
+
 `minVersion` is `2.12.0`; `ConnectivityCheck()` fails if either the client or server is older.
 
 ## Tests
@@ -137,7 +160,11 @@ builds `[]Application` values in Go and
 `json.Marshal`s them into the mocked `argocd app list` response, since the number of apps needs to
 vary with the test. `TestGetApplicationChangesConcurrencyBound` asserts observed max concurrency is
 `>1` and `<=` the configured limit rather than exactly equal, since an exact count can under-report
-on a loaded CI runner. `TestGetApplicationChangesOutOfTime` and
+on a loaded CI runner. `TestGetApplicationChangesNestedAppDiscoveryFailureSetsNotice` is the
+`NoticeStr` counterpart to `TestGetApplicationChangesOutOfTimeEnumeratingNestedApps`: same
+nested-app enumeration failure, but
+with time left on `ctx`, so it must set `NoticeStr`, keep the parent's `ChangedResources`, and leave
+`notDiffed` empty. `TestGetApplicationChangesOutOfTime` and
 `TestGetApplicationChangesOutOfTimeEnumeratingNestedApps` set `ARGO_DIFF_MAX_WORKERS=1` so wave 1
 runs one app at a time — the second test's mock relies on strict ordering, since it calls the
 test's own `cancel()` from inside the diff callback to simulate the deadline landing mid-run.

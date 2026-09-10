@@ -36,10 +36,32 @@ into an exit code.
   `*callerErr`, and prepends a `> [!WARNING]` block naming them — capped at 20 names by
   `timeoutMarkdown()` so a change matching hundreds of apps can't crowd out the diffs. Reporting
   success on a partial diff is worse than failing.
-- An application with `WarnStr` (its diff failed) counts as an error → `StatusFailure`.
+- An application with `WarnStr` (its diff failed) is **fatal**: it counts as an error →
+  `StatusFailure` + `*callerErr`, and its diffs are suppressed. Passed as
+  `github.AppMarkdownOpts.ErrStr`, which renders as a red `> [!CAUTION]` alert.
+- An application with `NoticeStr` is **advisory**: its diffs render as normal with the notice above
+  them, and `errorCount`, `firstError`, the status and `*callerErr` are all untouched. Passed as
+  `github.AppMarkdownOpts.NoticeStr`, which renders as a blue `> [!NOTE]` alert. Used when the diff
+  is good but something alongside it degraded — today, an app-of-apps whose children couldn't be
+  enumerated. It needs no term in the "should we comment at all" condition: `NoticeStr` is only ever
+  set on an app that already has changed resources, so it implies `changeCount > 0`.
+- The two travel in separate fields of `AppMarkdownOpts` rather than one string with an `"Error: "`
+  prefix, which is what they used to share — severity a reader can see is worth a struct field.
+- `CommentMarkdown.Notices` is set from `config.Notices()` — comment-level advisories that describe
+  the environment, not this event. See `internal/config/context.md`.
+- **A `NoticeStr` is a partial diff that deliberately does not fail the run**, which sits against
+  the `notDiffed` rule above. The one producer is an app-of-apps whose children have changes and
+  could not be enumerated (`internal/argocd/context.md`), so the comment is genuinely incomplete
+  and the status is still `success`. That is a decision, not an oversight: the parent's own diff is
+  good and worth showing, and the failure is usually an ArgoCD-side repository problem rather than
+  anything about the PR. The notice says plainly that the child diffs are absent, which is what a
+  reader needs to judge it. Revisit by routing it to `notDiffed` — but `timeoutMarkdown()`'s "ran
+  out of time" wording would then be wrong for it and would need its own block.
+- An app with a `NoticeStr` but no changed resources cannot happen today (`processTopLevelApp()`
+  returns first), but the `else if` logs a warning rather than dropping the advisory in silence,
+  since that invariant lives in another package.
 - No changes, no warnings, and nothing skipped → `github.Comment()` is called with an **empty**
   body list, which clears out any stale argo-diff comments.
-- `unknownCount` is vestigial: it is declared and reported but never incremented.
 
 ## Tests
 

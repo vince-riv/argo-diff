@@ -45,8 +45,24 @@ inputs:
     description: 'Set --server-side-diff flag for argocd app diff (true/false)'
     required: false
     default: ''
+  comment_collapse:
+    description: 'Whether the collapsible sections in a PR comment start open: auto (default), expanded or collapsed'
+    required: false
+    default: ''
+  comment_index_count:
+    description: 'When to render the summary index table above the diffs: -1 always, 0 never, any other number is the application count at which it starts. Defaults to 2'
+    required: false
+    default: ''
   comment_line_max_chars:
     description: 'Any individual line in Pull Request comments by argo-diff longer than this are truncated.'
+    required: false
+    default: ''
+  comment_max_chars:
+    description: 'Maximum size of a single Pull Request comment, in bytes. Defaults to (and cannot exceed) GitHub 262144 byte limit'
+    required: false
+    default: ''
+  comment_notice:
+    description: 'Advisory text rendered as a note at the top of the Pull Request comment. Separate several notices with |'
     required: false
     default: ''
   comment_preamble:
@@ -82,6 +98,10 @@ runs:
   image: 'docker://ghcr.io/vince-riv/argo-diff:2.14.0'
   entrypoint: '/app/argo-diff'
   env:
+    ARGO_DIFF_COMMENT_COLLAPSE: ${{ inputs.comment_collapse }}
+    ARGO_DIFF_COMMENT_INDEX_COUNT: ${{ inputs.comment_index_count }}
+    ARGO_DIFF_COMMENT_MAX_CHARS: ${{ inputs.comment_max_chars }}
+    ARGO_DIFF_COMMENT_NOTICE: ${{ inputs.comment_notice }}
     ARGO_DIFF_COMMENT_PREAMBLE: ${{ inputs.comment_preamble }}
     ARGO_DIFF_CONTEXT_STR: ${{ inputs.context_str }}
     ARGO_DIFF_MAX_WORKERS: ${{ inputs.max_workers }}
