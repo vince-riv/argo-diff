@@ -36,6 +36,13 @@ tests:
       - equal:
           path: data.ARGO_DIFF_CONTEXT_STR
           value: testing
+  - it: config refreshCommentKeywords
+    set:
+      config.refreshCommentKeywords: "refresh please,do-it"
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_REFRESH_COMMENT_KEYWORDS
+          value: "refresh please,do-it"
   - it: config commentLineMaxChars
     set:
       config.commentLineMaxChars: 12345

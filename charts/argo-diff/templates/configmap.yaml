@@ -13,7 +13,7 @@ metadata:
 {{- with .Values.config }}
 {{- if or .argocd.grpcWeb .argocd.grpcWebRoot .argocd.serverAddr .argocd.serverInsecure
           .argocd.serverPlainText .argocd.uiBaseURL .commentPreamble .contextStr .commentLineMaxChars
-          .maxWorkers .github.application.id .github.application.installationId }}
+          .maxWorkers .refreshCommentKeywords .github.application.id .github.application.installationId }}
 data:
   {{- with .argocd.grpcWeb }}
   ARGOCD_GRPC_WEB: {{ . | quote }}
@@ -38,6 +38,9 @@ data:
   {{- end }}
   {{- with .contextStr }}
   ARGO_DIFF_CONTEXT_STR: {{ . | quote }}
+  {{- end }}
+  {{- with .refreshCommentKeywords }}
+  ARGO_DIFF_REFRESH_COMMENT_KEYWORDS: {{ . | quote }}
   {{- end }}
   {{- with .commentLineMaxChars }}
   COMMENT_LINE_MAX_CHARS: {{ . | quote }}

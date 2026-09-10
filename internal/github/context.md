@@ -45,8 +45,10 @@ directly breaks comment reuse for any App whose name isn't already slug-shaped.
   every `isGithubAction` site: `ConnectivityCheck()`, the `getCommentUser()` call in
   `getExistingComments()`, and the comment-author match — bypassing it means `commentLogin` stays
   empty and comments are matched by `commentIdentifier` alone, same as under Actions.
-- `IsRefreshComment()` matches `argo diff` / `argo-diff`, optionally suffixed with the context
-  string (case-insensitive, trimmed). This is what makes an `issue_comment` re-run the diff.
+- `IsRefreshComment()` matches any keyword in `refreshCommentKeywords` (parsed once in `init()` from
+  `ARGO_DIFF_REFRESH_COMMENT_KEYWORDS`, a comma-separated list defaulting to `argo diff,argo-diff`),
+  each optionally suffixed with the context string (case-insensitive, trimmed). This is what makes an
+  `issue_comment` re-run the diff.
 
 ## Markdown limits
 

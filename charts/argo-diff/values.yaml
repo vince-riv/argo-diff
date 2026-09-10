@@ -51,6 +51,8 @@ config:
   commentPreamble: ""
   # config.contextStr -- Unique identifier of argo-diff instance. Use when deploying multiple instances (eg: one per cluster). Recommended to be a brief cluster nickname
   contextStr: ""
+  # config.refreshCommentKeywords -- Comma-separated list of PR comments that re-trigger argo-diff, replacing the default "argo diff,argo-diff"
+  refreshCommentKeywords: ""
   # config.commentLineMaxChars -- Any individual line in Pull Request comments by argo-diff longer than this are truncated. Defaults to 175
   commentLineMaxChars: ""
   # config.maxWorkers -- Max number of ArgoCD applications diffed concurrently (capped at 32). Defaults to 4
