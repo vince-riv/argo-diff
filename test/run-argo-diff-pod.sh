@@ -45,7 +45,8 @@ spec:
         - name: ARGO_DIFF_COMMENT_PREAMBLE
           value: |
             ## Argo-Diff - Ephemeral Environment Test
-            This argo-diff should have the same output every run
+        - name: ARGO_DIFF_COMMENT_NOTICE
+          value: "This argo-diff should have the same output every run"
         - name: ARGO_DIFF_CONTEXT_STR
           value: "${ARGO_DIFF_CONTEXT_STR}"
         - name: ARGO_DIFF_SKIP_REF_CHECK
