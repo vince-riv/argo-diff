@@ -140,8 +140,22 @@ func collapseMode() string {
 
 // commentBudget is how much rendered markdown one comment body may hold, after
 // subtracting what Comment() adds around it.
+//
+// The floor keeps finalize()'s invariant unconditional: below roughly
+// len(truncatedMarker)+truncTailReserve there is no room to truncate into, so
+// truncateBytes() returns "" and the marker alone lands over budget. Reaching
+// that needs ARGO_DIFF_COMMENT_MAX_CHARS set below the operator's own
+// ARGO_DIFF_COMMENT_PREAMBLE, so the only cap breached is one they set
+// themselves - but the warning is the part they need, since nothing else says
+// their preamble has eaten the comment.
 func commentBudget() int {
-	return commentMaxLen() - commentWrapperLen()
+	n := commentMaxLen() - commentWrapperLen()
+	if n < minResourceLen {
+		log.Warn().Msgf("ARGO_DIFF_COMMENT_MAX_CHARS %d leaves only %d bytes after the preamble and marker - using %d",
+			commentMaxLen(), n, minResourceLen)
+		return minResourceLen
+	}
+	return n
 }
 
 // truncateBytes cuts s to at most max bytes without splitting a UTF-8 rune.

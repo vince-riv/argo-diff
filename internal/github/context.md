@@ -114,6 +114,12 @@ limit  := budget - splitReserve
 
 - `commentMaxLen()` is `ARGO_DIFF_COMMENT_MAX_CHARS`, defaulting to — and clamped at —
   `githubCommentHardMax` (262144).
+- `commentBudget()` has a `minResourceLen` floor. Below roughly
+  `len(truncatedMarker)+truncTailReserve` there is no room for `finalize()` to truncate *into*, so
+  it would emit a marker that is itself over budget. Reaching that needs
+  `ARGO_DIFF_COMMENT_MAX_CHARS` set below the operator's own `ARGO_DIFF_COMMENT_PREAMBLE`, so the
+  only cap breached is one they set themselves — the warning is the useful part, since nothing else
+  tells them their preamble has eaten the comment.
 - `commentWrapperLen()` is what `Comment()` adds around each body: `ARGO_DIFF_COMMENT_PREAMBLE`
   (unbounded operator input) plus `commentIdentifier`. It is `len(wrapComment(""))`, derived from the
   same function `Comment()` posts with, so the two cannot drift. **This is the leak that used to

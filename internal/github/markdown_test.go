@@ -469,3 +469,29 @@ func TestFinalizeClosesWhatItCuts(t *testing.T) {
 		t.Errorf("truncation marker is inside the code fence:\n%s", got[0])
 	}
 }
+
+// A cap lower than the operator's own preamble used to leave no room to
+// truncate into: truncateBytes() returned "" and the marker alone landed over
+// budget. commentBudget()'s floor makes finalize()'s invariant unconditional.
+func TestAbsurdlyLowCapStillProducesUsableBodies(t *testing.T) {
+	setWrapper(t, strings.Repeat("P", 400), "<!-- argo-diff -->")
+	for _, cap := range []string{"20", "77", "300", "500"} {
+		t.Run("cap="+cap, func(t *testing.T) {
+			t.Setenv("ARGO_DIFF_COMMENT_MAX_CHARS", cap)
+			c := CommentMarkdown{Preamble: "**1 of 1 apps with changes**\n"}
+			a := c.AppMarkdown(AppMarkdownOpts{Name: "app", SyncStatus: "Synced", HealthStatus: "Healthy"})
+			a.AddResourceDiff("apps", "Deployment", "web", "prod", fakeDiff(50))
+
+			budget := commentBudget()
+			for i, b := range c.String() {
+				checkBodyWellFormed(t, i, b)
+				if len(b) > budget {
+					t.Errorf("body %d is %d bytes, over the %d byte budget:\n%s", i, len(b), budget, b)
+				}
+				if strings.TrimSpace(b) == "" {
+					t.Errorf("body %d is empty", i)
+				}
+			}
+		})
+	}
+}
