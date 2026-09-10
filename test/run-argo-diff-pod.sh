@@ -4,7 +4,9 @@
 #
 # Required env vars:
 #   POD_NAME_PREFIX       - prefix for the pod name (a timestamp suffix is appended)
-#   IMAGE_TAG             - argo-diff image tag to run
+#   IMAGE                 - full argo-diff image reference to run (e.g. argo-diff:e2e).
+#                          The workflow builds this locally and side-loads it into
+#                          k3d, so the pod uses imagePullPolicy: Never.
 #   ARGO_DIFF_CONTEXT_STR - value for ARGO_DIFF_CONTEXT_STR (commit status / comment context)
 #   ARGO_DIFF_SHA         - commit sha argo-diff should diff against
 #   ARGO_DIFF_HEAD_REF    - PR head branch
@@ -23,7 +25,7 @@
 
 set -euo pipefail
 
-: "${POD_NAME_PREFIX:?}" "${IMAGE_TAG:?}" "${ARGO_DIFF_CONTEXT_STR:?}" \
+: "${POD_NAME_PREFIX:?}" "${IMAGE:?}" "${ARGO_DIFF_CONTEXT_STR:?}" \
   "${ARGO_DIFF_SHA:?}" "${ARGO_DIFF_HEAD_REF:?}" "${ARGO_DIFF_REPOSITORY:?}" \
   "${GITHUB_TOKEN:?}" "${PR_REF:?}" "${EXPECT_EXIT:?}"
 
@@ -40,12 +42,14 @@ spec:
     - name: argo-diff
       command:
         - /app/argo-diff
-      image: ghcr.io/vince-riv/argo-diff:${IMAGE_TAG}
+      image: ${IMAGE}
+      imagePullPolicy: Never
       env:
         - name: ARGO_DIFF_COMMENT_PREAMBLE
           value: |
             ## Argo-Diff - Ephemeral Environment Test
-            This argo-diff should have the same output every run
+        - name: ARGO_DIFF_COMMENT_NOTICE
+          value: "This argo-diff should have the same output every run"
         - name: ARGO_DIFF_CONTEXT_STR
           value: "${ARGO_DIFF_CONTEXT_STR}"
         - name: ARGO_DIFF_SKIP_REF_CHECK

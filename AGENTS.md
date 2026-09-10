@@ -26,7 +26,7 @@ changes.
 | `docs/` | Screenshots and example raw Kubernetes manifests |
 | `scripts/` | `prep-release.sh` — bumps every version-pinned file before a release |
 | `test/` | Fixtures and runner for the k3s end-to-end test |
-| `temp/` | Gitignored scratch dir used by the Docker build and `post-local.sh` |
+| `temp/` | Gitignored scratch dir used by Docker image builds (dockerbuild + k3s e2e) and `post-local.sh` |
 
 ## Overview
 
@@ -102,7 +102,7 @@ mocking points — see the relevant `context.md`.
 Workflows in `.github/workflows/`:
 
 - **go.yml** — build, `go fmt`, tests, and lint (golangci-lint v2, `only-new-issues`; PRs only).
-- **dockerbuild.yml** — GoReleaser build + multi-arch image publish to `ghcr.io`.
+- **dockerbuild.yml** — GoReleaser build + multi-arch image publish to `ghcr.io` on `push` to `main` / `release-*` (no tag trigger; PRs build only, no push).
 - **k3s.yml** — end-to-end test on a k3s cluster with ArgoCD, using `test/` (see `test/context.md`).
 - **release.yml** — cuts a release on an `X.Y.Z[-suffix]` tag and moves the floating `vX` /
   `actions-vX` tags.

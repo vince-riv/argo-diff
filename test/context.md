@@ -30,9 +30,13 @@ should show up in the e2e diff has to be reflected there too.
 
 ## run-argo-diff-pod.sh
 
-Required env: `POD_NAME_PREFIX`, `IMAGE_TAG`, `ARGO_DIFF_CONTEXT_STR`, `ARGO_DIFF_SHA`,
+Required env: `POD_NAME_PREFIX`, `IMAGE`, `ARGO_DIFF_CONTEXT_STR`, `ARGO_DIFF_SHA`,
 `ARGO_DIFF_HEAD_REF`, `ARGO_DIFF_REPOSITORY`, `GITHUB_TOKEN`, `PR_REF`, `EXPECT_EXIT`
 (`0` or `nonzero`). Optional `REQUIRE_LOG` asserts a substring appears in the pod logs.
+
+`IMAGE` is a full image reference (`argo-diff:e2e`). `k3s.yml` builds it from the PR's own source
+and side-loads it into k3d, so the pod runs with `imagePullPolicy: Never` and there is no registry
+dependency.
 
 The `ARGO_DIFF_*` names exist because `GITHUB_SHA`, `GITHUB_HEAD_REF`, and `GITHUB_REPOSITORY` are
 GitHub Actions' reserved defaults — a step's own `env:` block cannot override them, so the script
@@ -45,10 +49,34 @@ phase, prints the logs, and compares the container's exit code against `EXPECT_E
 
 ## Workflow shape
 
-`k3s.yml` runs on PRs touching `test/**` or the workflow itself, and on a successful `Docker build`
-`workflow_run` (so it can test the `pr-<n>` image built from that PR). It runs two scenarios:
-the healthy apps (`EXPECT_EXIT=0`), then — after deleting `meta` (finalizer removed first, since its
-`selfHeal` would resurrect its children) and applying the broken app — the failure case
-(`EXPECT_EXIT=nonzero`, `REQUIRE_LOG="Failed to diff application broken-deployment"`).
+`k3s.yml` has two triggers:
 
-Both runs comment on the PR, so their output is visible on the PR that triggered them.
+- **`pull_request`** — same-repo branches only, on paths that affect the test: `test/**`, the
+  workflow itself, `charts/test-basic-deployment/**`, any `.go` file, `go.mod`/`go.sum`, `Dockerfile`.
+  The job `if:` skips fork PRs, because a fork PR gets a read-only `GITHUB_TOKEN` and cannot post the
+  argo-diff comment.
+- **`workflow_dispatch`** with a required `pr` input — the manual path for **fork PRs**. A maintainer
+  runs it against a PR number; the run gets a normal write token. `github.event.workflow_run` was
+  never usable for forks (its `pull_requests` array is always empty), so there is no automatic fork
+  path. Note a dispatch runs the workflow file from its target ref (usually `main`), so `k3s.yml`
+  changes in a fork PR are not exercised by the dispatch.
+
+  **Security:** a dispatch checks out and runs PR-authored code (`go build`, `docker build`,
+  `run-argo-diff-pod.sh`) with the job's `pull-requests: write` token. Review the fork's diff before
+  dispatching. The token has no `contents` / `packages` write, which bounds the damage.
+
+The `pr_info` step resolves the PR number, head/base refs, and head sha — from the event payload for
+`pull_request`, or via `gh pr view` for `workflow_dispatch` (which also normalizes `#123` / a PR URL
+to the integer). Checkout uses the resolved **head sha**, not `refs/pull/<n>/merge`: the merge ref is
+absent on a conflicted PR and can move mid-run, and the real diff is computed against the live PR via
+the API anyway.
+
+The image is built in-workflow: `go build` a linux/amd64 binary into `temp/`, `docker build` the
+`Dockerfile`, then `k3d image import` into the cluster. Nothing is pushed to a registry, so the test
+no longer depends on the `Docker build` workflow.
+
+It runs two scenarios: the healthy apps (`EXPECT_EXIT=0`), then — after deleting `meta` (finalizer
+removed first, since its `selfHeal` would resurrect its children) and applying the broken app — the
+failure case (`EXPECT_EXIT=nonzero`, `REQUIRE_LOG="Failed to diff application broken-deployment"`).
+
+Both runs comment on the PR, so their output is visible on the PR under test.
