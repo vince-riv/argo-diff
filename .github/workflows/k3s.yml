@@ -2,15 +2,22 @@
 name: K3s Argo-Diff Test
 
 on:
-  workflow_run:
-    workflows: ["Docker build"]
-    types:
-      - completed
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Pull request number to test (use this for fork PRs)'
+        required: true
+        type: string
   pull_request:
     branches: ["main"]
     paths:
       - '.github/workflows/k3s.yml'
       - 'test/**'
+      - 'charts/test-basic-deployment/**'
+      - '**/**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
 
 permissions:
   contents: read
@@ -18,11 +25,18 @@ permissions:
 
 env:
   ARGOCD_OPTS: '--port-forward --port-forward-namespace argocd --insecure --plaintext'
+  # Built in-workflow and side-loaded into k3d - never pushed to a registry, so
+  # this test has no dependency on the "Docker build" workflow or ghcr.io.
+  ARGO_DIFF_IMAGE: argo-diff:e2e
 
 jobs:
   k3s:
-    # Only run on pull_request events or successful workflow_run from dockerbuild in a pull request
-    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success') }}
+    # workflow_dispatch: always. This is the manual path for fork PRs - a fork
+    # PR gets a read-only GITHUB_TOKEN on pull_request and cannot post the
+    # argo-diff comment, and github.event.workflow_run.pull_requests was always
+    # empty for forks, so the old workflow_run path could not resolve them.
+    # pull_request: only for same-repo branches; fork PRs must use workflow_dispatch.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository }}
     strategy:
       fail-fast: false
       matrix:
@@ -30,42 +44,81 @@ jobs:
     name: K8s ${{ matrix.k8s }}
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve PR context
+        id: pr_info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_PR: ${{ github.event.inputs.pr }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_HEAD_REF: ${{ github.head_ref }}
+          EVENT_BASE_REF: ${{ github.base_ref }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            # Fork PRs expose no PR context in the event payload, so read it
+            # back from the API using the dispatched PR number.
+            PR_NUMBER="$DISPATCH_PR"
+            pr_json=$(gh pr view "$PR_NUMBER" --json headRefName,baseRefName,headRefOid)
+            HEAD_REF=$(jq -r '.headRefName' <<<"$pr_json")
+            BASE_REF=$(jq -r '.baseRefName' <<<"$pr_json")
+            HEAD_SHA=$(jq -r '.headRefOid' <<<"$pr_json")
+          else
+            PR_NUMBER="$EVENT_PR_NUMBER"
+            HEAD_REF="$EVENT_HEAD_REF"
+            BASE_REF="$EVENT_BASE_REF"
+            HEAD_SHA="$EVENT_HEAD_SHA"
+          fi
+
+          if [[ -z "$PR_NUMBER" || "$PR_NUMBER" == "null" ]]; then
+            echo "::error::Could not determine a PR number to test"
+            exit 1
+          fi
+
+          {
+            echo "PR_NUMBER=${PR_NUMBER}"
+            echo "HEAD_REF=${HEAD_REF}"
+            echo "BASE_REF=${BASE_REF}"
+            echo "HEAD_SHA=${HEAD_SHA}"
+            echo "PR_REF=refs/pull/${PR_NUMBER}/merge"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "PR number: ${PR_NUMBER}"
+          echo "Head ref (source branch): ${HEAD_REF}"
+          echo "Base ref (target branch): ${BASE_REF}"
+          echo "Head sha: ${HEAD_SHA}"
+
       - name: Git Checkout
         id: git_checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # The PR merge ref works for same-repo and fork PRs alike, so the
+          # workflow scripts and test fixtures come from the PR under test.
+          ref: refs/pull/${{ steps.pr_info.outputs.PR_NUMBER }}/merge
+          fetch-depth: '50'
+          fetch-tags: 'true'
 
-      - name: Determine argo-diff image tag and PR refs
-        id: pr_info
-        env:
-          PR_DATA: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+      - name: Set up Go
+        id: setup_go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build argo-diff binary
+        id: go_build
+        timeout-minutes: 3
         run: |
-          # Default values
-          IMAGE_TAG="main"
-          HEAD_REF="${{ github.head_ref }}"
-          BASE_REF="${{ github.base_ref }}"
-          PR_REF="${{ github.ref }}"
+          mkdir -p temp
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -ldflags "-s -w -X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo e2e)" \
+            -o temp/argo-diff-linux-amd64 ./cmd
 
-          if [[ "${{ github.event_name }}" == "workflow_run" && "${{ github.event.workflow_run.event }}" == "pull_request" ]]; then
-            # Triggered by dockerbuild.yml workflow on a PR - extract PR context from workflow_run
-            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.[0].number')
-            HEAD_REF=$(echo "$PR_DATA" | jq -r '.[0].head.ref')
-            BASE_REF=$(echo "$PR_DATA" | jq -r '.[0].base.ref')
-            if [[ -n "$PR_NUMBER" && "$PR_NUMBER" != "null" ]]; then
-              IMAGE_TAG="pr-${PR_NUMBER}"
-              PR_REF="refs/pull/${PR_NUMBER}/merge"
-            fi
-          fi
-
-          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "HEAD_REF=${HEAD_REF}" >> $GITHUB_OUTPUT
-          echo "BASE_REF=${BASE_REF}" >> $GITHUB_OUTPUT
-          echo "PR_REF=${PR_REF}" >> $GITHUB_OUTPUT
-          echo "Using argo-diff image tag: ${IMAGE_TAG}"
-          echo "Head ref (source branch): ${HEAD_REF}"
-          echo "Base ref (target branch): ${BASE_REF}"
-          echo "PR ref: ${PR_REF}"
+      - name: Build argo-diff image
+        id: docker_build
+        timeout-minutes: 3
+        run: docker build --build-arg TARGETARCH=amd64 -t "$ARGO_DIFF_IMAGE" -f Dockerfile .
 
       - name: K3d/K3s Setup
         id: k3s_setup
@@ -79,6 +132,15 @@ jobs:
         id: k3s_verify
         timeout-minutes: 1
         run: kubectl version
+
+      - name: Import argo-diff image into k3d
+        id: k3d_import
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          cluster=$(k3d cluster list -o json | jq -r '.[0].name')
+          echo "Importing $ARGO_DIFF_IMAGE into k3d cluster: $cluster"
+          k3d image import "$ARGO_DIFF_IMAGE" --cluster "$cluster"
 
       - name: Install ArgoCD via HelmChart CRD
         id: argocd_install
@@ -161,9 +223,9 @@ jobs:
         timeout-minutes: 2
         env:
           POD_NAME_PREFIX: argo-diff-healthy
-          IMAGE_TAG: ${{ steps.pr_info.outputs.IMAGE_TAG }}
+          IMAGE: ${{ env.ARGO_DIFF_IMAGE }}
           ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test
-          ARGO_DIFF_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ARGO_DIFF_SHA: ${{ steps.pr_info.outputs.HEAD_SHA }}
           ARGO_DIFF_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
           ARGO_DIFF_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -190,9 +252,9 @@ jobs:
         timeout-minutes: 2
         env:
           POD_NAME_PREFIX: argo-diff-failure
-          IMAGE_TAG: ${{ steps.pr_info.outputs.IMAGE_TAG }}
+          IMAGE: ${{ env.ARGO_DIFF_IMAGE }}
           ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test-failure
-          ARGO_DIFF_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ARGO_DIFF_SHA: ${{ steps.pr_info.outputs.HEAD_SHA }}
           ARGO_DIFF_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
           ARGO_DIFF_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

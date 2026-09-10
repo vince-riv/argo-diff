@@ -26,7 +26,7 @@ changes.
 | `docs/` | Screenshots and example raw Kubernetes manifests |
 | `scripts/` | `prep-release.sh` — bumps every version-pinned file before a release |
 | `test/` | Fixtures and runner for the k3s end-to-end test |
-| `temp/` | Gitignored scratch dir used by the Docker build and `post-local.sh` |
+| `temp/` | Gitignored scratch dir used by Docker image builds (dockerbuild + k3s e2e) and `post-local.sh` |
 
 ## Overview
 
