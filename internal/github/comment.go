@@ -35,9 +35,9 @@ func init() {
 	mux = &sync.RWMutex{}
 	isGithubAction = os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
 	contextStr = strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
-	commentPreamble = boundPreamble(strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE")))
+	commentPreamble = boundPreamble("ARGO_DIFF_COMMENT_PREAMBLE", strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE")))
 	if commentPreamble == "" {
-		commentPreamble = boundPreamble(contextStr)
+		commentPreamble = boundPreamble("ARGO_DIFF_CONTEXT_STR", contextStr)
 	}
 	if isGithubAction {
 		log.Debug().Msg("Running in github actions")
@@ -333,11 +333,16 @@ const maxPreambleLen = 4000
 // subtracted from the budget by commentWrapperLen(), so a large enough one
 // leaves no room for content and, past githubCommentHardMax, no room for the
 // preamble itself.
-func boundPreamble(s string) string {
+//
+// name is the environment variable the value actually came from: the preamble
+// falls back to ARGO_DIFF_CONTEXT_STR, and telling that operator to shorten an
+// ARGO_DIFF_COMMENT_PREAMBLE they never set sends them looking in the wrong
+// place.
+func boundPreamble(name, s string) string {
 	if len(s) <= maxPreambleLen {
 		return s
 	}
-	log.Warn().Msgf("ARGO_DIFF_COMMENT_PREAMBLE is %d bytes - truncating to %d", len(s), maxPreambleLen)
+	log.Warn().Msgf("%s is %d bytes - truncating the comment preamble to %d", name, len(s), maxPreambleLen)
 	return truncateBytes(s, maxPreambleLen)
 }
 

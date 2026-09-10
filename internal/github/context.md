@@ -124,6 +124,9 @@ limit  := budget - splitReserve
   but `commentIdentifier` carries `ARGO_DIFF_CONTEXT_STR`, which stays unbounded because comment
   matching depends on it — so the clamp is a live guard, not belt-and-braces.
 - `boundPreamble()` in `comment.go` caps `ARGO_DIFF_COMMENT_PREAMBLE` at `maxPreambleLen` (4000).
+  It takes the variable name as an argument because the preamble falls back to
+  `ARGO_DIFF_CONTEXT_STR` — an operator with a long context string and no preamble set would
+  otherwise be told to shorten a variable they never configured.
   Every input to the budget is now bounded; the preamble was the last one that was not, and
   `commentWrapperLen()` subtracts it from every body. README documents "150 chars or less", so the
   cap is generous by design — it exists to bound the input, not to police the guideline.

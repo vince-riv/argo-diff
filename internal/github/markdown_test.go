@@ -541,17 +541,18 @@ func TestBudgetFloorNeverExceedsTheHardMax(t *testing.T) {
 
 // The preamble was the last input to the size budget that nothing bounded.
 func TestBoundPreamble(t *testing.T) {
-	if got := boundPreamble("short"); got != "short" {
+	const v = "ARGO_DIFF_COMMENT_PREAMBLE"
+	if got := boundPreamble(v, "short"); got != "short" {
 		t.Errorf("boundPreamble(short) = %q, want it untouched", got)
 	}
-	if got := boundPreamble(strings.Repeat("x", maxPreambleLen)); len(got) != maxPreambleLen {
+	if got := boundPreamble(v, strings.Repeat("x", maxPreambleLen)); len(got) != maxPreambleLen {
 		t.Errorf("boundPreamble at the limit = %d bytes, want %d", len(got), maxPreambleLen)
 	}
-	if got := boundPreamble(strings.Repeat("x", 262000)); len(got) != maxPreambleLen {
+	if got := boundPreamble(v, strings.Repeat("x", 262000)); len(got) != maxPreambleLen {
 		t.Errorf("boundPreamble(262000) = %d bytes, want %d", len(got), maxPreambleLen)
 	}
 	// a cut must not split a rune
-	if got := boundPreamble(strings.Repeat("α", maxPreambleLen)); !utf8.ValidString(got) {
+	if got := boundPreamble(v, strings.Repeat("α", maxPreambleLen)); !utf8.ValidString(got) {
 		t.Error("boundPreamble split a multi-byte rune")
 	}
 }
