@@ -13,10 +13,11 @@ on:
       - 'Dockerfile'
   pull_request:
     branches: [main, "release-*"]
+    # PRs no longer push an image, so the only thing left to validate here is
+    # that the release tooling still builds. Scope to the files that can break
+    # it - go.yml covers plain Go compilation, and the push trigger above still
+    # catches multi-arch breakage from .go / go.mod changes on merge.
     paths:
-      - '**/**.go'
-      - 'go.mod'
-      - 'go.sum'
       - '.github/workflows/dockerbuild.yml'
       - '.goreleaser.yaml'
       - 'Dockerfile'
