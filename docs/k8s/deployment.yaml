@@ -50,6 +50,10 @@ spec:
             #  value: "argo-diff is being migrated to the new cluster on 1 Oct"
             #- name: ARGO_DIFF_COMMENT_COLLAPSE
             #  value: "auto"
+            #- name: ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT
+            #  value: "3"
+            #- name: ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT
+            #  value: "5"
             #- name: ARGO_DIFF_COMMENT_INDEX_COUNT
             #  value: "2"
             #- name: ARGO_DIFF_COMMENT_MAX_CHARS
