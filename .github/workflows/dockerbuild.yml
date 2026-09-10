@@ -77,6 +77,7 @@ jobs:
 
       -
         name: Set up QEMU
+        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4
       -
         name: Set up Docker Buildx
@@ -84,6 +85,7 @@ jobs:
       -
         name: Log in to container register
         id: login-ghcr
+        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -92,6 +94,7 @@ jobs:
       -
         name: Docker meta
         id: meta
+        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -99,19 +102,17 @@ jobs:
             type=schedule
             type=ref,event=branch
             type=sha,event=branch
-            type=ref,event=pr
-            type=sha,event=pr
       -
-        name: Build and push linux/amd64
-        ## only push amd64 on PRs, and only when the PR is not from a fork (forks can't push to ghcr.io)
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        name: Build linux/amd64 (no push)
+        ## PRs only validate that the image builds - the k3s e2e test builds its
+        ## own image, and publishing happens on push to main / release tags.
+        if: ${{ github.event_name == 'pull_request' }}
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: false
+          tags: argo-diff:pr
           platforms: linux/amd64
       -
         name: Build and push multi-arch

@@ -102,7 +102,7 @@ mocking points — see the relevant `context.md`.
 Workflows in `.github/workflows/`:
 
 - **go.yml** — build, `go fmt`, tests, and lint (golangci-lint v2, `only-new-issues`; PRs only).
-- **dockerbuild.yml** — GoReleaser build + multi-arch image publish to `ghcr.io`.
+- **dockerbuild.yml** — GoReleaser build + multi-arch image publish to `ghcr.io` (on `push` / tags; PRs build only, no push).
 - **k3s.yml** — end-to-end test on a k3s cluster with ArgoCD, using `test/` (see `test/context.md`).
 - **release.yml** — cuts a release on an `X.Y.Z[-suffix]` tag and moves the floating `vX` /
   `actions-vX` tags.
