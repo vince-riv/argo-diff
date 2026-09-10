@@ -693,6 +693,70 @@ func TestGetApplicationChangesNotDiffedGroupedWithParent(t *testing.T) {
 	}
 }
 
+func TestHasMatchingApplications(t *testing.T) {
+	appListData, filePath, err := readFileToByteArray(outputListApplications)
+	if err != nil {
+		t.Fatalf("Failed to read %s: %v", filePath, err)
+	}
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		return appListData, nil
+	}
+
+	tests := []struct {
+		name     string
+		repoName string
+		want     bool
+	}{
+		{"single-source match", "argo-diff-config", true},
+		{"multi-source-only match", "argo-diff-testing", true},
+		{"no match", "unrelated-repo", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			evtInfo := wh.EventInfo{
+				RepoOwner:      "vince-riv",
+				RepoName:       tt.repoName,
+				RepoDefaultRef: "main",
+				ChangeRef:      "my-branch",
+				BaseRef:        "main",
+			}
+			got, err := HasMatchingApplications(context.Background(), evtInfo)
+			if err != nil {
+				t.Fatalf("HasMatchingApplications() err'd: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("HasMatchingApplications() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasMatchingApplicationsListError(t *testing.T) {
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		return nil, fmt.Errorf("boom")
+	}
+	evtInfo := wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff-config"}
+	if _, err := HasMatchingApplications(context.Background(), evtInfo); err == nil {
+		t.Error("expected an error when listApplications() fails")
+	}
+}
+
+func TestHasMatchingApplicationsEmptyList(t *testing.T) {
+	originalExecArgoCdCli := execArgoCdCli
+	defer func() { execArgoCdCli = originalExecArgoCdCli }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		return []byte("[]"), nil
+	}
+	evtInfo := wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff-config"}
+	if _, err := HasMatchingApplications(context.Background(), evtInfo); err == nil {
+		t.Error("expected an error for an empty ArgoCD app list")
+	}
+}
+
 func TestVersionCheck(t *testing.T) {
 	if !versionCheck("2.12.1") {
 		t.Error("v2.12.1 should pass")

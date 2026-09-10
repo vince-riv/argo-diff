@@ -106,6 +106,14 @@ Matching rules worth knowing:
   absolute ones are repo-root relative; glob patterns (`*?[`) go through `filepath.Match`, plain
   ones are treated as directory prefixes.
 
+`HasMatchingApplications(ctx, eventInfo)` answers "does anything match" without diffing: it
+lists applications and runs the same `filterApplications()` (single-source, then multi-source)
+that wave 1 and wave 3 use, returning `true` on the first non-empty result. A `false` here
+guarantees `GetApplicationChanges()` would return an empty `appResList` and no error, since
+nested app-of-apps jobs (the only matches this doesn't see directly) are only ever queued by an
+already-matching parent app. It's the cheap pre-check behind `ARGO_DIFF_SKIP_UNMATCHED_EVENTS`
+in `internal/process_event` — see that package's `context.md`.
+
 ## Timeouts and partial results
 
 `GetApplicationChanges()` returns `([]ApplicationResourcesWithChanges, notDiffed []string, error)`.

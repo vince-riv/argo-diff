@@ -14,9 +14,13 @@ into an exit code.
    `github.GetPullRequest()` fills in `Sha`, `ChangeRef`, and `BaseRef` from the live PR.
 3. **Changed files** via `github.ListPullRequestFiles()`, used downstream by the
    `manifest-generate-paths` filter. A failure here is recorded but not fatal.
-4. Commit status → `pending`.
-5. `argocd.GetApplicationChanges(diffCtx, eventInfo)`.
-6. Build the markdown, choose the final status, comment.
+4. **Optional match check.** If `ARGO_DIFF_SKIP_UNMATCHED_EVENTS=true`,
+   `argocd.HasMatchingApplications(ctx, eventInfo)` runs here — a cheap check (list + filter,
+   no diffing) — and the function returns with no commit status and no comment at all if
+   nothing matches. See "Reporting rules" below.
+5. Commit status → `pending`.
+6. `argocd.GetApplicationChanges(diffCtx, eventInfo)`.
+7. Build the markdown, choose the final status, comment.
 
 ## Timeout budget
 
@@ -40,6 +44,9 @@ into an exit code.
 - No changes, no warnings, and nothing skipped → `github.Comment()` is called with an **empty**
   body list, which clears out any stale argo-diff comments.
 - `unknownCount` is vestigial: it is declared and reported but never incremented.
+- `ARGO_DIFF_SKIP_UNMATCHED_EVENTS`'s no-match case returns before any status or comment call —
+  not even the empty-body "clear stale comments" call above. So a PR that previously matched (and
+  got a diff comment) and later stops matching keeps its stale comment under this flag.
 
 ## Tests
 
