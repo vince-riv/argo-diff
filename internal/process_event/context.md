@@ -49,6 +49,17 @@ into an exit code.
   prefix, which is what they used to share — severity a reader can see is worth a struct field.
 - `CommentMarkdown.Notices` is set from `config.Notices()` — comment-level advisories that describe
   the environment, not this event. See `internal/config/context.md`.
+- **A `NoticeStr` is a partial diff that deliberately does not fail the run**, which sits against
+  the `notDiffed` rule above. The one producer is an app-of-apps whose children have changes and
+  could not be enumerated (`internal/argocd/context.md`), so the comment is genuinely incomplete
+  and the status is still `success`. That is a decision, not an oversight: the parent's own diff is
+  good and worth showing, and the failure is usually an ArgoCD-side repository problem rather than
+  anything about the PR. The notice says plainly that the child diffs are absent, which is what a
+  reader needs to judge it. Revisit by routing it to `notDiffed` — but `timeoutMarkdown()`'s "ran
+  out of time" wording would then be wrong for it and would need its own block.
+- An app with a `NoticeStr` but no changed resources cannot happen today (`processTopLevelApp()`
+  returns first), but the `else if` logs a warning rather than dropping the advisory in silence,
+  since that invariant lives in another package.
 - No changes, no warnings, and nothing skipped → `github.Comment()` is called with an **empty**
   body list, which clears out any stale argo-diff comments.
 

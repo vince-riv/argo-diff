@@ -50,10 +50,15 @@ const (
 )
 
 const (
-	detailsClose      = "</details>\n\n"
-	appSeparator      = "\n---\n\n"
-	continuedMarker   = "\n\n_[Continued in next comment]_\n"
-	truncatedMarker   = "\n\n`<<< TRUNCATED - comment size limit reached >>>`\n"
+	detailsClose    = "</details>\n\n"
+	appSeparator    = "\n---\n\n"
+	continuedMarker = "\n\n_[Continued in next comment]_\n"
+	truncatedMarker = "\n\n`<<< TRUNCATED - comment size limit reached >>>`\n"
+	// truncFenceClose and truncTailReserve cover what finalize() appends after
+	// its cut: a closing code fence, and up to two </details> - the deepest
+	// nesting this renderer produces (application, then resource).
+	truncFenceClose   = "\n```\n"
+	truncTailReserve  = len(truncFenceClose) + 2*len(detailsClose)
 	partHeaderReserve = 64
 	// splitReserve is every byte String() appends after a fit check has already
 	// passed - the closing tags, the continuation marker, and the part header
@@ -257,7 +262,9 @@ func truncateLines(s string, maxLen int) string {
 func diffStats(diffStr string) (added, removed int) {
 	for line := range strings.SplitSeq(diffStr, "\n") {
 		switch {
-		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+		// match the file headers exactly, trailing space included: a removed
+		// YAML document separator renders as "----" and must still count
+		case strings.HasPrefix(line, "+++ "), strings.HasPrefix(line, "--- "):
 		case strings.HasPrefix(line, "+"):
 			added++
 		case strings.HasPrefix(line, "-"):
@@ -406,7 +413,13 @@ func (a ArgoAppMarkdown) OverviewStr(continued, open bool) string {
 // leaving a resource no body can hold.
 func (a ArgoAppMarkdown) maxResourceBodyLen(summary string) int {
 	const markup = 64 // the <details>/<summary> scaffolding around the body
-	n := commentBudget() - splitReserve - len(a.OverviewStr(true, false)) - len(summary) - markup
+	// Reserve everything String() emits ahead of the first resource: the rule,
+	// this app's alerts - up to maxNoticeLen each, so ~8KB - and the header.
+	// OverviewStr(false, true) is the first-body form and the larger of the
+	// two. ErrStr/NoticeStr are set by AppMarkdown() before any
+	// AddResourceDiff() call, so alerts() is complete here.
+	head := len(appSeparator) + len(a.alerts()) + len(a.OverviewStr(false, true))
+	n := commentBudget() - splitReserve - head - len(summary) - markup
 	if n < minResourceLen {
 		return minResourceLen
 	}
@@ -532,8 +545,12 @@ func (c CommentMarkdown) String() []string {
 		overview := head + a.OverviewStr(false, appOpen)
 		resOpen := c.resourceOpen(a)
 		// look ahead to the first resource: opening an application block at the
-		// tail of a body that can't hold any of its diffs just wastes a header
-		if len(md)+len(overview)+len(a.Resources[0].render(resOpen)) > limit {
+		// tail of a body that can't hold any of its diffs just wastes a header.
+		// The second term is the same progress guard the resource loop uses - if
+		// it doesn't fit in an empty body either, splitting only emits the
+		// preamble on its own and still doesn't fit.
+		first := a.Resources[0].render(resOpen)
+		if len(md)+len(overview)+len(first) > limit && len(overview)+len(first) <= limit {
 			flush()
 		}
 		md += overview
@@ -572,7 +589,18 @@ func finalize(bodies []string, budget int) []string {
 			continue
 		}
 		log.Warn().Msgf("comment body %d is %d bytes, over the %d byte budget - truncating", i+1, len(b), budget)
-		bodies[i] = truncateBytes(b, budget-len(truncatedMarker)) + truncatedMarker
+		t := truncateBytes(b, budget-len(truncatedMarker)-truncTailReserve)
+		// The cut lands at an arbitrary byte, almost always inside a resource.
+		// Close what it left open, innermost first, or the fence swallows the
+		// truncation marker and the unclosed <details> swallow everything after.
+		if strings.Count(t, "```")%2 != 0 {
+			t += truncFenceClose
+		}
+		t += truncatedMarker
+		for range strings.Count(t, "<details") - strings.Count(t, "</details>") {
+			t += detailsClose
+		}
+		bodies[i] = t
 	}
 	return bodies
 }

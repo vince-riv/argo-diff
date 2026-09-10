@@ -86,9 +86,10 @@ the `---` rule and the block. Consequences worth knowing:
   text and the ArgoCD link.
 - `appOpen()` never folds an application carrying a `NoticeStr` or `ErrStr`, whatever the auto
   thresholds say (an explicit `ARGO_DIFF_COMMENT_COLLAPSE=collapsed` still wins).
-- `checkBodyWellFormed()` in `markdown_test.go` walks `<details>` depth and fails on any `> [!`
-  line nested inside one. That is the regression guard — the bug is invisible in Go tests, since
-  the string looks perfectly fine.
+- `checkBodyWellFormed()` — a **test helper** in `markdown_test.go`, not a runtime check — walks
+  `<details>` depth and fails on any `> [!` line nested inside one. That is the regression guard,
+  and it only runs under `go test`. Nothing validates this at runtime, which is why the guard
+  matters: the emitted string looks perfectly fine from Go.
 - A fenced block inside an alert only renders when **every** one of its lines carries the `> `
   prefix, blank lines included — that is what `blockquote()` is for.
 - `syncString()` / `healthString()` emit literal Unicode emoji, not `:shortcodes:`. These strings
@@ -120,8 +121,11 @@ limit  := budget - splitReserve
 - `splitReserve` covers everything appended *after* a fit check has already passed — the closing
   `</details>`, the continuation marker, and the `part i of n` header `finalize()` prepends.
 - `ArgoAppMarkdown.maxResourceBodyLen()` bounds a single resource to what is left of one body once
-  that app's continuation header and the resource's own markup are subtracted, so a diff can never
-  be too big for any body. Over it, the resource renders as `<<< DIFF TOO LARGE TO DISPLAY >>>`.
+  **everything `String()` emits ahead of it** is subtracted — the `---` rule, this app's alerts
+  (up to `maxNoticeLen` each, so ~8KB), the `<details>` header and the resource's own markup — so a
+  diff can never be too big for any body. Over it, the resource renders as
+  `<<< DIFF TOO LARGE TO DISPLAY >>>`. Missing the alerts here is what used to overshoot the budget
+  and drop a body into `finalize()` mid-markup.
 - `ErrStr`, `NoticeStr` and each entry in `Notices` are bounded to `maxNoticeLen` (4000) by
   `truncateNotice()`; `HealthMsg` to `maxHealthMsgLen` (500). All three come from unbounded input
   (`err.Error()`, operator config, the cluster) and share the budget with the diffs.
@@ -129,7 +133,11 @@ limit  := budget - splitReserve
   `truncateLines()` always returns a string ending in exactly one newline, which is what lets a
   caller close a code fence on its own line — an unclosed fence swallows every diff below it.
 - `finalize()` is the last guard: any body still over budget is hard-truncated with a visible
-  marker. A 422 means no comment at all, which is worse than a truncated one.
+  marker. A 422 means no comment at all, which is worse than a truncated one. The cut lands at an
+  arbitrary byte — almost always inside a resource, since resources are the bulk of a body — so it
+  **closes what it cuts**: an odd ` ``` ` count gets a closing fence, then the marker, then one
+  `</details>` per unclosed tag. Without that the fence swallows the marker and the reader sees the
+  truncation notice as diff text. `truncTailReserve` holds the room for it.
 - Every body is self-contained: balanced `<details>` tags and an even number of code fences. A
   mid-application split closes the app block before the continuation marker.
 - `ARGOCD_UI_BASE_URL` adds a link to each app; the app path is hardcoded to `/applications/argocd/`.

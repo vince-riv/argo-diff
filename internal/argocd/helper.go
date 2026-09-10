@@ -178,7 +178,15 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 			// res.diffResult, only its app-of-apps children are missing. That's
 			// advisory, not fatal - notDiffed would report it as a timeout and
 			// fail the run, and WarnStr would suppress the diff we do have.
-			appResChanges.NoticeStr = fmt.Sprintf("Unable to discover app-of-apps children of %s: %s", app.Name, err.Error())
+			//
+			// argoAppsWithChanges() only reaches an error after it has confirmed
+			// this app's diff contains changed argoproj.io/Application
+			// resources, so the children it couldn't enumerate are children
+			// *with changes*. The notice has to say their diffs are absent -
+			// "couldn't discover them" alone reads as "there were none".
+			appResChanges.NoticeStr = fmt.Sprintf(
+				"Unable to enumerate the app-of-apps children of %s, so their diffs are missing from this comment: %s",
+				app.Name, err.Error())
 		}
 		log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.Name)
 		return res

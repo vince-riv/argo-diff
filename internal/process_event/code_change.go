@@ -196,6 +196,12 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 				for _, ar := range a.ChangedResources {
 					appMarkdown.AddResourceDiff(ar.Group, ar.Kind, ar.Name, ar.Namespace, ar.DiffStr)
 				}
+			} else if a.NoticeStr != "" {
+				// today processTopLevelApp() returns before it can set NoticeStr
+				// on an app with no changed resources, so this is unreachable -
+				// but that invariant lives in another package, and a future
+				// producer breaking it would otherwise drop the advisory silently
+				log.Warn().Msgf("%s has a NoticeStr but no changed resources - dropping it: %s", appName, a.NoticeStr)
 			}
 		}
 	}

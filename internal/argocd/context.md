@@ -128,7 +128,10 @@ nested diff was missing.
 
 The one producer today is `processTopLevelApp()`: when `argoAppsWithChanges()` fails while `ctx`
 still has time left, the parent's own diff is already in `res.diffResult`, but its app-of-apps
-children are gone. That is `NoticeStr`, not `notDiffed` (which reporting renders as
+children are gone. Note **which** children: `argoAppsWithChanges()` returns `nil` early when it
+finds no changed `argoproj.io/Application` resources, so its only error path is reached *after*
+confirming there are children with changes. The notice therefore says their diffs are missing from
+the comment — "couldn't discover them" on its own reads as "there were none". That is `NoticeStr`, not `notDiffed` (which reporting renders as
 "argo-diff ran out of time" and turns into a `*callerErr`) and not `WarnStr` (which would throw
 away the diff that did work). `res.diffResult` points at the same local `appResChanges`, so setting
 the field after the pointer is taken is enough. The `ctx.Err() != nil` half of that branch is

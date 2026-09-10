@@ -411,3 +411,61 @@ func TestCommentWrapperLenMatchesWrapComment(t *testing.T) {
 		}
 	}
 }
+
+// An application carrying an alert *and* a near-cap resource is the case the
+// budget used to miss: maxResourceBodyLen() reserved only the <details> header,
+// not the ~8KB the hoisted alerts can add ahead of it, so the body overshot and
+// fell through to finalize() - which then cut through an open ```diff fence and
+// two open <details>.
+func TestAlertPlusLargeResourceStaysWellFormed(t *testing.T) {
+	t.Setenv("ARGO_DIFF_COMMENT_MAX_CHARS", "20000")
+	setWrapper(t, "", "<!-- argo-diff -->")
+
+	for _, lines := range []int{150, 180, 400} {
+		t.Run(fmt.Sprintf("%d changed lines", lines), func(t *testing.T) {
+			c := CommentMarkdown{Preamble: "**1 of 1 apps with changes**\n"}
+			a := c.AppMarkdown(AppMarkdownOpts{
+				Name:       "noisy",
+				NoticeStr:  strings.Repeat("n", maxNoticeLen),
+				SyncStatus: "Synced", HealthStatus: "Healthy",
+			})
+			a.AddResourceDiff("apps", "Deployment", "web", "prod", fakeDiff(lines))
+
+			bodies := c.String()
+			for i, b := range bodies {
+				checkBodyWellFormed(t, i, b)
+				if got := wrappedLen(b); got > commentMaxLen() {
+					t.Errorf("body %d is %d bytes once wrapped, over the %d byte cap", i, got, commentMaxLen())
+				}
+				if strings.TrimSpace(b) == "" {
+					t.Errorf("body %d is empty", i)
+				}
+			}
+		})
+	}
+}
+
+// finalize() is the declared last guard, so it has to be safe on its own even
+// when a body reaches it mid-markup.
+func TestFinalizeClosesWhatItCuts(t *testing.T) {
+	body := "text\n\n<details open>\n<summary>x</summary>\n\n<details open>\n<summary>y</summary>\n\n```diff\n" +
+		strings.Repeat("-  some removed line\n", 500) +
+		"```\n\n</details>\n\n</details>\n\n"
+	const budget = 2000
+	got := finalize([]string{body}, budget)
+	if len(got) != 1 {
+		t.Fatalf("got %d bodies, want 1", len(got))
+	}
+	checkBodyWellFormed(t, 0, got[0])
+	if len(got[0]) > budget {
+		t.Errorf("truncated body is %d bytes, over the %d byte budget", len(got[0]), budget)
+	}
+	if !strings.Contains(got[0], "TRUNCATED") {
+		t.Error("truncation is not visible to the reader")
+	}
+	// the marker must sit outside the fence, or it renders as diff text
+	fenceIdx := strings.LastIndex(got[0], "```")
+	if fenceIdx > strings.Index(got[0], "TRUNCATED") {
+		t.Errorf("truncation marker is inside the code fence:\n%s", got[0])
+	}
+}

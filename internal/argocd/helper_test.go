@@ -379,8 +379,12 @@ func TestGetApplicationChangesOutOfTimeEnumeratingNestedApps(t *testing.T) {
 	}
 	// the deadline path stays on notDiffed; NoticeStr is for the non-timeout
 	// failure only, so reporting can't describe a real error as a timeout or
-	// vice versa
-	if len(appResList) == 1 && appResList[0].NoticeStr != "" {
+	// vice versa. Fatalf rather than a guarded Errorf: a guard would turn a
+	// regression in the result count into no signal at all here.
+	if len(appResList) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(appResList))
+	}
+	if appResList[0].NoticeStr != "" {
 		t.Errorf("NoticeStr = %q, want empty when the deadline is what stopped nested app enumeration", appResList[0].NoticeStr)
 	}
 }
