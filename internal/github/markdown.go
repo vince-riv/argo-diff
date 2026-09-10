@@ -51,6 +51,7 @@ const (
 
 const (
 	detailsClose      = "</details>\n\n"
+	appSeparator      = "\n---\n\n"
 	continuedMarker   = "\n\n_[Continued in next comment]_\n"
 	truncatedMarker   = "\n\n`<<< TRUNCATED - comment size limit reached >>>`\n"
 	partHeaderReserve = 64
@@ -357,24 +358,43 @@ func (a ArgoAppMarkdown) summaryLine(continued bool) string {
 	return strings.Join(parts, " · ")
 }
 
-func (a ArgoAppMarkdown) OverviewStr(continued, open bool) string {
-	md := "\n"
-	if !continued {
-		md += "---\n"
+// alerts renders this application's advisory and error blocks. String() emits
+// them OUTSIDE the app's <details>, and they name the application because of
+// it.
+//
+// GitHub renders its coloured alert boxes only at the top level of a document.
+// Inside any HTML element - <details> included - the extension is skipped and
+// the block degrades to a plain blockquote with a literal "[!NOTE]" as its
+// first line. No amount of blank lines or wrapper markup changes that, so the
+// alerts have to live outside the block. Keeping them there is also better
+// behaviour: a folded application can no longer hide the reason its diffs are
+// missing or suspect.
+func (a ArgoAppMarkdown) alerts() string {
+	md := ""
+	if a.ErrStr != "" {
+		body := fmt.Sprintf("**%s** - diff failed, so no manifests are shown. %s · %s\n\n```\n%s\n```",
+			a.AppName, syncString(a.SyncStatus), healthString(a.HealthStatus), a.ErrStr)
+		if u := a.url(); u != "" {
+			body += fmt.Sprintf("\n\n[Open in ArgoCD ↗](%s)", u)
+		}
+		md += alert("CAUTION", body)
 	}
-	md += detailsTag(open) + "\n"
+	if a.NoticeStr != "" {
+		md += alert("NOTE", fmt.Sprintf("**%s** - %s", a.AppName, a.NoticeStr))
+	}
+	return md
+}
+
+// OverviewStr is the application's <details> header. It carries no alerts - see
+// alerts() for why those sit outside the block.
+func (a ArgoAppMarkdown) OverviewStr(continued, open bool) string {
+	md := detailsTag(open) + "\n"
 	md += "<summary>" + a.summaryLine(continued) + "</summary>\n\n"
 	if u := a.url(); u != "" {
 		md += fmt.Sprintf("[Open in ArgoCD ↗](%s)\n\n", u)
 	}
 	if a.HealthMsg != "" {
 		md += "<sub>" + html.EscapeString(a.HealthMsg) + "</sub>\n\n"
-	}
-	if a.ErrStr != "" {
-		md += alert("CAUTION", "**Diff failed** - no manifests are shown for this application.\n\n```\n"+a.ErrStr+"\n```")
-	}
-	if a.NoticeStr != "" {
-		md += alert("NOTE", a.NoticeStr)
 	}
 	return md
 }
@@ -413,12 +433,18 @@ func (a *ArgoAppMarkdown) AddResourceDiff(group, kind, name, ns, diffStr string)
 }
 
 // appOpen and resourceOpen decide whether a block renders folded.
-func (c CommentMarkdown) appOpen() bool {
+func (c CommentMarkdown) appOpen(a *ArgoAppMarkdown) bool {
 	switch collapseMode() {
 	case collapseExpanded:
 		return true
 	case collapseCollapsed:
 		return false
+	}
+	// never fold an application carrying an advisory or an error: its alert
+	// says these diffs deserve a second look, so hiding them behind a fold
+	// works against the reader
+	if a.NoticeStr != "" || a.ErrStr != "" {
+		return true
 	}
 	return len(c.ArgoApps) <= autoCollapseAppCount
 }
@@ -471,8 +497,6 @@ func (c CommentMarkdown) String() []string {
 	if limit < minResourceLen {
 		limit = minResourceLen
 	}
-	appOpen := c.appOpen()
-
 	var res []string
 	md := c.Preamble
 	for _, n := range c.Notices {
@@ -490,14 +514,22 @@ func (c CommentMarkdown) String() []string {
 	}
 
 	for _, a := range c.ArgoApps {
-		overview := a.OverviewStr(false, appOpen)
+		appOpen := c.appOpen(a)
+		// the rule and the alerts precede the block, so the alerts stay at the
+		// top level of the document where GitHub will render them
+		head := appSeparator + a.alerts()
 		if len(a.Resources) == 0 {
-			if len(md)+len(overview) > limit {
+			// a failed application is its alert - there are no diffs to fold
+			if a.ErrStr == "" {
+				head += a.OverviewStr(false, appOpen) + detailsClose
+			}
+			if len(md)+len(head) > limit {
 				flush()
 			}
-			md += overview + detailsClose
+			md += head
 			continue
 		}
+		overview := head + a.OverviewStr(false, appOpen)
 		resOpen := c.resourceOpen(a)
 		// look ahead to the first resource: opening an application block at the
 		// tail of a body that can't hold any of its diffs just wastes a header

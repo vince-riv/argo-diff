@@ -49,6 +49,21 @@ func checkBodyWellFormed(t *testing.T, i int, body string) {
 	if n := strings.Count(body, "```"); n%2 != 0 {
 		t.Errorf("body %d has %d code fences, want an even number:\n%s", i, n, body)
 	}
+	// GitHub renders its coloured alert boxes only at the top level of a
+	// document. Inside a <details> the extension is skipped and the block
+	// degrades to a plain blockquote with a literal "[!NOTE]" first line, so an
+	// alert emitted in there is a rendering bug, not a style choice.
+	depth := 0
+	for _, line := range strings.Split(body, "\n") {
+		switch {
+		case strings.HasPrefix(line, "<details"):
+			depth++
+		case strings.HasPrefix(line, "</details>"):
+			depth--
+		case strings.HasPrefix(line, "> [!") && depth > 0:
+			t.Errorf("body %d has an alert %q nested %d <details> deep; GitHub won't render it:\n%s", i, line, depth, body)
+		}
+	}
 }
 
 // A fatal error and an advisory notice must be told apart at a glance. The
@@ -56,7 +71,7 @@ func checkBodyWellFormed(t *testing.T, i int, body string) {
 // notice renders as a blue [!NOTE] alert *above* diffs that are still worth
 // reading.
 func TestErrStrAndNoticeStrRenderDistinctly(t *testing.T) {
-	t.Run("notice sits above surviving diffs", func(t *testing.T) {
+	t.Run("notice sits above the app block and its diffs survive", func(t *testing.T) {
 		c := CommentMarkdown{}
 		a := c.AppMarkdown(AppMarkdownOpts{
 			Name:       "my-app",
@@ -78,20 +93,22 @@ func TestErrStrAndNoticeStrRenderDistinctly(t *testing.T) {
 		if strings.Contains(body, "[!CAUTION]") {
 			t.Errorf("an advisory notice must not render as a fatal alert:\n%s", body)
 		}
-		noticeIdx := strings.Index(body, "exit status 1")
-		diffIdx := strings.Index(body, "apps/Deployment")
-		if noticeIdx < 0 {
-			t.Fatal("notice text missing from comment body")
+		// the alert is detached from the block, so it has to name the app
+		if !strings.Contains(body, "**my-app**") {
+			t.Errorf("hoisted notice does not name its application:\n%s", body)
 		}
+		noticeIdx := strings.Index(body, "> [!NOTE]")
+		blockIdx := strings.Index(body, "<details")
+		diffIdx := strings.Index(body, "apps/Deployment")
 		if diffIdx < 0 {
 			t.Fatal("resource diff missing: an advisory notice must not suppress the diffs")
 		}
-		if noticeIdx > diffIdx {
-			t.Error("notice rendered below the diffs, want above them")
+		if noticeIdx > blockIdx {
+			t.Error("notice rendered below the application block, want above it")
 		}
 	})
 
-	t.Run("error suppresses diffs", func(t *testing.T) {
+	t.Run("error renders as a caution and drops the empty block", func(t *testing.T) {
 		c := CommentMarkdown{}
 		c.AppMarkdown(AppMarkdownOpts{
 			Name:       "broken",
@@ -107,6 +124,12 @@ func TestErrStrAndNoticeStrRenderDistinctly(t *testing.T) {
 		if strings.Contains(body, "[!NOTE]") {
 			t.Errorf("a fatal error must not render as an advisory:\n%s", body)
 		}
+		if strings.Contains(body, "<details") {
+			t.Errorf("a failed application has no diffs, so it should have no block to fold:\n%s", body)
+		}
+		if !strings.Contains(body, "**broken**") {
+			t.Errorf("caution does not name its application:\n%s", body)
+		}
 		if !strings.Contains(body, "app path does not exist") {
 			t.Errorf("error text missing:\n%s", body)
 		}
@@ -115,6 +138,30 @@ func TestErrStrAndNoticeStrRenderDistinctly(t *testing.T) {
 			if strings.Contains(line, "app path does not exist") && !strings.HasPrefix(line, "> ") {
 				t.Errorf("error line inside the alert is not blockquoted: %q", line)
 			}
+		}
+	})
+
+	// An application whose diffs deserve a second look must not be hidden by
+	// auto-collapse, whatever the thresholds say.
+	t.Run("an app carrying a notice is never auto-folded", func(t *testing.T) {
+		t.Setenv("ARGO_DIFF_COMMENT_INDEX_COUNT", "0")
+		c := CommentMarkdown{}
+		for i := range 9 { // well past autoCollapseAppCount
+			o := AppMarkdownOpts{Name: fmt.Sprintf("app-%d", i), SyncStatus: "Synced", HealthStatus: "Healthy"}
+			if i == 4 {
+				o.NoticeStr = "children could not be enumerated"
+			}
+			a := c.AppMarkdown(o)
+			a.AddResourceDiff("apps", "Deployment", "web", "prod", "-a\n+b\n")
+		}
+		body := c.String()[0]
+		if strings.Count(body, "<details open>") != 1+9 {
+			// one open app block, plus every resource block (all apps have 1 resource)
+			t.Errorf("expected exactly the noticed app to stay open:\n%s", body)
+		}
+		noticed := body[strings.Index(body, "> [!NOTE]"):]
+		if !strings.HasPrefix(noticed[strings.Index(noticed, "<details"):], "<details open>") {
+			t.Errorf("the app carrying the notice was folded:\n%s", body)
 		}
 	})
 }

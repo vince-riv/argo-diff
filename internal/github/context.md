@@ -52,8 +52,8 @@ directly breaks comment reuse for any App whose name isn't already slug-shaped.
 ## Comment rendering
 
 One comment reads top to bottom as: the preamble (change counts and timestamp, from
-`process_event`), any `Notices`, the summary index table, then one `<details>` block per
-application, each holding one `<details>` block per changed resource.
+`process_event`), any `Notices`, the summary index table, then per application a `---` rule, that
+application's alerts, and a `<details>` block holding one `<details>` block per changed resource.
 
 - **Severity is carried by the GitHub alert type**, because a reader has to tell "this diff is
   untrustworthy" from "this diff is fine, but FYI" at a glance:
@@ -65,6 +65,30 @@ application, each holding one `<details>` block per changed resource.
   | `timeoutMarkdown()` in `process_event` | `> [!WARNING]` (yellow) | applications left undiffed |
   `ErrStr` and `NoticeStr` are separate fields on purpose — they used to share one, distinguished
   only by a `"Error: "` string prefix at the call site.
+
+### Alerts only render at the top level
+
+**GitHub renders its coloured alert boxes only at the top level of a document.** Inside any HTML
+element — `<details>` included — the extension is skipped and the block degrades to a plain
+blockquote whose first line is a literal `[!NOTE]`. Nothing changes that: not extra blank lines,
+not a blank line before `<summary>`, not a `<div>` wrapper, and not nesting inside another
+blockquote. Verified against GitHub's own renderer (`POST /markdown`, and the `body_html` of a real
+PR).
+
+So `ArgoAppMarkdown.alerts()` is emitted by `String()` **outside** the app's `<details>`, between
+the `---` rule and the block. Consequences worth knowing:
+
+- A hoisted alert is detached from the block, so it **names its application**. `NoticeStr` from
+  `internal/argocd` also names the app, so the rendered line repeats it once — accepted, because a
+  notice that is self-contained at the `argocd` layer is worth more than the tidier sentence.
+- An application with `ErrStr` and no resources renders as **just its alert** — no `<details>` at
+  all. There are no diffs to fold, and the alert already carries the name, both statuses, the error
+  text and the ArgoCD link.
+- `appOpen()` never folds an application carrying a `NoticeStr` or `ErrStr`, whatever the auto
+  thresholds say (an explicit `ARGO_DIFF_COMMENT_COLLAPSE=collapsed` still wins).
+- `checkBodyWellFormed()` in `markdown_test.go` walks `<details>` depth and fails on any `> [!`
+  line nested inside one. That is the regression guard — the bug is invisible in Go tests, since
+  the string looks perfectly fine.
 - A fenced block inside an alert only renders when **every** one of its lines carries the `> `
   prefix, blank lines included — that is what `blockquote()` is for.
 - `syncString()` / `healthString()` emit literal Unicode emoji, not `:shortcodes:`. These strings
