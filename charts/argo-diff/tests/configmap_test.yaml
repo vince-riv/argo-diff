@@ -43,6 +43,50 @@ tests:
       - equal:
           path: data.COMMENT_LINE_MAX_CHARS
           value: "12345"
+  - it: config commentNotice
+    set:
+      config.commentNotice: "feature X is deprecated|use Y instead"
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_NOTICE
+          value: "feature X is deprecated|use Y instead"
+  - it: config commentCollapse
+    set:
+      config.commentCollapse: collapsed
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE
+          value: "collapsed"
+  - it: config commentIndexCount
+    set:
+      config.commentIndexCount: 5
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_INDEX_COUNT
+          value: "5"
+  # 0 means "never render the index" - a meaningful value that a plain `with`
+  # would drop, so the template normalizes it to a string first
+  - it: config commentIndexCount zero
+    set:
+      config.commentIndexCount: 0
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_INDEX_COUNT
+          value: "0"
+  - it: config commentIndexCount always
+    set:
+      config.commentIndexCount: -1
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_INDEX_COUNT
+          value: "-1"
+  - it: config commentMaxChars
+    set:
+      config.commentMaxChars: 60000
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_MAX_CHARS
+          value: "60000"
   - it: config maxWorkers
     set:
       config.maxWorkers: 8

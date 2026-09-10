@@ -322,6 +322,30 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 	return res, nil
 }
 
+// wrapComment builds the body actually posted to GitHub: the operator preamble,
+// the rendered markdown, and the identifier argo-diff finds its own comments by.
+func wrapComment(body string) string {
+	var b strings.Builder
+	if commentPreamble != "" {
+		b.WriteString(commentPreamble)
+		b.WriteString("\n\n")
+	}
+	b.WriteString(body)
+	b.WriteString("\n\n")
+	b.WriteString(commentIdentifier)
+	b.WriteString("\n")
+	return b.String()
+}
+
+// commentWrapperLen is how many bytes wrapComment() adds around a body. None of
+// it is visible to markdown.go's budget, so String() subtracts it - otherwise a
+// long ARGO_DIFF_COMMENT_PREAMBLE plus a full-size body is a 422 from the API
+// and no comment at all. Derived from wrapComment() rather than recomputed, so
+// the two cannot drift apart.
+func commentWrapperLen() int {
+	return len(wrapComment(""))
+}
+
 // Creates or updates comment on the specified pull request
 func Comment(ctx context.Context, owner, repo string, prNum int, sha string, commentBodies []string) ([]*github.IssueComment, error) {
 	var res []*github.IssueComment
@@ -335,14 +359,7 @@ func Comment(ctx context.Context, owner, repo string, prNum int, sha string, com
 	}
 	nextExistingCommentIdx := 0
 	for i, commentBody := range commentBodies {
-		newCommentBody := commentPreamble
-		if newCommentBody != "" {
-			newCommentBody += "\n\n"
-		}
-		newCommentBody += commentBody
-		newCommentBody += "\n\n"
-		newCommentBody += commentIdentifier
-		newCommentBody += "\n"
+		newCommentBody := wrapComment(commentBody)
 		newComment := github.IssueComment{Body: &newCommentBody}
 		var existingComment *github.IssueComment
 		var issueComment *github.IssueComment

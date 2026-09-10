@@ -11,8 +11,16 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 {{- with .Values.config }}
+{{- /* commentIndexCount is normalized to a string because 0 is a meaningful
+       value for it ("never render the index"), and `with`/`or` treat a numeric
+       0 as unset. */ -}}
+{{- $indexCount := "" }}
+{{- if not (kindIs "invalid" .commentIndexCount) }}
+{{- $indexCount = toString .commentIndexCount }}
+{{- end }}
 {{- if or .argocd.grpcWeb .argocd.grpcWebRoot .argocd.serverAddr .argocd.serverInsecure
           .argocd.serverPlainText .argocd.uiBaseURL .commentPreamble .contextStr .commentLineMaxChars
+          .commentNotice .commentCollapse $indexCount .commentMaxChars
           .maxWorkers .github.application.id .github.application.installationId }}
 data:
   {{- with .argocd.grpcWeb }}
@@ -41,6 +49,18 @@ data:
   {{- end }}
   {{- with .commentLineMaxChars }}
   COMMENT_LINE_MAX_CHARS: {{ . | quote }}
+  {{- end }}
+  {{- with .commentNotice }}
+  ARGO_DIFF_COMMENT_NOTICE: {{ . | quote }}
+  {{- end }}
+  {{- with .commentCollapse }}
+  ARGO_DIFF_COMMENT_COLLAPSE: {{ . | quote }}
+  {{- end }}
+  {{- with $indexCount }}
+  ARGO_DIFF_COMMENT_INDEX_COUNT: {{ . | quote }}
+  {{- end }}
+  {{- with .commentMaxChars }}
+  ARGO_DIFF_COMMENT_MAX_CHARS: {{ . | quote }}
   {{- end }}
   {{- with .maxWorkers }}
   ARGO_DIFF_MAX_WORKERS: {{ . | quote }}

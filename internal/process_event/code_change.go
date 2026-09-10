@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/vince-riv/argo-diff/internal/argocd"
+	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
@@ -159,10 +160,9 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	log.Debug().Msgf("argocd.GetApplicationChanges() returned %d results", len(appResList))
 	log.Trace().Msgf("argocd.GetApplicationChanges() returned: %+v", appResList)
 
-	errorCount := 0   // keep track of the number of errors
-	changeCount := 0  // how many apps have changes
-	unknownCount := 0 // how many apps we can't determine if there's changes (usually when we can new manifests but not current ones)
-	firstError := ""  // string of the first error we receive - used in commit status message
+	errorCount := 0  // keep track of the number of errors
+	changeCount := 0 // how many apps have changes
+	firstError := "" // string of the first error we receive - used in commit status message
 	cMarkdown := github.CommentMarkdown{}
 	for _, a := range appResList {
 		appName := a.ArgoApp.Name
@@ -173,7 +173,12 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		if a.WarnStr != "" {
 			log.Trace().Msgf("%s has WarnStr %s", appName, a.WarnStr)
 			errorCount++
-			_ = cMarkdown.AppMarkdown(appName, "Error: "+a.WarnStr, appSyncStatus, appHealthStatus, appHealthMsg)
+			// fatal: ErrStr renders as a red [!CAUTION] alert and this app
+			// contributes no diffs
+			_ = cMarkdown.AppMarkdown(github.AppMarkdownOpts{
+				Name: appName, ErrStr: a.WarnStr,
+				SyncStatus: appSyncStatus, HealthStatus: appHealthStatus, HealthMsg: appHealthMsg,
+			})
 			if firstError == "" {
 				firstError = a.WarnStr
 			}
@@ -181,10 +186,13 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 			log.Trace().Msgf("%s has %d Changed Resources", appName, len(a.ChangedResources))
 			if len(a.ChangedResources) > 0 {
 				changeCount++
-				// NoticeStr is advisory: it renders above this app's diffs (see
-				// ArgoAppMarkdown.OverviewStr) without touching errorCount,
-				// firstError or the commit status, unlike WarnStr above.
-				appMarkdown := cMarkdown.AppMarkdown(appName, a.NoticeStr, appSyncStatus, appHealthStatus, appHealthMsg)
+				// advisory: NoticeStr renders as a blue [!NOTE] alert above
+				// this app's diffs, and leaves errorCount, firstError and the
+				// commit status alone - unlike the fatal branch above
+				appMarkdown := cMarkdown.AppMarkdown(github.AppMarkdownOpts{
+					Name: appName, NoticeStr: a.NoticeStr,
+					SyncStatus: appSyncStatus, HealthStatus: appHealthStatus, HealthMsg: appHealthMsg,
+				})
 				for _, ar := range a.ChangedResources {
 					appMarkdown.AddResourceDiff(ar.Group, ar.Kind, ar.Name, ar.Namespace, ar.DiffStr)
 				}
@@ -196,9 +204,6 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	newStatus := github.StatusError //nolint:ineffassign
 	statusDescription := "Unknown"  //nolint:ineffassign
 	changeCountStr := fmt.Sprintf("%d of %d apps with changes", changeCount, len(appResList))
-	if unknownCount > 0 {
-		changeCountStr += fmt.Sprintf(" [%d apps unknown]", unknownCount)
-	}
 	if len(notDiffed) > 0 {
 		changeCountStr += fmt.Sprintf(" [%d apps not diffed]", len(notDiffed))
 	}
@@ -232,12 +237,15 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	// Post PR comment when something has happened
 	t := time.Now()
 	tStr := t.Format("3:04PM MST, 2 Jan 2006")
-	markdownStart += " compared to live state\n"
-	markdownStart += "\n" + tStr + "\n"
+	markdownStart = "**" + markdownStart + "** compared to live state\n"
+	markdownStart += "<sub>" + tStr + "</sub>\n\n"
 	if len(notDiffed) > 0 {
 		markdownStart += timeoutMarkdown(timeout, notDiffed)
 	}
 	cMarkdown.Preamble = markdownStart
+	// comment-level advisories: the operator's ARGO_DIFF_COMMENT_NOTICE plus
+	// anything config.AddNotice() raised during the run
+	cMarkdown.Notices = config.Notices()
 	if changeCount == 0 && firstError == "" && len(notDiffed) == 0 {
 		// if there are no changes or warnings, don't comment (but clear out any existing comments).
 		// NoticeStr needs no term here: it's only ever set on an app that already
