@@ -61,9 +61,15 @@ phase, prints the logs, and compares the container's exit code against `EXPECT_E
   path. Note a dispatch runs the workflow file from its target ref (usually `main`), so `k3s.yml`
   changes in a fork PR are not exercised by the dispatch.
 
+  **Security:** a dispatch checks out and runs PR-authored code (`go build`, `docker build`,
+  `run-argo-diff-pod.sh`) with the job's `pull-requests: write` token. Review the fork's diff before
+  dispatching. The token has no `contents` / `packages` write, which bounds the damage.
+
 The `pr_info` step resolves the PR number, head/base refs, and head sha — from the event payload for
-`pull_request`, or via `gh pr view` for `workflow_dispatch`. Checkout then uses
-`refs/pull/<n>/merge`.
+`pull_request`, or via `gh pr view` for `workflow_dispatch` (which also normalizes `#123` / a PR URL
+to the integer). Checkout uses the resolved **head sha**, not `refs/pull/<n>/merge`: the merge ref is
+absent on a conflicted PR and can move mid-run, and the real diff is computed against the live PR via
+the API anyway.
 
 The image is built in-workflow: `go build` a linux/amd64 binary into `temp/`, `docker build` the
 `Dockerfile`, then `k3d image import` into the cluster. Nothing is pushed to a registry, so the test

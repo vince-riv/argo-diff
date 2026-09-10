@@ -106,7 +106,8 @@ jobs:
       -
         name: Build linux/amd64 (no push)
         ## PRs only validate that the image builds - the k3s e2e test builds its
-        ## own image, and publishing happens on push to main / release tags.
+        ## own image, and publishing happens on push to main / release-* branches
+        ## (this workflow has no tag trigger; release.yml owns tag publishing).
         if: ${{ github.event_name == 'pull_request' }}
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:

@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: 'Pull request number to test (use this for fork PRs)'
+        description: 'PR number to test (fork-PR path). Review the fork diff first: the run executes PR code with a pull-requests:write token.'
         required: true
         type: string
   pull_request:
@@ -19,6 +19,11 @@ on:
       - 'go.sum'
       - 'Dockerfile'
 
+# SECURITY: on workflow_dispatch this job checks out and runs PR-authored code
+# (go build, docker build, test/run-argo-diff-pod.sh) with the token below. A
+# maintainer must review the fork's diff before dispatching. The token is held
+# to pull-requests:write (comment post/edit) - no contents or packages write -
+# which bounds the blast radius of a malicious fork PR.
 permissions:
   contents: read
   pull-requests: write
@@ -58,10 +63,11 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            # Fork PRs expose no PR context in the event payload, so read it
-            # back from the API using the dispatched PR number.
-            PR_NUMBER="$DISPATCH_PR"
-            pr_json=$(gh pr view "$PR_NUMBER" --json headRefName,baseRefName,headRefOid)
+            # Fork PRs expose no PR context in the event payload, so read it back
+            # from the API. `gh pr view` accepts a number, "#123", or a PR URL;
+            # .number normalizes whatever was typed to the canonical integer.
+            pr_json=$(gh pr view "$DISPATCH_PR" --json number,headRefName,baseRefName,headRefOid)
+            PR_NUMBER=$(jq -r '.number' <<<"$pr_json")
             HEAD_REF=$(jq -r '.headRefName' <<<"$pr_json")
             BASE_REF=$(jq -r '.baseRefName' <<<"$pr_json")
             HEAD_SHA=$(jq -r '.headRefOid' <<<"$pr_json")
@@ -94,9 +100,12 @@ jobs:
         id: git_checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # The PR merge ref works for same-repo and fork PRs alike, so the
-          # workflow scripts and test fixtures come from the PR under test.
-          ref: refs/pull/${{ steps.pr_info.outputs.PR_NUMBER }}/merge
+          # Check out the resolved head commit, not refs/pull/<n>/merge: the
+          # merge ref is absent when the PR has conflicts and can move if the PR
+          # author pushes mid-run. A pinned sha always exists and matches the
+          # HEAD_SHA we report. argo-diff computes the real diff against the live
+          # PR via the API, so a local merge preview would add nothing.
+          ref: ${{ steps.pr_info.outputs.HEAD_SHA }}
           fetch-depth: '50'
           fetch-tags: 'true'
 
