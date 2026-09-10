@@ -150,12 +150,21 @@ func collapseMode() string {
 // their preamble has eaten the comment.
 func commentBudget() int {
 	n := commentMaxLen() - commentWrapperLen()
-	if n < minResourceLen {
-		log.Warn().Msgf("ARGO_DIFF_COMMENT_MAX_CHARS %d leaves only %d bytes after the preamble and marker - using %d",
-			commentMaxLen(), n, minResourceLen)
-		return minResourceLen
+	if n >= minResourceLen {
+		return n
 	}
-	return n
+	log.Warn().Msgf("ARGO_DIFF_COMMENT_MAX_CHARS %d leaves only %d bytes after the preamble and marker",
+		commentMaxLen(), n)
+	// The floor may never exceed what GitHub itself accepts: raising the budget
+	// past the real headroom turns a useless-but-postable body into a 422, and
+	// posting nothing is worse than posting something tiny. boundPreamble()
+	// keeps this out of reach for the preamble, but commentIdentifier carries
+	// ARGO_DIFF_CONTEXT_STR, which stays unbounded because comment matching
+	// depends on it.
+	if room := githubCommentHardMax - commentWrapperLen(); room < minResourceLen {
+		return max(room, 0)
+	}
+	return minResourceLen
 }
 
 // truncateBytes cuts s to at most max bytes without splitting a UTF-8 rune.

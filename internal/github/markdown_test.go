@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // wrappedLen is the size of what Comment() actually posts, so a test can assert
@@ -493,5 +494,64 @@ func TestAbsurdlyLowCapStillProducesUsableBodies(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// commentBudget()'s floor may never raise the budget above the real headroom.
+// Doing so turns a useless-but-postable body into a 422, and posting nothing is
+// worse than posting something tiny. Reachable only through a wrapper large
+// enough to eat the whole comment.
+func TestBudgetFloorNeverExceedsTheHardMax(t *testing.T) {
+	tests := []struct {
+		name             string
+		preamble         string
+		cap              string
+		wantFloorEngages bool
+	}{
+		{"huge wrapper, default cap", strings.Repeat("P", 262000), "", false},
+		{"huge wrapper, low cap", strings.Repeat("P", 262000), "5000", false},
+		{"small wrapper, absurdly low cap", "ctx", "40", true},
+		{"small wrapper, default cap", "ctx", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setWrapper(t, tt.preamble, "<!-- argo-diff -->")
+			t.Setenv("ARGO_DIFF_COMMENT_MAX_CHARS", tt.cap)
+
+			budget := commentBudget()
+			if room := githubCommentHardMax - commentWrapperLen(); budget > room {
+				t.Errorf("budget %d exceeds the %d bytes GitHub actually leaves - every body is a 422", budget, room)
+			}
+			if got := budget == minResourceLen; got != tt.wantFloorEngages {
+				t.Errorf("floor engaged = %v, want %v (budget %d)", got, tt.wantFloorEngages, budget)
+			}
+
+			c := CommentMarkdown{Preamble: "**1 of 1 apps with changes**\n"}
+			a := c.AppMarkdown(AppMarkdownOpts{Name: "app", SyncStatus: "Synced", HealthStatus: "Healthy"})
+			a.AddResourceDiff("apps", "Deployment", "web", "prod", fakeDiff(50))
+			for i, b := range c.String() {
+				checkBodyWellFormed(t, i, b)
+				if got := wrappedLen(b); got > githubCommentHardMax {
+					t.Errorf("body %d is %d bytes once wrapped, over GitHub cap %d - this is a 422", i, got, githubCommentHardMax)
+				}
+			}
+		})
+	}
+}
+
+// The preamble was the last input to the size budget that nothing bounded.
+func TestBoundPreamble(t *testing.T) {
+	if got := boundPreamble("short"); got != "short" {
+		t.Errorf("boundPreamble(short) = %q, want it untouched", got)
+	}
+	if got := boundPreamble(strings.Repeat("x", maxPreambleLen)); len(got) != maxPreambleLen {
+		t.Errorf("boundPreamble at the limit = %d bytes, want %d", len(got), maxPreambleLen)
+	}
+	if got := boundPreamble(strings.Repeat("x", 262000)); len(got) != maxPreambleLen {
+		t.Errorf("boundPreamble(262000) = %d bytes, want %d", len(got), maxPreambleLen)
+	}
+	// a cut must not split a rune
+	if got := boundPreamble(strings.Repeat("α", maxPreambleLen)); !utf8.ValidString(got) {
+		t.Error("boundPreamble split a multi-byte rune")
 	}
 }

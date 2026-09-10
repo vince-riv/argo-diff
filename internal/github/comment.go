@@ -35,9 +35,9 @@ func init() {
 	mux = &sync.RWMutex{}
 	isGithubAction = os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
 	contextStr = strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
-	commentPreamble = strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE"))
+	commentPreamble = boundPreamble(strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE")))
 	if commentPreamble == "" {
-		commentPreamble = contextStr
+		commentPreamble = boundPreamble(contextStr)
 	}
 	if isGithubAction {
 		log.Debug().Msg("Running in github actions")
@@ -320,6 +320,25 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		}
 	}
 	return res, nil
+}
+
+// maxPreambleLen bounds ARGO_DIFF_COMMENT_PREAMBLE. README documents "150
+// chars or less", so this is generous - it exists to keep the comment budget's
+// inputs all bounded, not to police the guideline.
+const maxPreambleLen = 4000
+
+// boundPreamble caps the operator preamble. Every other input to the size
+// budget is bounded - ErrStr, NoticeStr, each notice, HealthMsg, every resource
+// body - and this was the last one that was not. An unbounded preamble is
+// subtracted from the budget by commentWrapperLen(), so a large enough one
+// leaves no room for content and, past githubCommentHardMax, no room for the
+// preamble itself.
+func boundPreamble(s string) string {
+	if len(s) <= maxPreambleLen {
+		return s
+	}
+	log.Warn().Msgf("ARGO_DIFF_COMMENT_PREAMBLE is %d bytes - truncating to %d", len(s), maxPreambleLen)
+	return truncateBytes(s, maxPreambleLen)
 }
 
 // wrapComment builds the body actually posted to GitHub: the operator preamble,

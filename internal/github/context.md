@@ -116,10 +116,17 @@ limit  := budget - splitReserve
   `githubCommentHardMax` (262144).
 - `commentBudget()` has a `minResourceLen` floor. Below roughly
   `len(truncatedMarker)+truncTailReserve` there is no room for `finalize()` to truncate *into*, so
-  it would emit a marker that is itself over budget. Reaching that needs
-  `ARGO_DIFF_COMMENT_MAX_CHARS` set below the operator's own `ARGO_DIFF_COMMENT_PREAMBLE`, so the
-  only cap breached is one they set themselves — the warning is the useful part, since nothing else
-  tells them their preamble has eaten the comment.
+  it would emit a marker that is itself over budget. The warning is the useful part, since nothing
+  else tells an operator their preamble has eaten the comment.
+  **The floor is itself clamped against `githubCommentHardMax`.** Raising the budget above the
+  headroom that genuinely remains turns a useless-but-postable body into a 422, and posting nothing
+  is worse than posting something tiny. `boundPreamble()` puts that out of reach for the preamble,
+  but `commentIdentifier` carries `ARGO_DIFF_CONTEXT_STR`, which stays unbounded because comment
+  matching depends on it — so the clamp is a live guard, not belt-and-braces.
+- `boundPreamble()` in `comment.go` caps `ARGO_DIFF_COMMENT_PREAMBLE` at `maxPreambleLen` (4000).
+  Every input to the budget is now bounded; the preamble was the last one that was not, and
+  `commentWrapperLen()` subtracts it from every body. README documents "150 chars or less", so the
+  cap is generous by design — it exists to bound the input, not to police the guideline.
 - `commentWrapperLen()` is what `Comment()` adds around each body: `ARGO_DIFF_COMMENT_PREAMBLE`
   (unbounded operator input) plus `commentIdentifier`. It is `len(wrapComment(""))`, derived from the
   same function `Comment()` posts with, so the two cannot drift. **This is the leak that used to
