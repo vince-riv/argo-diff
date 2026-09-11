@@ -159,8 +159,8 @@ func collapseMode() string {
 	case collapseAuto, collapseExpanded, collapseCollapsed:
 		return raw
 	}
-	log.Warn().Msgf("Unknown ARGO_DIFF_COMMENT_COLLAPSE value %q - using %s", raw, collapseAuto)
-	return collapseAuto
+	log.Warn().Msgf("Unknown ARGO_DIFF_COMMENT_COLLAPSE value %q - using %s", raw, collapseExpanded)
+	return collapseExpanded
 }
 
 // commentBudget is how much rendered markdown one comment body may hold, after

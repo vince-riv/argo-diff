@@ -94,14 +94,16 @@ the `---` rule and the block. Consequences worth knowing:
   prefix, blank lines included — that is what `blockquote()` is for.
 - `syncString()` / `healthString()` emit literal Unicode emoji, not `:shortcodes:`. These strings
   also land inside raw HTML `<summary>` elements, where shortcode substitution is not reliable.
-- Blocks are folded per `ARGO_DIFF_COMMENT_COLLAPSE` (`expanded` | `collapsed` | `auto`), default
-  `expanded`. `auto` keeps a comment expanded until it covers more than
-  `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT` (default 3) applications, or an application with more than
-  `ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT` (default 5) resources — both read via
-  `collapseAppCount()`/`collapseResourceCount()`, which warn and fall back to the default on a
-  non-positive value, the same guard `lineMaxChars()` uses. Because that decision needs totals
-  `AddResourceDiff()` doesn't have, a resource stores its `Summary` and `Body` separately and
-  `String()` renders it — nothing pre-renders a `<details>` tag.
+- Blocks are folded per `ARGO_DIFF_COMMENT_COLLAPSE` (`expanded` | `collapsed` | `auto`); an empty
+  or unrecognized value both fall back to `expanded`, the default. `auto` splits the fold decision
+  in two: `appOpen()` folds an application's own block once the comment covers more than
+  `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT` (default 3) applications, and `resourceOpen()` folds that
+  application's individual resource (diff) blocks once it has more than
+  `ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT` (default 5) changed resources — the two thresholds are
+  independent counts read via `collapseAppCount()`/`collapseResourceCount()`, which warn and fall
+  back to the default on a non-positive value, the same guard `lineMaxChars()` uses. Because that
+  decision needs totals `AddResourceDiff()` doesn't have, a resource stores its `Summary` and
+  `Body` separately and `String()` renders it — nothing pre-renders a `<details>` tag.
 - The index table is gated by `ARGO_DIFF_COMMENT_INDEX_COUNT`: `-1` always, `0` never, any other `n`
   once `n` applications have an entry (default 2). Capped at `maxIndexRows` (50).
 

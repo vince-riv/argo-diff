@@ -50,11 +50,11 @@ inputs:
     required: false
     default: ''
   comment_collapse_app_count:
-    description: 'In auto collapse mode, the application count above which a comment is folded. Must be positive. Defaults to 3'
+    description: "In auto collapse mode, the application count above which each application's own block starts folded. Must be positive. Defaults to 3"
     required: false
     default: ''
   comment_collapse_resource_count:
-    description: "In auto collapse mode, the changed-resource count above which an application's block is folded. Must be positive. Defaults to 5"
+    description: "In auto collapse mode, the count of changed resources within an application above which that application's resource (diff) blocks start folded - not the application's own block, which comment_collapse_app_count governs. Must be positive. Defaults to 5"
     required: false
     default: ''
   comment_index_count:

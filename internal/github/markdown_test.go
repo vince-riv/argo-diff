@@ -290,7 +290,7 @@ func TestCollapseMode(t *testing.T) {
 		{"auto", "", "10", 1, 9, "<details open>", "<details open>"},   // raised resource threshold keeps it open
 		{"expanded", "", "", 9, 9, "<details open>", "<details open>"}, // forced open
 		{"collapsed", "", "", 1, 1, "<details>", "<details>"},          // forced closed
-		{"nonsense", "", "", 1, 1, "<details open>", "<details open>"}, // falls back to auto
+		{"nonsense", "", "", 9, 9, "<details open>", "<details open>"}, // unparseable falls back to expanded, not auto
 		{"auto", "0", "", 9, 1, "<details>", "<details open>"},         // non-positive app count falls back to the default
 		{"auto", "", "-1", 1, 9, "<details open>", "<details>"},        // non-positive resource count falls back to the default
 	}
