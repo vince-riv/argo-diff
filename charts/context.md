@@ -55,16 +55,20 @@ them with `config.configMapName` / `secret.name`.
 `values.yaml` (with its `# key -- description` comment for helm-docs), `templates/configmap.yaml`,
 `tests/configmap_test.yaml`, and the README table — so most new variables don't get one. Instead,
 `deployment.env` (raw `core/v1` `EnvVar` entries) and `deployment.envFrom` (raw `core/v1`
-`EnvFromSource` entries) in `templates/deployment.yaml` pass straight through to the container spec,
-appended after the chart's own `env`/`envFrom` entries so an operator-supplied entry always wins: a
-later `env` entry with a duplicate name overrides an earlier one (this is how an operator overrides
-`logLevel` or the `ARGOCD_CLI_CMD_NAME` set by `argocdCli.image.tag`), and a later `envFrom` source
-overrides an earlier one on key collisions. This is the escape hatch for everything the typed
-`config.*` keys don't cover, and it also lets an operator layer extra ConfigMaps/Secrets on top of
-the chart-managed one — something `config.configMapCreate: false` cannot do, since that gives up
-every typed `config.*` key at once. One gap: the pod's `checksum/config` / `checksum/secret`
-annotations only hash the chart's own `configmap.yaml` / `secret.yaml`, so a change to a ConfigMap or
-Secret referenced through `deployment.envFrom` does not by itself trigger a rollout.
+`EnvFromSource` entries) in `templates/deployment.yaml` pass straight through to the container spec.
+`deployment.env` entries are appended after the chart's own (`LOG_LEVEL`, and `ARGOCD_CLI_CMD_NAME`
+when `argocdCli.image.tag` is set), but a same-named entry there does not render twice — the
+template checks `deployment.env` for that name first and omits the chart's own entry for it, since
+Kubernetes rejects a container spec with two `env` entries sharing a name under server-side apply.
+`deployment.envFrom` entries are appended after the chart's own ConfigMap/Secret refs and win on key
+collisions against those two — but never against `LOG_LEVEL`/`ARGOCD_CLI_CMD_NAME`, since Kubernetes
+always resolves every `envFrom` source before applying the container's own `env:` entries; only
+`deployment.env` can override those. This is the escape hatch for everything the typed `config.*`
+keys don't cover, and it also lets an operator layer extra ConfigMaps/Secrets on top of the
+chart-managed one — something `config.configMapCreate: false` cannot do, since that gives up every
+typed `config.*` key at once. One gap: the pod's `checksum/config` / `checksum/secret` annotations
+only hash the chart's own `configmap.yaml` / `secret.yaml`, so a change to a ConfigMap or Secret
+referenced through `deployment.envFrom` does not by itself trigger a rollout.
 
 ### Pinning the argocd CLI version (`argocdCli.*`)
 

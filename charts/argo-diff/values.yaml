@@ -202,9 +202,11 @@ deployment:
   #   readOnly: true
 
   # deployment.env -- Additional environment variables for the argo-diff container, appended after
-  # the chart's own entries (LOG_LEVEL, and ARGOCD_CLI_CMD_NAME when argocdCli.image.tag is set). A
-  # later entry with the same name overrides an earlier one, so this can override those too. Raw
-  # core/v1 EnvVar entries, so valueFrom (secretKeyRef, configMapKeyRef, fieldRef) works.
+  # the chart's own entries (LOG_LEVEL, and ARGOCD_CLI_CMD_NAME when argocdCli.image.tag is set). An
+  # entry here with the same name as one of those overrides it: the chart's own entry for that name
+  # is omitted, rather than rendering two entries with the same name, since Kubernetes rejects
+  # duplicate env names under server-side apply. Raw core/v1 EnvVar entries, so valueFrom
+  # (secretKeyRef, configMapKeyRef, fieldRef) works.
   env: []
   #  - name: ARGO_DIFF_TIMEOUT
   #    value: "5m"
@@ -215,10 +217,12 @@ deployment:
   #        key: token
 
   # deployment.envFrom -- Additional envFrom sources for the argo-diff container, appended after the
-  # chart's own ConfigMap/Secret refs, so these win on key collisions. Raw core/v1 EnvFromSource
-  # entries. Note: the pod's checksum/config and checksum/secret annotations only hash the chart's
-  # own configmap.yaml/secret.yaml, so a change to a ConfigMap/Secret referenced here does not by
-  # itself trigger a rollout.
+  # chart's own ConfigMap/Secret refs, so these win on key collisions against those two sources.
+  # This cannot override LOG_LEVEL or ARGOCD_CLI_CMD_NAME: Kubernetes always resolves envFrom before
+  # the container's env: entries, so those two always win regardless of envFrom order — use
+  # deployment.env for that. Raw core/v1 EnvFromSource entries. Note: the pod's checksum/config and
+  # checksum/secret annotations only hash the chart's own configmap.yaml/secret.yaml, so a change to
+  # a ConfigMap/Secret referenced here does not by itself trigger a rollout.
   envFrom: []
   #  - configMapRef:
   #      name: argo-diff-extra-env

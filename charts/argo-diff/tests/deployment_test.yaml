@@ -264,7 +264,7 @@ tests:
                 secretKeyRef:
                   name: my-gh-token
                   key: token
-  - it: deployment.env duplicate name overrides LOG_LEVEL by landing after it
+  - it: deployment.env duplicate name overrides LOG_LEVEL without rendering it twice
     set:
       deployment.env:
         - name: LOG_LEVEL
@@ -275,10 +275,8 @@ tests:
           path: spec.template.spec.containers[0].env
           value:
             - name: LOG_LEVEL
-              value: "info"
-            - name: LOG_LEVEL
               value: "debug"
-  - it: deployment.env duplicate name overrides ARGOCD_CLI_CMD_NAME by landing after it
+  - it: deployment.env duplicate name overrides ARGOCD_CLI_CMD_NAME without rendering it twice
     set:
       argocdCli.image.tag: "v3.4.6"
       deployment.env:
@@ -291,8 +289,6 @@ tests:
           value:
             - name: LOG_LEVEL
               value: "info"
-            - name: ARGOCD_CLI_CMD_NAME
-              value: "/argocd-cli/argocd"
             - name: ARGOCD_CLI_CMD_NAME
               value: "/custom/argocd"
   - it: deployment.envFrom appended after chart's own refs

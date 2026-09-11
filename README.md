@@ -235,8 +235,8 @@ the accepted environment variables and their respective GitHub Actions inputs.
 > **Important:** Valid GitHub API credentials are required to run — either the `GITHUB_APP_*` variables
 > must be set, or `GITHUB_TOKEN` / `GITHUB_PERSONAL_ACCESS_TOKEN` must be set.
 
-Any of these variables can be set through the Helm chart via its typed `config.*` values (see
-`charts/argo-diff/README.md`). Any variable without a typed key — including ones not listed here —
+Many of these variables have a typed Helm values key (`config.*`, `logLevel`, `secret.*`) — see
+`charts/argo-diff/README.md`. Any variable without a typed key — including ones not listed here —
 can still be set through the chart's `deployment.env` / `deployment.envFrom` passthrough values.
 
 | Environment Variable             | Input Name                  | Required         | Default  | Description |
