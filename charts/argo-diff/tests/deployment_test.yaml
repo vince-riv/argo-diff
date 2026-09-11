@@ -223,6 +223,100 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content: {name: foo, mountPath: "/etc/foo"}
+  - it: env and envFrom defaults render the same spec as today
+    release:
+      name: argo-diff
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: LOG_LEVEL
+              value: "info"
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - configMapRef:
+                name: argo-diff-env
+            - secretRef:
+                name: argo-diff-env
+  - it: deployment.env appended after chart entries, valueFrom survives passthrough
+    set:
+      deployment.env:
+        - name: ARGO_DIFF_TIMEOUT
+          value: "5m"
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: my-gh-token
+              key: token
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: LOG_LEVEL
+              value: "info"
+            - name: ARGO_DIFF_TIMEOUT
+              value: "5m"
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: my-gh-token
+                  key: token
+  - it: deployment.env duplicate name overrides LOG_LEVEL by landing after it
+    set:
+      deployment.env:
+        - name: LOG_LEVEL
+          value: "debug"
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: LOG_LEVEL
+              value: "info"
+            - name: LOG_LEVEL
+              value: "debug"
+  - it: deployment.env duplicate name overrides ARGOCD_CLI_CMD_NAME by landing after it
+    set:
+      argocdCli.image.tag: "v3.4.6"
+      deployment.env:
+        - name: ARGOCD_CLI_CMD_NAME
+          value: "/custom/argocd"
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: LOG_LEVEL
+              value: "info"
+            - name: ARGOCD_CLI_CMD_NAME
+              value: "/argocd-cli/argocd"
+            - name: ARGOCD_CLI_CMD_NAME
+              value: "/custom/argocd"
+  - it: deployment.envFrom appended after chart's own refs
+    release:
+      name: argo-diff
+    set:
+      deployment.envFrom:
+        - configMapRef:
+            name: argo-diff-extra-env
+        - secretRef:
+            name: argo-diff-extra-secrets
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - configMapRef:
+                name: argo-diff-env
+            - secretRef:
+                name: argo-diff-env
+            - configMapRef:
+                name: argo-diff-extra-env
+            - secretRef:
+                name: argo-diff-extra-secrets
   - it: argocd cli initContainer inherits deployment securityContext and resources
     set:
       argocdCli.image.tag: "v3.4.6"

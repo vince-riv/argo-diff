@@ -201,6 +201,30 @@ deployment:
   #   mountPath: "/etc/foo"
   #   readOnly: true
 
+  # deployment.env -- Additional environment variables for the argo-diff container, appended after
+  # the chart's own entries (LOG_LEVEL, and ARGOCD_CLI_CMD_NAME when argocdCli.image.tag is set). A
+  # later entry with the same name overrides an earlier one, so this can override those too. Raw
+  # core/v1 EnvVar entries, so valueFrom (secretKeyRef, configMapKeyRef, fieldRef) works.
+  env: []
+  #  - name: ARGO_DIFF_TIMEOUT
+  #    value: "5m"
+  #  - name: GITHUB_TOKEN
+  #    valueFrom:
+  #      secretKeyRef:
+  #        name: my-gh-token
+  #        key: token
+
+  # deployment.envFrom -- Additional envFrom sources for the argo-diff container, appended after the
+  # chart's own ConfigMap/Secret refs, so these win on key collisions. Raw core/v1 EnvFromSource
+  # entries. Note: the pod's checksum/config and checksum/secret annotations only hash the chart's
+  # own configmap.yaml/secret.yaml, so a change to a ConfigMap/Secret referenced here does not by
+  # itself trigger a rollout.
+  envFrom: []
+  #  - configMapRef:
+  #      name: argo-diff-extra-env
+  #  - secretRef:
+  #      name: argo-diff-extra-secrets
+
   nodeSelector: {}
 
   tolerations: []

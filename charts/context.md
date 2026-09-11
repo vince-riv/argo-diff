@@ -50,10 +50,21 @@ Configuration split:
 Set `configMapCreate: false` / `secret.create: false` to manage those objects yourself and point at
 them with `config.configMapName` / `secret.name`.
 
-**Not every argo-diff env var has a values key** — `ARGO_DIFF_TIMEOUT` and
-`ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH`, for example, currently require an externally managed
-ConfigMap. Adding one means touching `values.yaml` (with its `# key -- description` comment for
-helm-docs), `templates/configmap.yaml`, `tests/configmap_test.yaml`, and the README table.
+**Not every argo-diff env var has a typed values key** — `ARGO_DIFF_TIMEOUT` and
+`ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH`, for example, have none. Adding one means touching
+`values.yaml` (with its `# key -- description` comment for helm-docs), `templates/configmap.yaml`,
+`tests/configmap_test.yaml`, and the README table — so most new variables don't get one. Instead,
+`deployment.env` (raw `core/v1` `EnvVar` entries) and `deployment.envFrom` (raw `core/v1`
+`EnvFromSource` entries) in `templates/deployment.yaml` pass straight through to the container spec,
+appended after the chart's own `env`/`envFrom` entries so an operator-supplied entry always wins: a
+later `env` entry with a duplicate name overrides an earlier one (this is how an operator overrides
+`logLevel` or the `ARGOCD_CLI_CMD_NAME` set by `argocdCli.image.tag`), and a later `envFrom` source
+overrides an earlier one on key collisions. This is the escape hatch for everything the typed
+`config.*` keys don't cover, and it also lets an operator layer extra ConfigMaps/Secrets on top of
+the chart-managed one — something `config.configMapCreate: false` cannot do, since that gives up
+every typed `config.*` key at once. One gap: the pod's `checksum/config` / `checksum/secret`
+annotations only hash the chart's own `configmap.yaml` / `secret.yaml`, so a change to a ConfigMap or
+Secret referenced through `deployment.envFrom` does not by itself trigger a rollout.
 
 ### Pinning the argocd CLI version (`argocdCli.*`)
 

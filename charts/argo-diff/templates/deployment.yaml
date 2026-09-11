@@ -80,11 +80,17 @@ spec:
             - name: ARGOCD_CLI_CMD_NAME
               value: "/argocd-cli/argocd"
             {{- end }}
+            {{- with .Values.deployment.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "argo-diff.configMapName" . | quote }}
             - secretRef:
                 name: {{ include "argo-diff.secretName" . | quote }}
+            {{- with .Values.deployment.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.deployment.livenessProbe | nindent 12 }}
           readinessProbe:

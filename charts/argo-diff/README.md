@@ -54,6 +54,8 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | config.maxWorkers | string | `""` | Max number of ArgoCD applications diffed concurrently (capped at 32). Defaults to 4 |
 | deployment.affinity | object | `{}` |  |
 | deployment.annotations | object | `{}` |  |
+| deployment.env | list | `[]` | Additional environment variables for the argo-diff container, appended after the chart's own entries (LOG_LEVEL, and ARGOCD_CLI_CMD_NAME when argocdCli.image.tag is set). A later entry with the same name overrides an earlier one, so this can override those too. Raw core/v1 EnvVar entries, so valueFrom (secretKeyRef, configMapKeyRef, fieldRef) works. |
+| deployment.envFrom | list | `[]` | Additional envFrom sources for the argo-diff container, appended after the chart's own ConfigMap/Secret refs, so these win on key collisions. Raw core/v1 EnvFromSource entries. Note: the pod's checksum/config and checksum/secret annotations only hash the chart's own configmap.yaml/secret.yaml, so a change to a ConfigMap/Secret referenced here does not by itself trigger a rollout. |
 | deployment.livenessProbe | object | `{"httpGet":{"path":"/healthz","port":"http"},"initialDelaySeconds":2,"periodSeconds":10}` | Configuration for liveness check. (See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) |
 | deployment.nodeSelector | object | `{}` |  |
 | deployment.podAnnotations | object | `{}` |  |
