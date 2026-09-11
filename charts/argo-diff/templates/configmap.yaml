@@ -20,7 +20,8 @@ metadata:
 {{- end }}
 {{- if or .argocd.grpcWeb .argocd.grpcWebRoot .argocd.serverAddr .argocd.serverInsecure
           .argocd.serverPlainText .argocd.uiBaseURL .commentPreamble .contextStr .commentLineMaxChars
-          .commentNotice .commentCollapse $indexCount .commentMaxChars
+          .commentNotice .commentCollapse .commentCollapseAppCount .commentCollapseResourceCount
+          $indexCount .commentMaxChars
           .maxWorkers .github.application.id .github.application.installationId }}
 data:
   {{- with .argocd.grpcWeb }}
@@ -55,6 +56,12 @@ data:
   {{- end }}
   {{- with .commentCollapse }}
   ARGO_DIFF_COMMENT_COLLAPSE: {{ . | quote }}
+  {{- end }}
+  {{- with .commentCollapseAppCount }}
+  ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT: {{ . | quote }}
+  {{- end }}
+  {{- with .commentCollapseResourceCount }}
+  ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT: {{ . | quote }}
   {{- end }}
   {{- with $indexCount }}
   ARGO_DIFF_COMMENT_INDEX_COUNT: {{ . | quote }}

@@ -55,8 +55,12 @@ config:
   commentLineMaxChars: ""
   # config.commentNotice -- Advisory text rendered as a note at the top of the Pull Request comment. Separate several notices with "|"
   commentNotice: ""
-  # config.commentCollapse -- Whether the collapsible sections in a Pull Request comment start open: "auto" (default), "expanded" or "collapsed"
+  # config.commentCollapse -- Whether the collapsible sections in a Pull Request comment start open: "expanded" (default), "collapsed", or "auto"
   commentCollapse: ""
+  # config.commentCollapseAppCount -- In "auto" collapse mode, the application count above which each application's own block starts folded. Must be positive. Defaults to 3
+  commentCollapseAppCount: ""
+  # config.commentCollapseResourceCount -- In "auto" collapse mode, the count of changed resources within an application above which that application's resource (diff) blocks start folded - not the application's own block, which commentCollapseAppCount governs. Must be positive. Defaults to 5
+  commentCollapseResourceCount: ""
   # config.commentIndexCount -- When to render the summary index table above the diffs: -1 always, 0 never, any other number is the application count at which it starts. Defaults to 2
   commentIndexCount: ""
   # config.commentMaxChars -- Maximum size of a single Pull Request comment, in bytes. Defaults to (and cannot exceed) GitHub's 262144 byte limit

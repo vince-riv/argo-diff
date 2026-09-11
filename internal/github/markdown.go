@@ -32,11 +32,12 @@ const (
 	// maxHealthMsgLen bounds the ArgoCD health message, which is arbitrary
 	// text from the cluster.
 	maxHealthMsgLen = 500
-	// autoCollapse* are the "auto" collapse thresholds. Below them a comment is
-	// small enough to read fully expanded, which is what argo-diff has always
-	// done; above them an open wall of diffs hides the shape of the change.
-	autoCollapseAppCount      = 3
-	autoCollapseResourceCount = 5
+	// defaultCollapse* are the "auto" collapse thresholds. Below them a comment
+	// is small enough to read fully expanded; above them an open wall of diffs
+	// hides the shape of the change. They're only consulted in "auto" mode -
+	// the default mode is collapseExpanded, which ignores them entirely.
+	defaultCollapseAppCount      = 3
+	defaultCollapseResourceCount = 5
 	// minResourceLen keeps a very low ARGO_DIFF_COMMENT_MAX_CHARS from
 	// collapsing every diff into the "too large" marker.
 	minResourceLen = 512
@@ -126,16 +127,40 @@ func indexCount() int {
 	return envInt("ARGO_DIFF_COMMENT_INDEX_COUNT", defaultIndexCount)
 }
 
+// collapseAppCount is the "auto" mode threshold on application count. Zero or
+// negative is invalid - collapseCollapsed is the only way to fold everything -
+// so it warns and falls back to the default, the same guard lineMaxChars()
+// uses.
+func collapseAppCount() int {
+	n := envInt("ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT", defaultCollapseAppCount)
+	if n <= 0 {
+		log.Warn().Msgf("ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT must be positive - using %d", defaultCollapseAppCount)
+		return defaultCollapseAppCount
+	}
+	return n
+}
+
+// collapseResourceCount is the "auto" mode threshold on a single application's
+// resource count. Same non-positive guard as collapseAppCount.
+func collapseResourceCount() int {
+	n := envInt("ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT", defaultCollapseResourceCount)
+	if n <= 0 {
+		log.Warn().Msgf("ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT must be positive - using %d", defaultCollapseResourceCount)
+		return defaultCollapseResourceCount
+	}
+	return n
+}
+
 func collapseMode() string {
 	raw := strings.ToLower(strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_COLLAPSE")))
 	switch raw {
 	case "":
-		return collapseAuto
+		return collapseExpanded
 	case collapseAuto, collapseExpanded, collapseCollapsed:
 		return raw
 	}
-	log.Warn().Msgf("Unknown ARGO_DIFF_COMMENT_COLLAPSE value %q - using %s", raw, collapseAuto)
-	return collapseAuto
+	log.Warn().Msgf("Unknown ARGO_DIFF_COMMENT_COLLAPSE value %q - using %s", raw, collapseExpanded)
+	return collapseExpanded
 }
 
 // commentBudget is how much rendered markdown one comment body may hold, after
@@ -482,7 +507,7 @@ func (c CommentMarkdown) appOpen(a *ArgoAppMarkdown) bool {
 	if a.NoticeStr != "" || a.ErrStr != "" {
 		return true
 	}
-	return len(c.ArgoApps) <= autoCollapseAppCount
+	return len(c.ArgoApps) <= collapseAppCount()
 }
 
 func (c CommentMarkdown) resourceOpen(a *ArgoAppMarkdown) bool {
@@ -492,7 +517,7 @@ func (c CommentMarkdown) resourceOpen(a *ArgoAppMarkdown) bool {
 	case collapseCollapsed:
 		return false
 	}
-	return len(a.Resources) <= autoCollapseResourceCount
+	return len(a.Resources) <= collapseResourceCount()
 }
 
 // indexTable renders the summary index: one row per application, so a reader

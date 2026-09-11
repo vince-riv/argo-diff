@@ -145,9 +145,10 @@ func TestErrStrAndNoticeStrRenderDistinctly(t *testing.T) {
 	// An application whose diffs deserve a second look must not be hidden by
 	// auto-collapse, whatever the thresholds say.
 	t.Run("an app carrying a notice is never auto-folded", func(t *testing.T) {
+		t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE", "auto")
 		t.Setenv("ARGO_DIFF_COMMENT_INDEX_COUNT", "0")
 		c := CommentMarkdown{}
-		for i := range 9 { // well past autoCollapseAppCount
+		for i := range 9 { // well past defaultCollapseAppCount
 			o := AppMarkdownOpts{Name: fmt.Sprintf("app-%d", i), SyncStatus: "Synced", HealthStatus: "Healthy"}
 			if i == 4 {
 				o.NoticeStr = "children could not be enumerated"
@@ -274,21 +275,30 @@ func TestIndexCount(t *testing.T) {
 func TestCollapseMode(t *testing.T) {
 	tests := []struct {
 		mode      string
+		appCount  string // ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT, "" leaves the default
+		resCount  string // ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT, "" leaves the default
 		apps      int
 		resources int
 		wantApp   string
 		wantRes   string
 	}{
-		{"", 1, 1, "<details open>", "<details open>"},         // auto, small
-		{"", 9, 1, "<details>", "<details open>"},              // auto, many apps
-		{"", 1, 9, "<details open>", "<details>"},              // auto, many resources
-		{"expanded", 9, 9, "<details open>", "<details open>"}, // forced open
-		{"collapsed", 1, 1, "<details>", "<details>"},          // forced closed
-		{"nonsense", 1, 1, "<details open>", "<details open>"}, // falls back to auto
+		{"", "", "", 1, 1, "<details open>", "<details open>"},         // default mode is expanded, whatever the counts
+		{"auto", "", "", 1, 1, "<details open>", "<details open>"},     // auto, small
+		{"auto", "", "", 9, 1, "<details>", "<details open>"},          // auto, many apps
+		{"auto", "", "", 1, 9, "<details open>", "<details>"},          // auto, many resources
+		{"auto", "10", "", 9, 1, "<details open>", "<details open>"},   // raised app threshold keeps it open
+		{"auto", "", "10", 1, 9, "<details open>", "<details open>"},   // raised resource threshold keeps it open
+		{"expanded", "", "", 9, 9, "<details open>", "<details open>"}, // forced open
+		{"collapsed", "", "", 1, 1, "<details>", "<details>"},          // forced closed
+		{"nonsense", "", "", 9, 9, "<details open>", "<details open>"}, // unparseable falls back to expanded, not auto
+		{"auto", "0", "", 9, 1, "<details>", "<details open>"},         // non-positive app count falls back to the default
+		{"auto", "", "-1", 1, 9, "<details open>", "<details>"},        // non-positive resource count falls back to the default
 	}
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("mode=%q/%dapps/%dres", tt.mode, tt.apps, tt.resources), func(t *testing.T) {
+		t.Run(fmt.Sprintf("mode=%q/appCount=%q/resCount=%q/%dapps/%dres", tt.mode, tt.appCount, tt.resCount, tt.apps, tt.resources), func(t *testing.T) {
 			t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE", tt.mode)
+			t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT", tt.appCount)
+			t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT", tt.resCount)
 			t.Setenv("ARGO_DIFF_COMMENT_INDEX_COUNT", "0")
 			c := CommentMarkdown{}
 			for i := range tt.apps {

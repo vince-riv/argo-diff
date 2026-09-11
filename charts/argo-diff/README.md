@@ -34,7 +34,9 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | config.argocd.serverInsecure | string | `""` |  |
 | config.argocd.serverPlainText | string | `""` |  |
 | config.argocd.uiBaseURL | string | `""` | The base URL of the ArgoCD UI. Used for link generation in comments |
-| config.commentCollapse | string | `""` | Whether the collapsible sections in a Pull Request comment start open: "auto" (default), "expanded" or "collapsed" |
+| config.commentCollapse | string | `""` | Whether the collapsible sections in a Pull Request comment start open: "expanded" (default), "collapsed", or "auto" |
+| config.commentCollapseAppCount | string | `""` | In "auto" collapse mode, the application count above which each application's own block starts folded. Must be positive. Defaults to 3 |
+| config.commentCollapseResourceCount | string | `""` | In "auto" collapse mode, the count of changed resources within an application above which that application's resource (diff) blocks start folded - not the application's own block, which commentCollapseAppCount governs. Must be positive. Defaults to 5 |
 | config.commentIndexCount | string | `""` | When to render the summary index table above the diffs: -1 always, 0 never, any other number is the application count at which it starts. Defaults to 2 |
 | config.commentLineMaxChars | string | `""` | Any individual line in Pull Request comments by argo-diff longer than this are truncated. Defaults to 175 |
 | config.commentMaxChars | string | `""` | Maximum size of a single Pull Request comment, in bytes. Defaults to (and cannot exceed) GitHub's 262144 byte limit |

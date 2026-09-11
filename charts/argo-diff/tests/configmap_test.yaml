@@ -57,6 +57,20 @@ tests:
       - equal:
           path: data.ARGO_DIFF_COMMENT_COLLAPSE
           value: "collapsed"
+  - it: config commentCollapseAppCount
+    set:
+      config.commentCollapseAppCount: 10
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT
+          value: "10"
+  - it: config commentCollapseResourceCount
+    set:
+      config.commentCollapseResourceCount: 8
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT
+          value: "8"
   - it: config commentIndexCount
     set:
       config.commentIndexCount: 5
