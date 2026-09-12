@@ -19,18 +19,25 @@ const argoApplicationApiGroup = "argoproj.io"
 const argoApplicationApiKind = "Application"
 const minVersion = "2.12.0"
 
-// checks if a given version is greater than or equal to required version
-func versionCheck(version string) bool {
-
-	// Remove 'v' prefix if present
+// versionAtLeast reports whether version is greater than or equal to required,
+// comparing major, minor, and patch numerically. A leading 'v' on either
+// input is ignored. A version string with fewer than 3 dot-separated,
+// numeric components (or any non-numeric component) is treated as
+// unparseable and returns false, rather than panicking on an out-of-range
+// index.
+func versionAtLeast(version, required string) bool {
 	version = strings.TrimPrefix(version, "v")
-	minVersionParts := strings.Split(minVersion, ".")
+	required = strings.TrimPrefix(required, "v")
+	requiredParts := strings.Split(required, ".")
 	versionParts := strings.Split(version, ".")
+	if len(versionParts) < 3 || len(requiredParts) < 3 {
+		return false
+	}
 
 	// Compare major, minor, and patch versions
 	for i := 0; i < 3; i++ {
 		v1, err1 := strconv.Atoi(versionParts[i])
-		v2, err2 := strconv.Atoi(minVersionParts[i])
+		v2, err2 := strconv.Atoi(requiredParts[i])
 		// Handle parsing errors
 		if err1 != nil || err2 != nil {
 			return false
@@ -53,7 +60,7 @@ func ConnectivityCheck() error {
 	if err != nil {
 		return err
 	}
-	if versionCheck(clientV) && versionCheck(serverV) {
+	if versionAtLeast(clientV, minVersion) && versionAtLeast(serverV, minVersion) {
 		return nil
 	}
 	return fmt.Errorf("client (%s) or Server (%s) version is not %s or greater", clientV, serverV, minVersion)
@@ -72,12 +79,12 @@ func getApplicationChanges(ctx context.Context, app *Application, revision strin
 	var err error
 	appResChanges.ArgoApp = app
 	if revision != "" {
-		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, revision, nil, nil)
+		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, app.Namespace, revision, nil, nil)
 	} else {
 		if len(revs) < 1 || len(revs) != len(pos) {
 			return appResChanges, fmt.Errorf("getApplicationChanges() called as multi-src with bad revs/pos count [%d/%d]", len(revs), len(pos))
 		}
-		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, "", revs, pos)
+		appResChanges.ChangedResources, err = diffApplication(ctx, app.Name, app.Namespace, "", revs, pos)
 	}
 	return appResChanges, err
 }
@@ -165,7 +172,7 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 		return res
 	}
 	res.diffResult = &appResChanges
-	appsWithChanges, err := argoAppsWithChanges(ctx, app.Name, appResChanges.ChangedResources, eventInfo.Sha)
+	appsWithChanges, err := argoAppsWithChanges(ctx, app.Name, app.Namespace, appResChanges.ChangedResources, eventInfo.Sha)
 	if err != nil {
 		if ctx.Err() != nil {
 			// This app's diff turned up nested Applications but we ran out of
@@ -572,7 +579,7 @@ func genericManifestToArgoApplication(manifest K8sManifest) (Application, error)
 	return app, nil
 }
 
-func argoAppsWithChanges(ctx context.Context, appName string, appResources []AppResource, revision string) ([]Application, error) {
+func argoAppsWithChanges(ctx context.Context, appName string, appNamespace string, appResources []AppResource, revision string) ([]Application, error) {
 	log.Trace().Msgf("argoAppsWithChanges() scanning %s at %s for argo apps", appName, revision)
 	argoAppNamesFound := []string{}
 	argoApps := []Application{}
@@ -591,7 +598,7 @@ func argoAppsWithChanges(ctx context.Context, appName string, appResources []App
 	}
 	// generate full manifests for our application at the specified revision
 	log.Debug().Msgf("argoAppsWithChanges(%s) - getting manifests at revision %s", appName, revision)
-	manifests, err := getApplicationManifests(ctx, appName, revision)
+	manifests, err := getApplicationManifests(ctx, appName, appNamespace, revision)
 	if err != nil {
 		log.Debug().Err(err).Msgf("argoAppsWithChanges() - getApplicationManifests(%s, %s) failed", appName, revision)
 		return argoApps, err
