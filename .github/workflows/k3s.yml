@@ -280,7 +280,7 @@ jobs:
           # its own PR comment) so a pinned-version dispatch doesn't clobber
           # the standard run's comment on the same PR.
           ARGO_DIFF_CONTEXT_STR: ${{ github.event.inputs.argocd_version == '' && 'ephemeral-environment-test' || format('ephemeral-environment-test-argocd-{0}', github.event.inputs.argocd_version) }}
-          ARGO_DIFF_COMMENT_PREAMBLE: ${{ github.event.inputs.argocd_version == '' && '' || format('Testing with bundled argocd CLI `{0}` (overridden via workflow_dispatch input `argocd_version`).', github.event.inputs.argocd_version) }}
+          ARGO_DIFF_COMMENT_PREAMBLE: ${{ github.event.inputs.argocd_version != '' && format('Testing with bundled argocd CLI `{0}` (overridden via workflow_dispatch input `argocd_version`).', github.event.inputs.argocd_version) || '' }}
           ARGO_DIFF_SHA: ${{ steps.pr_info.outputs.HEAD_SHA }}
           ARGO_DIFF_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
           ARGO_DIFF_REPOSITORY: ${{ github.repository }}
@@ -312,7 +312,7 @@ jobs:
           # See the healthy-run step above: a non-default argocd_version gets
           # its own context string/comment here too.
           ARGO_DIFF_CONTEXT_STR: ${{ github.event.inputs.argocd_version == '' && 'ephemeral-environment-test-failure' || format('ephemeral-environment-test-failure-argocd-{0}', github.event.inputs.argocd_version) }}
-          ARGO_DIFF_COMMENT_PREAMBLE: ${{ github.event.inputs.argocd_version == '' && '' || format('Testing with bundled argocd CLI `{0}` (overridden via workflow_dispatch input `argocd_version`) - manifest failure scenario.', github.event.inputs.argocd_version) }}
+          ARGO_DIFF_COMMENT_PREAMBLE: ${{ github.event.inputs.argocd_version != '' && format('Testing with bundled argocd CLI `{0}` (overridden via workflow_dispatch input `argocd_version`) - manifest failure scenario.', github.event.inputs.argocd_version) || '' }}
           ARGO_DIFF_SHA: ${{ steps.pr_info.outputs.HEAD_SHA }}
           ARGO_DIFF_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
           ARGO_DIFF_REPOSITORY: ${{ github.repository }}
