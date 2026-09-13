@@ -39,6 +39,17 @@ to split it, since that split is a style choice rather than a requirement. `any-
 workload is deliberately self-contained (default ServiceAccount, no ClusterRole/Secret) so it can't
 collide with `basic-deployment`'s cluster-scoped `test-clusterrole`/`test-sa-rolebinding`.
 
+`argocd-helmchart.yaml` also sets `configs.rbac.policy.default: role:admin`. This isn't optional for
+the any-ns apps: `server.disable.auth` only bypasses *authentication*, not RBAC (a known upstream
+quirk, [argoproj/argo-cd#332](https://github.com/argoproj/argo-cd/issues/332)), and the built-in
+`role:readonly` default policy only matches the legacy `<project>/<app>` object format used by apps
+in the `argocd` namespace. Apps in any other namespace are addressed as
+`<project>/<namespace>/<app>`, which no built-in `readonly` policy line matches, so `argocd app
+diff`/`app wait` against `any-ns-meta`/`any-ns-deployment` fail with a gRPC `PermissionDenied` unless
+the default role is bumped to `admin`. Since auth is already fully disabled on this test cluster,
+that's a no-op from a security standpoint here — the apps in the default `argocd` namespace were
+already unauthenticated-admin-equivalent for anything the diff/wait/list read paths need.
+
 Pinning the in-cluster ArgoCD chart/app version (currently "latest", same as the runner's own
 `argocd` CLI used to drive `argocd app wait`) is a possible future enhancement, not covered here —
 only the argocd CLI bundled into the argo-diff image is pinnable today (see below).

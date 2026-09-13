@@ -13,6 +13,16 @@ spec:
         server.insecure: "true"
         server.disable.auth: "true"
         application.namespaces: "argocd-apps,apps"
+      rbac:
+        # server.disable.auth only bypasses authentication, not RBAC (a known
+        # upstream quirk: https://github.com/argoproj/argo-cd/issues/332). The
+        # built-in role:readonly default policy only covers the legacy
+        # "<project>/<app>" object format used by apps in the argocd
+        # namespace; apps in any other namespace use "<project>/<namespace>/
+        # <app>" and fall through to a permission-denied default-deny. Since
+        # auth is already fully disabled for this test cluster, default to
+        # role:admin so any-namespace apps aren't denied by RBAC either.
+        policy.default: role:admin
     redis-ha:
       enabled: false
     controller:
