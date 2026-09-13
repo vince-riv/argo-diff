@@ -12,7 +12,7 @@ import (
 	"time"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/rs/zerolog/log"
 
 	"github.com/vince-riv/argo-diff/internal/config"
@@ -414,16 +414,15 @@ func Comment(ctx context.Context, owner, repo string, prNum int, sha string, com
 	nextExistingCommentIdx := 0
 	for i, commentBody := range commentBodies {
 		newCommentBody := wrapComment(commentBody)
-		newComment := github.IssueComment{Body: &newCommentBody}
 		var existingComment *github.IssueComment
 		var issueComment *github.IssueComment
 		var resp *github.Response
 		if i < len(existingComments) {
 			nextExistingCommentIdx = i + 1
 			existingComment = existingComments[i]
-			issueComment, resp, err = commentClient.Issues.EditComment(ctx, owner, repo, *existingComment.ID, &newComment)
+			issueComment, resp, err = commentClient.Issues.UpdateComment(ctx, owner, repo, *existingComment.ID, github.IssueCommentRequest{Body: newCommentBody})
 		} else {
-			issueComment, resp, err = commentClient.Issues.CreateComment(ctx, owner, repo, prNum, &newComment)
+			issueComment, resp, err = commentClient.Issues.CreateComment(ctx, owner, repo, prNum, github.IssueCommentRequest{Body: newCommentBody})
 		}
 		if resp != nil {
 			log.Info().Msgf("%s received from %s", resp.Status, resp.Request.URL.String())
@@ -446,8 +445,7 @@ func Comment(ctx context.Context, owner, repo string, prNum int, sha string, com
 	for nextExistingCommentIdx < len(existingComments) {
 		existingComment := existingComments[nextExistingCommentIdx]
 		truncateCommentBody := "[Outdated argo-diff content]\n\n" + commentIdentifier + "\n"
-		newComment := github.IssueComment{Body: &truncateCommentBody}
-		issueComment, resp, err := commentClient.Issues.EditComment(ctx, owner, repo, *existingComment.ID, &newComment)
+		issueComment, resp, err := commentClient.Issues.UpdateComment(ctx, owner, repo, *existingComment.ID, github.IssueCommentRequest{Body: truncateCommentBody})
 		if resp != nil {
 			log.Info().Msgf("%s received from %s", resp.Status, resp.Request.URL.String())
 		}

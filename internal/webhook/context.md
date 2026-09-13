@@ -56,5 +56,5 @@ keys removed, and a `changes` block added (base retarget vs. title-only) to exer
 check. `process_test.go` asserts which of them are ignored vs. actionable; `signature_test.go` covers
 the bad-length, bad-prefix, and valid cases.
 
-The `github.com/google/go-github/v90` types are used to unmarshal payloads — a major-version bump of
+The `github.com/google/go-github/v91` types are used to unmarshal payloads — a major-version bump of
 that dependency changes this import path.

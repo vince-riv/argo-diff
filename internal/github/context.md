@@ -1,7 +1,7 @@
 # internal/github/
 
 Everything that talks to the GitHub API, plus the markdown rendering for PR comments. Built on
-`github.com/google/go-github/v89` (the major version is in the import path — a Renovate bump
+`github.com/google/go-github/v91` (the major version is in the import path — a Renovate bump
 requires a code change).
 
 ## Files
