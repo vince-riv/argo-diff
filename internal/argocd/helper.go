@@ -428,7 +428,8 @@ func HasMatchingApplications(ctx context.Context, eventInfo webhook.EventInfo) (
 		return false, err
 	}
 	if len(argoApps.Items) == 0 {
-		return false, fmt.Errorf("empty ArgoCD app list")
+		log.Warn().Msg("HasMatchingApplications: empty ArgoCD app list; treating event as unmatched")
+		return false, nil
 	}
 	apps, err := filterApplications(argoApps.Items, eventInfo, false)
 	if err != nil {

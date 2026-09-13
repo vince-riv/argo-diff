@@ -135,7 +135,9 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		matched, err := argocd.HasMatchingApplications(ctx, eventInfo)
 		if err != nil {
 			log.Error().Err(err).Msg("argocd.HasMatchingApplications() failed")
-			_ = github.Status(ctx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+			statusCtx, statusCancel := context.WithTimeout(context.Background(), reportReserve(timeout))
+			defer statusCancel()
+			_ = github.Status(statusCtx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 			*callerErr = err
 			return
 		}

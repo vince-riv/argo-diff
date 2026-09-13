@@ -826,8 +826,12 @@ func TestHasMatchingApplicationsEmptyList(t *testing.T) {
 		return []byte("[]"), nil
 	}
 	evtInfo := wh.EventInfo{RepoOwner: "vince-riv", RepoName: "argo-diff-config"}
-	if _, err := HasMatchingApplications(context.Background(), evtInfo); err == nil {
-		t.Error("expected an error for an empty ArgoCD app list")
+	got, err := HasMatchingApplications(context.Background(), evtInfo)
+	if err != nil {
+		t.Errorf("HasMatchingApplications() with empty list returned unexpected error: %v", err)
+	}
+	if got {
+		t.Error("HasMatchingApplications() with empty list returned true, want false")
 	}
 }
 
