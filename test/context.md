@@ -97,7 +97,12 @@ phase, prints the logs, and compares the container's exit code against `EXPECT_E
   input — the version of the `argocd` CLI to bundle into the argo-diff image under test (e.g.
   `v3.5.2`). Leave it blank to build with the version pinned in the `Dockerfile`'s `ARGOCD_IMAGE`
   build arg; this only affects the CLI argo-diff itself shells out to, not the in-cluster ArgoCD
-  install or the runner's own `argocd` CLI (both still float on "latest").
+  install or the runner's own `argocd` CLI (both still float on "latest"). A non-blank
+  `argocd_version` also changes `ARGO_DIFF_CONTEXT_STR` (from `ephemeral-environment-test`/
+  `-failure` to `ephemeral-environment-test-argocd-<version>`/`-failure-argocd-<version>`) and sets
+  `ARGO_DIFF_COMMENT_PREAMBLE` to call out the overridden version. `ARGO_DIFF_CONTEXT_STR` is the key
+  argo-diff uses to find its own comment on a PR (see `internal/github/context.md`), so a
+  pinned-version dispatch posts its own comment instead of overwriting the standard run's.
 
   **Security:** a dispatch checks out and runs PR-authored code (`go build`, `docker build`,
   `run-argo-diff-pod.sh`) with the job's `pull-requests: write` token. Review the fork's diff before
