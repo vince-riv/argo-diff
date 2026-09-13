@@ -52,7 +52,6 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | config.github.auth.token | string | `""` | Value of Github Personal Access Token. Populates GITHUB_TOKEN |
 | config.github.webhook.sharedSecret | string | `""` | Shared secret key for Github webhook events |
 | config.maxWorkers | string | `""` | Max number of ArgoCD applications diffed concurrently (capped at 32). Defaults to 4 |
-| config.refreshCommentKeywords | string | `""` | Comma-separated list of PR comments that re-trigger argo-diff, replacing the default "argo diff,argo-diff" |
 | deployment.affinity | object | `{}` |  |
 | deployment.annotations | object | `{}` |  |
 | deployment.env | list | `[]` | Additional environment variables for the argo-diff container, appended after the chart's own entries (LOG_LEVEL, and ARGOCD_CLI_CMD_NAME when argocdCli.image.tag is set). An entry here with the same name as one of those overrides it: the chart's own entry for that name is omitted, rather than rendering two entries with the same name, since Kubernetes rejects duplicate env names under server-side apply. Raw core/v1 EnvVar entries, so valueFrom (secretKeyRef, configMapKeyRef, fieldRef) works. |

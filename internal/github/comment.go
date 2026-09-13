@@ -24,6 +24,7 @@ var (
 	commentClientIsApp     bool
 	commentPreamble        string
 	contextStr             string
+	lowerContextStr        string
 	refreshCommentKeywords []string
 	commentIdentifier      string
 	commentLogin           string
@@ -31,21 +32,39 @@ var (
 	mux                    *sync.RWMutex
 )
 
+// defaultRefreshCommentKeywords is used when ARGO_DIFF_REFRESH_COMMENT_KEYWORDS is unset, blank, or
+// parses to zero usable keywords (eg: a value of just ",").
+const defaultRefreshCommentKeywords = "argo diff,argo-diff"
+
+// parseRefreshCommentKeywords splits a comma-separated ARGO_DIFF_REFRESH_COMMENT_KEYWORDS value into
+// lower-cased, trimmed keywords, falling back to defaultRefreshCommentKeywords when raw is blank or
+// parses to no usable keywords.
+func parseRefreshCommentKeywords(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		raw = defaultRefreshCommentKeywords
+	}
+	var keywords []string
+	for _, keyword := range strings.Split(raw, ",") {
+		keyword = strings.ToLower(strings.TrimSpace(keyword))
+		if keyword != "" {
+			keywords = append(keywords, keyword)
+		}
+	}
+	if len(keywords) == 0 {
+		log.Warn().Msg("ARGO_DIFF_REFRESH_COMMENT_KEYWORDS parsed to zero keywords; using defaults")
+		return strings.Split(defaultRefreshCommentKeywords, ",")
+	}
+	return keywords
+}
+
 func init() {
 	commentClientIsApp = false
 	mux = &sync.RWMutex{}
 	isGithubAction = os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
 	contextStr = strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
-	refreshCommentKeywordsRaw := strings.TrimSpace(os.Getenv("ARGO_DIFF_REFRESH_COMMENT_KEYWORDS"))
-	if refreshCommentKeywordsRaw == "" {
-		refreshCommentKeywordsRaw = "argo diff,argo-diff"
-	}
-	for _, keyword := range strings.Split(refreshCommentKeywordsRaw, ",") {
-		keyword = strings.ToLower(strings.TrimSpace(keyword))
-		if keyword != "" {
-			refreshCommentKeywords = append(refreshCommentKeywords, keyword)
-		}
-	}
+	lowerContextStr = strings.ToLower(contextStr)
+	refreshCommentKeywords = parseRefreshCommentKeywords(os.Getenv("ARGO_DIFF_REFRESH_COMMENT_KEYWORDS"))
 	commentPreamble = boundPreamble("ARGO_DIFF_COMMENT_PREAMBLE", strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE")))
 	if commentPreamble == "" {
 		commentPreamble = boundPreamble("ARGO_DIFF_CONTEXT_STR", contextStr)
@@ -136,7 +155,7 @@ func ConnectivityCheck() error {
 func IsRefreshComment(comment string) bool {
 	input := strings.ToLower(strings.TrimSpace(comment))
 	for _, keyword := range refreshCommentKeywords {
-		if input == keyword || input == keyword+" "+strings.ToLower(contextStr) {
+		if input == keyword || input == keyword+" "+lowerContextStr {
 			return true
 		}
 	}
