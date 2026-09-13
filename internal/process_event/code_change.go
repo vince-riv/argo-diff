@@ -130,8 +130,8 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		eventInfo.ChangedFiles = changedFiles
 	}
 
-	// ARGO_DIFF_SKIP_UNMATCHED_EVENTS: check for a matching ArgoCD application before posting commit status
-	if strings.ToLower(strings.TrimSpace(os.Getenv("ARGO_DIFF_SKIP_UNMATCHED_EVENTS"))) == "true" {
+	// ARGO_DIFF_REQUIRE_APP_MATCH: check for a matching ArgoCD application before posting commit status
+	if strings.ToLower(strings.TrimSpace(os.Getenv("ARGO_DIFF_REQUIRE_APP_MATCH"))) == "true" {
 		matched, err := argocd.HasMatchingApplications(ctx, eventInfo)
 		if err != nil {
 			log.Error().Err(err).Msg("argocd.HasMatchingApplications() failed")

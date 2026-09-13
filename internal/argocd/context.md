@@ -135,7 +135,7 @@ lists applications and runs the same `filterApplications()` (single-source, then
 that wave 1 and wave 3 use, returning `true` on the first non-empty result. A `false` here
 guarantees `GetApplicationChanges()` would return an empty `appResList` and no error, since
 nested app-of-apps jobs (the only matches this doesn't see directly) are only ever queued by an
-already-matching parent app. It's the cheap pre-check behind `ARGO_DIFF_SKIP_UNMATCHED_EVENTS`
+already-matching parent app. It's the cheap pre-check behind `ARGO_DIFF_REQUIRE_APP_MATCH`
 in `internal/process_event` — see that package's `context.md`.
 
 ## Timeouts and partial results
