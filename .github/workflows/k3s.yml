@@ -8,6 +8,11 @@ on:
         description: 'PR number to test (fork-PR path). Review the fork diff first: the run executes PR code with a pull-requests:write token.'
         required: true
         type: string
+      argocd_version:
+        description: 'argocd CLI version to bundle into the argo-diff image (e.g. v3.5.2); leave blank to use the version pinned in the Dockerfile'
+        required: false
+        type: string
+        default: ''
   pull_request:
     branches: ["main"]
     paths:
@@ -126,8 +131,18 @@ jobs:
 
       - name: Build argo-diff image
         id: docker_build
+        if: ${{ github.event.inputs.argocd_version == '' }}
         timeout-minutes: 3
         run: docker build --build-arg TARGETARCH=amd64 -t "$ARGO_DIFF_IMAGE" -f Dockerfile .
+
+      - name: Build argo-diff image with specified argocd version
+        id: docker_build_pinned_argocd
+        if: ${{ github.event.inputs.argocd_version != '' }}
+        timeout-minutes: 3
+        run: |
+          docker build --build-arg TARGETARCH=amd64 \
+            --build-arg "ARGOCD_IMAGE=quay.io/argoproj/argocd:${{ github.event.inputs.argocd_version }}" \
+            -t "$ARGO_DIFF_IMAGE" -f Dockerfile .
 
       - name: K3d/K3s Setup
         id: k3s_setup
@@ -156,6 +171,8 @@ jobs:
         timeout-minutes: 1
         run: |
           kubectl create namespace argocd
+          kubectl create namespace argocd-apps
+          kubectl create namespace apps
           kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=true
 
       - name: Wait for HelmChart to deploy
@@ -195,6 +212,7 @@ jobs:
         run: |
           kubectl -n argocd apply -k test/argocd-applications/ --server-side=true
           kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
+          kubectl -n argocd apply -f test/argocd-meta-any-ns.yaml --server-side=true
 
       - name: Install ArgoCD CLI
         id: argocd_cli_install
@@ -217,6 +235,10 @@ jobs:
           argocd app wait basic-deployment
           echo "--- Wait - helm-deployment ---"
           argocd app wait helm-deployment
+          echo "--- Wait - any-ns-meta ---"
+          argocd app wait any-ns-meta --app-namespace argocd-apps
+          echo "--- Wait - any-ns-deployment ---"
+          argocd app wait any-ns-deployment --app-namespace apps
           #echo "--- Meta ---"
           #argocd app get meta -o tree
           #echo "--- Basic-Deployment ---"

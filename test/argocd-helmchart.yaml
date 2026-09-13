@@ -12,6 +12,7 @@ spec:
       params:
         server.insecure: "true"
         server.disable.auth: "true"
+        application.namespaces: "argocd-apps,apps"
     redis-ha:
       enabled: false
     controller:
