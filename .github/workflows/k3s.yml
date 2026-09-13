@@ -252,6 +252,24 @@ jobs:
           echo "--- App List ---"
           argocd app list
 
+      - name: Debug any-ns applications if sync wait fails
+        id: any_ns_debug
+        timeout-minutes: 1
+        if: failure() && steps.argocd_app_sync.outcome == 'failure'
+        run: |
+          echo "--- any-ns-meta (argocd-apps ns) ---"
+          kubectl -n argocd-apps get applications.argoproj.io -o yaml
+          echo "--- any-ns-deployment (apps ns) ---"
+          kubectl -n apps get applications.argoproj.io -o yaml
+          echo "--- any-ns AppProject ---"
+          kubectl -n argocd get appprojects.argoproj.io any-ns -o yaml
+          echo "--- argocd-cmd-params-cm ---"
+          kubectl -n argocd get configmap argocd-cmd-params-cm -o yaml
+          echo "--- argocd-application-controller logs ---"
+          kubectl -n argocd logs sts/argocd-application-controller --all-containers --tail=500 || kubectl -n argocd logs deploy/argocd-application-controller --all-containers --tail=500 || true
+          echo "--- argocd-server logs ---"
+          kubectl -n argocd logs deploy/argocd-server --all-containers --tail=500 || true
+
       - name: Run argo-diff (healthy)
         id: argo_diff_healthy
         timeout-minutes: 2
