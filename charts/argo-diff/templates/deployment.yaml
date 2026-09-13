@@ -1,7 +1,3 @@
-{{- $envNames := list }}
-{{- range .Values.deployment.env }}
-{{- $envNames = append $envNames .name }}
-{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -78,17 +74,7 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
-            {{- if not (has "LOG_LEVEL" $envNames) }}
-            - name: LOG_LEVEL
-              value: "{{ .Values.logLevel }}"
-            {{- end }}
-            {{- if and .Values.argocdCli.image.tag (not (has "ARGOCD_CLI_CMD_NAME" $envNames)) }}
-            - name: ARGOCD_CLI_CMD_NAME
-              value: "/argocd-cli/argocd"
-            {{- end }}
-            {{- with .Values.deployment.env }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- include "argo-diff.env" . | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ include "argo-diff.configMapName" . | quote }}

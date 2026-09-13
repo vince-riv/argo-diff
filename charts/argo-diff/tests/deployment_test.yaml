@@ -240,8 +240,9 @@ tests:
                 name: argo-diff-env
             - secretRef:
                 name: argo-diff-env
-  - it: deployment.env appended after chart entries, valueFrom survives passthrough
+  - it: deployment.env merges with chart entries by name, valueFrom survives passthrough, non-string logLevel is cast to string
     set:
+      logLevel: 5
       deployment.env:
         - name: ARGO_DIFF_TIMEOUT
           value: "5m"
@@ -255,8 +256,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env
           value:
-            - name: LOG_LEVEL
-              value: "info"
             - name: ARGO_DIFF_TIMEOUT
               value: "5m"
             - name: GITHUB_TOKEN
@@ -264,18 +263,26 @@ tests:
                 secretKeyRef:
                   name: my-gh-token
                   key: token
-  - it: deployment.env duplicate name overrides LOG_LEVEL without rendering it twice
+            - name: LOG_LEVEL
+              value: "5"
+  - it: deployment.env duplicate name overrides LOG_LEVEL without rendering it twice or leaking its value field
     set:
       deployment.env:
         - name: LOG_LEVEL
-          value: "debug"
+          valueFrom:
+            configMapKeyRef:
+              name: my-config
+              key: log-level
     template: deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].env
           value:
             - name: LOG_LEVEL
-              value: "debug"
+              valueFrom:
+                configMapKeyRef:
+                  name: my-config
+                  key: log-level
   - it: deployment.env duplicate name overrides ARGOCD_CLI_CMD_NAME without rendering it twice
     set:
       argocdCli.image.tag: "v3.4.6"
@@ -287,10 +294,10 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env
           value:
-            - name: LOG_LEVEL
-              value: "info"
             - name: ARGOCD_CLI_CMD_NAME
               value: "/custom/argocd"
+            - name: LOG_LEVEL
+              value: "info"
   - it: deployment.envFrom appended after chart's own refs
     release:
       name: argo-diff

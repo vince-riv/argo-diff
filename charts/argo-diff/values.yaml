@@ -201,12 +201,9 @@ deployment:
   #   mountPath: "/etc/foo"
   #   readOnly: true
 
-  # deployment.env -- Additional environment variables for the argo-diff container, appended after
-  # the chart's own entries (LOG_LEVEL, and ARGOCD_CLI_CMD_NAME when argocdCli.image.tag is set). An
-  # entry here with the same name as one of those overrides it: the chart's own entry for that name
-  # is omitted, rather than rendering two entries with the same name, since Kubernetes rejects
-  # duplicate env names under server-side apply. Raw core/v1 EnvVar entries, so valueFrom
-  # (secretKeyRef, configMapKeyRef, fieldRef) works.
+  # deployment.env -- Additional environment variables for the argo-diff container. An entry with
+  # the same name as a chart-managed variable (LOG_LEVEL, ARGOCD_CLI_CMD_NAME) overrides it. Raw
+  # core/v1 EnvVar entries, so valueFrom (secretKeyRef, configMapKeyRef, fieldRef) is also supported.
   env: []
   #  - name: ARGO_DIFF_TIMEOUT
   #    value: "5m"
