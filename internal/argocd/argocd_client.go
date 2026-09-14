@@ -221,14 +221,14 @@ func supportsManifestsAppNamespace(ctx context.Context) bool {
 	}
 	v, err := argocdClientVersion(ctx)
 	if err != nil {
-		log.Warn().Err(err).Msg("failed to determine argocd CLI client version; omitting --app-namespace from `argocd app manifests` (app-of-apps discovery will only find nested apps in the CLI's default namespace)")
+		log.Warn().Err(err).Msg("failed to determine argocd CLI client version; omitting --app-namespace from `argocd app manifests` (app-of-apps discovery will not find the nested apps of a parent outside the CLI's default namespace)")
 		addNotice("argo-diff could not determine the `argocd` CLI version, so app-of-apps children are only enumerated for Applications in ArgoCD's own namespace.")
 		return false
 	}
 	supported := versionAtLeast(v, appNamespaceManifestsMinVersion)
 	if !supported {
 		addNotice(fmt.Sprintf(
-			"The pinned `argocd` CLI (%s) is older than %s, so app-of-apps children are only enumerated for Applications in ArgoCD's own namespace. Point `ARGOCD_CLI_CMD_NAME` at a newer CLI to diff nested Applications in other namespaces.",
+			"The pinned `argocd` CLI (%s) is older than %s, so app-of-apps children are only enumerated for Applications in ArgoCD's own namespace. Point `ARGOCD_CLI_CMD_NAME` at a newer CLI to diff the nested Applications of parents in other namespaces.",
 			v, appNamespaceManifestsMinVersion))
 	}
 	cachedSupportsManifestsAppNamespace = &supported
