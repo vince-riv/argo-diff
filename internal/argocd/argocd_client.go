@@ -198,6 +198,11 @@ var (
 	cachedSupportsManifestsAppNamespace *bool
 )
 
+// addNotice is a seam over config.AddNotice(), the same pattern execArgoCdCli
+// uses over exec.Command: tests swap it to capture only the notices their own
+// call raises, rather than reading config's process-wide, never-cleared list.
+var addNotice = config.AddNotice
+
 // supportsManifestsAppNamespace reports whether the pinned argocd CLI is new
 // enough (>=3.5.0) to accept --app-namespace on `argocd app manifests`. An
 // operator can pin an older CLI via ARGOCD_CLI_CMD_NAME; without this check,
@@ -217,12 +222,12 @@ func supportsManifestsAppNamespace(ctx context.Context) bool {
 	v, err := argocdClientVersion(ctx)
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to determine argocd CLI client version; omitting --app-namespace from `argocd app manifests` (app-of-apps discovery will only find nested apps in the CLI's default namespace)")
-		config.AddNotice("argo-diff could not determine the `argocd` CLI version, so app-of-apps children are only enumerated for Applications in ArgoCD's own namespace.")
+		addNotice("argo-diff could not determine the `argocd` CLI version, so app-of-apps children are only enumerated for Applications in ArgoCD's own namespace.")
 		return false
 	}
 	supported := versionAtLeast(v, appNamespaceManifestsMinVersion)
 	if !supported {
-		config.AddNotice(fmt.Sprintf(
+		addNotice(fmt.Sprintf(
 			"The pinned `argocd` CLI (%s) is older than %s, so app-of-apps children are only enumerated for Applications in ArgoCD's own namespace. Point `ARGOCD_CLI_CMD_NAME` at a newer CLI to diff nested Applications in other namespaces.",
 			v, appNamespaceManifestsMinVersion))
 	}

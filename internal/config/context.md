@@ -41,8 +41,8 @@ There are two producers, and `Notices()` returns them in this order:
 
 The first caller is `supportsManifestsAppNamespace()` in `internal/argocd/argocd_client.go`: it
 raises a notice on both its false branches (client version undetectable, client older than
-`appNamespaceManifestsMinVersion`), so the PR comment explains why app-of-apps children outside
-ArgoCD's own namespace are missing rather than leaving the reader to guess.
+`appNamespaceManifestsMinVersion`), so the PR comment explains why the children of app-of-apps
+parents outside ArgoCD's own namespace are missing rather than leaving the reader to guess.
 
 A notice is **advisory**, and renders differently from a warning or a fatal error. See the severity
 table in `internal/github/context.md`.

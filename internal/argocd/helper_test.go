@@ -881,7 +881,7 @@ func TestArgoAppsWithChangesDisambiguatesByNamespace(t *testing.T) {
 	const repoURL = "https://github.com/acme/widgets.git"
 	manifestA := argoAppManifestFixture("web", "team-a", repoURL)
 	manifestB := argoAppManifestFixture("web", "team-b", repoURL)
-	combined := append(append([]byte{}, manifestA...), append([]byte("\n---\n"), manifestB...)...)
+	combined := slices.Concat(manifestA, []byte("\n---\n"), manifestB)
 
 	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 		if slices.Equal(args, []string{"version", "--client"}) {
