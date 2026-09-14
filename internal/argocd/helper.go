@@ -66,10 +66,16 @@ func ConnectivityCheck() error {
 	return fmt.Errorf("client (%s) or Server (%s) version is not %s or greater", clientV, serverV, minVersion)
 }
 
+// appKey returns a namespace/name composite key for disambiguating
+// Applications with the same name in different namespaces.
+func appKey(namespace, name string) string {
+	return namespace + "/" + name
+}
+
 func appListToMap(appList []Application) map[string]Application {
 	argoAppMap := make(map[string]Application)
 	for _, app := range appList {
-		argoAppMap[app.Name] = app
+		argoAppMap[appKey(app.Namespace, app.Name)] = app
 	}
 	return argoAppMap
 }
@@ -131,10 +137,10 @@ type nestedJob struct {
 // merges these sequentially, in original apps order, after the wave-1 pool
 // drains.
 type wave1Result struct {
-	diffResult       *ApplicationResourcesWithChanges
-	notDiffed        []string
-	multiSrcAppNames []string
-	nestedJobs       []nestedJob
+	diffResult      *ApplicationResourcesWithChanges
+	notDiffed       []string
+	multiSrcAppKeys []string
+	nestedJobs      []nestedJob
 }
 
 // diffJobResult is the shared shape for wave-2 (nested app) and wave-3
@@ -201,12 +207,12 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 	// diff matching multi-source application
 	log.Info().Msgf("Found %d nested ArgoCD Application(s) with changes within '%s'", len(appsWithChanges), app.Name)
 	for _, subApp := range appsWithChanges {
-		subAppCur, ok := appLookup[subApp.Name]
+		subAppCur, ok := appLookup[appKey(subApp.Namespace, subApp.Name)]
 		if !ok {
 			log.Info().Msgf("Application %s not found in current ArgoCD app list", subApp.Name)
 			continue
 		}
-		res.multiSrcAppNames = append(res.multiSrcAppNames, subApp.Name)
+		res.multiSrcAppKeys = append(res.multiSrcAppKeys, appKey(subApp.Namespace, subApp.Name))
 		if ctx.Err() != nil {
 			res.notDiffed = append(res.notDiffed, subApp.Name)
 			continue
@@ -332,12 +338,12 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		}
 		wave1Results[i] = res
 	})
-	multiSrcAppNamesDiffed := []string{}
+	multiSrcAppKeysDiffed := []string{}
 	// nestedJobs accumulates in wave1Results order, so it comes out grouped
 	// by parentIdx (ascending, contiguous per parent) without extra sorting.
 	var nestedJobs []nestedJob
 	for _, r := range wave1Results {
-		multiSrcAppNamesDiffed = append(multiSrcAppNamesDiffed, r.multiSrcAppNames...)
+		multiSrcAppKeysDiffed = append(multiSrcAppKeysDiffed, r.multiSrcAppKeys...)
 		nestedJobs = append(nestedJobs, r.nestedJobs...)
 	}
 
@@ -384,7 +390,7 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	}())
 	var wave3Apps []Application
 	for _, app := range apps {
-		if slices.Contains(multiSrcAppNamesDiffed, app.Name) {
+		if slices.Contains(multiSrcAppKeysDiffed, appKey(app.Namespace, app.Name)) {
 			log.Debug().Msgf("Skipping multi-source %s, we already diff'ed it", app.Name)
 			continue
 		}
@@ -581,17 +587,17 @@ func genericManifestToArgoApplication(manifest K8sManifest) (Application, error)
 
 func argoAppsWithChanges(ctx context.Context, appName string, appNamespace string, appResources []AppResource, revision string) ([]Application, error) {
 	log.Trace().Msgf("argoAppsWithChanges() scanning %s at %s for argo apps", appName, revision)
-	argoAppNamesFound := []string{}
+	argoAppKeysFound := []string{}
 	argoApps := []Application{}
 	// look through app resource changes for argoproj.io Applications
 	for _, appRes := range appResources {
 		log.Trace().Msgf("argoAppsWithChanges(%s) - checking changed resource +++ %s/%s %s +++", appName, appRes.Group, appRes.Kind, appRes.Name)
 		if appRes.Group == argoApplicationApiGroup && appRes.Kind == argoApplicationApiKind {
 			log.Debug().Msgf("argoAppsWithChanges(%s) %s is an argo app (%s/%s)", appName, appRes.Name, argoApplicationApiGroup, argoApplicationApiKind)
-			argoAppNamesFound = append(argoAppNamesFound, appRes.Name)
+			argoAppKeysFound = append(argoAppKeysFound, appKey(appRes.Namespace, appRes.Name))
 		}
 	}
-	if len(argoAppNamesFound) == 0 {
+	if len(argoAppKeysFound) == 0 {
 		// bail out if no applications have been found
 		log.Debug().Msgf("argoAppsWithChanges() not argo apps found in %s", appName)
 		return argoApps, nil
@@ -614,10 +620,9 @@ func argoAppsWithChanges(ctx context.Context, appName string, appNamespace strin
 		if err != nil {
 			log.Error().Err(err).Msg("Detected an argo application, but Unable to convert")
 		} else {
-			name := app.Name
 			numSrcs := len(app.Spec.GetSources())
-			log.Trace().Msgf("argoAppsWithChanges(%s): argoApp %s w/ %d sources", appName, name, numSrcs)
-			if slices.Contains(argoAppNamesFound, name) && numSrcs > 0 {
+			log.Trace().Msgf("argoAppsWithChanges(%s): argoApp %s w/ %d sources", appName, app.Name, numSrcs)
+			if slices.Contains(argoAppKeysFound, appKey(app.Namespace, app.Name)) && numSrcs > 0 {
 				// only return multi-source apps that have changes
 				argoApps = append(argoApps, app)
 			}

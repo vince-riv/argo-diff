@@ -458,7 +458,7 @@ func buildTestApps(n int, repoURL string) []Application {
 	apps := make([]Application, n)
 	for i := range apps {
 		apps[i] = Application{
-			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pool-app-%d", i)},
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pool-app-%d", i), Namespace: "argocd"},
 			Spec: ApplicationSpec{
 				Source: &ApplicationSource{RepoURL: repoURL, TargetRevision: "main"},
 			},
@@ -594,7 +594,7 @@ func TestGetApplicationChangesOrderStable(t *testing.T) {
 // resource is an argoproj.io/Application named childName, the shape that
 // sends processTopLevelApp() down the nested-app enumeration path.
 func nestedAppDiffFixture(childName string) []byte {
-	return []byte(fmt.Sprintf(`===== argoproj.io/Application /%s ======
+	return []byte(fmt.Sprintf(`===== argoproj.io/Application argocd/%s ======
 --- a
 +++ b
 @@ -1 +1 @@
@@ -636,11 +636,11 @@ func TestGetApplicationChangesNestedAppsGroupedWithParent(t *testing.T) {
 	parents := buildTestApps(3, repoURL) // pool-app-0, pool-app-1, pool-app-2
 	children := []Application{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child"},
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child", Namespace: "argocd"},
 			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-2-child"},
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-2-child", Namespace: "argocd"},
 			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
 		},
 	}
@@ -711,7 +711,7 @@ func TestGetApplicationChangesNotDiffedGroupedWithParent(t *testing.T) {
 	parents := buildTestApps(3, repoURL) // pool-app-0, pool-app-1, pool-app-2
 	children := []Application{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child"},
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child", Namespace: "argocd"},
 			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
 		},
 	}
