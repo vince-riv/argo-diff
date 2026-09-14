@@ -75,6 +75,25 @@ func TestTimeoutMarkdown(t *testing.T) {
 	}
 }
 
+func TestRequireAppMatch(t *testing.T) {
+	cases := map[string]bool{
+		"":      false,
+		"false": false,
+		"true":  true,
+		"TRUE":  true,
+		"True":  true,
+		" true": true,
+		"yes":   false,
+		"1":     false,
+	}
+	for envVal, want := range cases {
+		t.Setenv("ARGO_DIFF_REQUIRE_APP_MATCH", envVal)
+		if got := requireAppMatch(); got != want {
+			t.Errorf("ARGO_DIFF_REQUIRE_APP_MATCH=%q: requireAppMatch() = %v, want %v", envVal, got, want)
+		}
+	}
+}
+
 func TestProcessTimeoutUnset(t *testing.T) {
 	// t.Setenv registers the restore of any pre-existing value for us
 	t.Setenv("ARGO_DIFF_TIMEOUT", "")
