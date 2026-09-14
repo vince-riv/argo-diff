@@ -67,7 +67,6 @@ into an exit code.
   since that invariant lives in another package.
 - No changes, no warnings, and nothing skipped → `github.Comment()` is called with an **empty**
   body list, which clears out any stale argo-diff comments.
-- `unknownCount` is vestigial: it is declared and reported but never incremented.
 - `ARGO_DIFF_REQUIRE_APP_MATCH`'s no-match case returns before any status or comment call —
   not even the empty-body "clear stale comments" call above. So a PR that previously matched (and
   got a diff comment) and later stops matching keeps its stale comment under this flag.
