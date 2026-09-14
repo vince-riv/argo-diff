@@ -1,0 +1,48 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: any-ns
+  namespace: argocd
+  # Finalizer that ensures that project is not deleted until it is not referenced by any application
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: App-in-any-namespace project
+  sourceRepos:
+    - 'https://github.com/vince-riv/argo-diff.git'
+  sourceNamespaces:
+    - argocd-apps
+    - apps
+  destinations:
+    - namespace: 'apps'
+      server: https://kubernetes.default.svc
+    - namespace: 'any-ns-deployment'
+      server: https://kubernetes.default.svc
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: any-ns-meta
+  namespace: argocd-apps
+spec:
+  destination:
+    namespace: apps
+    server: https://kubernetes.default.svc
+  project: any-ns
+  source:
+    path: test/argocd-applications-any-ns
+    repoURL: 'https://github.com/vince-riv/argo-diff.git'
+    targetRevision: k3s-test
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

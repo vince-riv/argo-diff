@@ -1,0 +1,27 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+  labels:
+    app.kubernetes.io/name: argo-diff-any-ns-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+      app.kubernetes.io/name: argo-diff-any-ns-test
+  template:
+    metadata:
+      labels:
+        app: test
+        app.kubernetes.io/name: argo-diff-any-ns-test
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: test
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - while true ; do sleep 2; done

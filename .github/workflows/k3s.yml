@@ -8,6 +8,11 @@ on:
         description: 'PR number to test (fork-PR path). Review the fork diff first: the run executes PR code with a pull-requests:write token.'
         required: true
         type: string
+      argocd_version:
+        description: 'argocd CLI version to bundle into the argo-diff image (e.g. v3.5.2); leave blank to use the version pinned in the Dockerfile'
+        required: false
+        type: string
+        default: ''
   pull_request:
     branches: ["main"]
     paths:
@@ -126,8 +131,18 @@ jobs:
 
       - name: Build argo-diff image
         id: docker_build
+        if: ${{ github.event.inputs.argocd_version == '' }}
         timeout-minutes: 3
         run: docker build --build-arg TARGETARCH=amd64 -t "$ARGO_DIFF_IMAGE" -f Dockerfile .
+
+      - name: Build argo-diff image with specified argocd version
+        id: docker_build_pinned_argocd
+        if: ${{ github.event.inputs.argocd_version != '' }}
+        timeout-minutes: 3
+        run: |
+          docker build --build-arg TARGETARCH=amd64 \
+            --build-arg "ARGOCD_IMAGE=quay.io/argoproj/argocd:${{ github.event.inputs.argocd_version }}" \
+            -t "$ARGO_DIFF_IMAGE" -f Dockerfile .
 
       - name: K3d/K3s Setup
         id: k3s_setup
@@ -156,6 +171,8 @@ jobs:
         timeout-minutes: 1
         run: |
           kubectl create namespace argocd
+          kubectl create namespace argocd-apps
+          kubectl create namespace apps
           kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=true
 
       - name: Wait for HelmChart to deploy
@@ -195,6 +212,10 @@ jobs:
         run: |
           kubectl -n argocd apply -k test/argocd-applications/ --server-side=true
           kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
+          # Not "-n argocd": any-ns-meta declares its own metadata.namespace
+          # (argocd-apps), which conflicts with a "-n" override to a different
+          # namespace. The AppProject declares its own namespace: argocd instead.
+          kubectl apply -f test/argocd-meta-any-ns.yaml --server-side=true
 
       - name: Install ArgoCD CLI
         id: argocd_cli_install
@@ -217,6 +238,10 @@ jobs:
           argocd app wait basic-deployment
           echo "--- Wait - helm-deployment ---"
           argocd app wait helm-deployment
+          echo "--- Wait - any-ns-meta ---"
+          argocd app wait any-ns-meta --app-namespace argocd-apps
+          echo "--- Wait - any-ns-deployment ---"
+          argocd app wait any-ns-deployment --app-namespace apps
           #echo "--- Meta ---"
           #argocd app get meta -o tree
           #echo "--- Basic-Deployment ---"
@@ -227,13 +252,35 @@ jobs:
           echo "--- App List ---"
           argocd app list
 
+      - name: Debug any-ns applications if sync wait fails
+        id: any_ns_debug
+        timeout-minutes: 1
+        if: failure() && steps.argocd_app_sync.outcome == 'failure'
+        run: |
+          echo "--- any-ns-meta (argocd-apps ns) ---"
+          kubectl -n argocd-apps get applications.argoproj.io -o yaml
+          echo "--- any-ns-deployment (apps ns) ---"
+          kubectl -n apps get applications.argoproj.io -o yaml
+          echo "--- any-ns AppProject ---"
+          kubectl -n argocd get appprojects.argoproj.io any-ns -o yaml
+          echo "--- argocd-cmd-params-cm ---"
+          kubectl -n argocd get configmap argocd-cmd-params-cm -o yaml
+          echo "--- argocd-application-controller logs ---"
+          kubectl -n argocd logs sts/argocd-application-controller --all-containers --tail=500 || kubectl -n argocd logs deploy/argocd-application-controller --all-containers --tail=500 || true
+          echo "--- argocd-server logs ---"
+          kubectl -n argocd logs deploy/argocd-server --all-containers --tail=500 || true
+
       - name: Run argo-diff (healthy)
         id: argo_diff_healthy
         timeout-minutes: 2
         env:
           POD_NAME_PREFIX: argo-diff-healthy
           IMAGE: ${{ env.ARGO_DIFF_IMAGE }}
-          ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test
+          # A non-default argocd_version gets its own context string (and thus
+          # its own PR comment) so a pinned-version dispatch doesn't clobber
+          # the standard run's comment on the same PR.
+          ARGO_DIFF_CONTEXT_STR: ${{ github.event.inputs.argocd_version == '' && 'ephemeral-environment-test' || format('ephemeral-environment-test-argocd-{0}', github.event.inputs.argocd_version) }}
+          ARGO_DIFF_COMMENT_PREAMBLE: ${{ github.event.inputs.argocd_version != '' && format('Testing with bundled argocd CLI `{0}` (overridden via workflow_dispatch input `argocd_version`).', github.event.inputs.argocd_version) || '' }}
           ARGO_DIFF_SHA: ${{ steps.pr_info.outputs.HEAD_SHA }}
           ARGO_DIFF_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
           ARGO_DIFF_REPOSITORY: ${{ github.repository }}
@@ -262,7 +309,10 @@ jobs:
         env:
           POD_NAME_PREFIX: argo-diff-failure
           IMAGE: ${{ env.ARGO_DIFF_IMAGE }}
-          ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test-failure
+          # See the healthy-run step above: a non-default argocd_version gets
+          # its own context string/comment here too.
+          ARGO_DIFF_CONTEXT_STR: ${{ github.event.inputs.argocd_version == '' && 'ephemeral-environment-test-failure' || format('ephemeral-environment-test-failure-argocd-{0}', github.event.inputs.argocd_version) }}
+          ARGO_DIFF_COMMENT_PREAMBLE: ${{ github.event.inputs.argocd_version != '' && format('Testing with bundled argocd CLI `{0}` (overridden via workflow_dispatch input `argocd_version`) - manifest failure scenario.', github.event.inputs.argocd_version) || '' }}
           ARGO_DIFF_SHA: ${{ steps.pr_info.outputs.HEAD_SHA }}
           ARGO_DIFF_HEAD_REF: ${{ steps.pr_info.outputs.HEAD_REF }}
           ARGO_DIFF_REPOSITORY: ${{ github.repository }}

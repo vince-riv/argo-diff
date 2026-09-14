@@ -1,0 +1,20 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: any-ns-deployment
+spec:
+  project: any-ns
+  source:
+    repoURL: 'https://github.com/vince-riv/argo-diff.git'
+    targetRevision: k3s-test
+    path: test/any-ns-deployment
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: any-ns-deployment
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

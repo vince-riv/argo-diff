@@ -604,19 +604,19 @@ func nestedAppDiffFixture(childName string) []byte {
 }
 
 // argoAppManifestFixture builds a minimal `argocd app manifests` document
-// containing a single-source Application named childName, so
+// containing a single-source Application named childName in namespace, so
 // argoAppsWithChanges() recognizes it as a nested app to queue.
-func argoAppManifestFixture(childName, repoURL string) []byte {
+func argoAppManifestFixture(childName, namespace, repoURL string) []byte {
 	return []byte(fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: %s
-  namespace: argocd
+  namespace: %s
 spec:
   source:
     repoURL: %s
     targetRevision: main
-`, childName, repoURL))
+`, childName, namespace, repoURL))
 }
 
 var plainDeploymentDiffFixture = []byte(`===== apps/Deployment /dummy ======
@@ -670,7 +670,7 @@ func TestGetApplicationChangesNestedAppsGroupedWithParent(t *testing.T) {
 		case args[1] == "diff" && (appName == "pool-app-0-child" || appName == "pool-app-2-child"):
 			return nestedAppDiffFixture(appName), makeExitError(t, nil)
 		case args[1] == "manifests":
-			return argoAppManifestFixture(appName+"-child", otherRepoURL), nil
+			return argoAppManifestFixture(appName+"-child", "argocd", otherRepoURL), nil
 		}
 		return nil, fmt.Errorf("unexpected argocd args: %v", args)
 	}
@@ -739,7 +739,7 @@ func TestGetApplicationChangesNotDiffedGroupedWithParent(t *testing.T) {
 		case args[1] == "diff" && appName == "pool-app-0":
 			return nestedAppDiffFixture("pool-app-0-child"), makeExitError(t, nil)
 		case args[1] == "manifests" && appName == "pool-app-0":
-			return argoAppManifestFixture("pool-app-0-child", otherRepoURL), nil
+			return argoAppManifestFixture("pool-app-0-child", "argocd", otherRepoURL), nil
 		case args[1] == "diff" && appName == "pool-app-1":
 			// the deadline lands only now: pool-app-0 (and its nested job
 			// queued from the manifests call above) is already fully
@@ -837,6 +837,74 @@ func TestArgoAppsWithChangesNamespacePropagation(t *testing.T) {
 	}
 	if captured[nsIdx+1] != "non-default-namespace" {
 		t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
+	}
+}
+
+// Two Applications named "web" in different namespaces must not collide in
+// appListToMap()'s keyspace: argocd app list spans namespaces once
+// app-in-any-namespace is enabled, so name-only keys would let one
+// namespace's app silently overwrite the other's entry.
+func TestAppListToMapKeysByNamespaceAndName(t *testing.T) {
+	apps := []Application{
+		{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "team-a"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "team-b"}},
+	}
+	got := appListToMap(apps)
+	if len(got) != 2 {
+		t.Fatalf("appListToMap() returned %d entries, want 2 (name-only keying would collapse these into 1)", len(got))
+	}
+	teamA, ok := got[appKey("team-a", "web")]
+	if !ok {
+		t.Fatalf("no entry for team-a/web in %v", got)
+	}
+	if teamA.Namespace != "team-a" {
+		t.Errorf("key team-a/web resolved to an app in namespace %q, want team-a", teamA.Namespace)
+	}
+	teamB, ok := got[appKey("team-b", "web")]
+	if !ok {
+		t.Fatalf("no entry for team-b/web in %v", got)
+	}
+	if teamB.Namespace != "team-b" {
+		t.Errorf("key team-b/web resolved to an app in namespace %q, want team-b", teamB.Namespace)
+	}
+}
+
+// When two namespaces each have an Application named "web", and only
+// team-a's is a changed resource of the parent being diffed, only team-a's
+// must come back — name-only matching (pre-appKey) would return both, since
+// it can't tell them apart.
+func TestArgoAppsWithChangesDisambiguatesByNamespace(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+
+	const repoURL = "https://github.com/acme/widgets.git"
+	manifestA := argoAppManifestFixture("web", "team-a", repoURL)
+	manifestB := argoAppManifestFixture("web", "team-b", repoURL)
+	combined := slices.Concat(manifestA, []byte("\n---\n"), manifestB)
+
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		if slices.Equal(args, []string{"version", "--client"}) {
+			return []byte("argocd: v3.5.2\n"), nil
+		}
+		if len(args) > 1 && args[1] == "manifests" {
+			return combined, nil
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	appResources := []AppResource{
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-a", Name: "web"},
+	}
+	result, err := argoAppsWithChanges(context.Background(), "parent-app", "team-a", appResources, "abc123")
+	if err != nil {
+		t.Fatalf("argoAppsWithChanges() erred: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("argoAppsWithChanges() returned %d apps, want 1 (name-only matching would return both team-a/web and team-b/web)", len(result))
+	}
+	if result[0].Namespace != "team-a" {
+		t.Errorf("argoAppsWithChanges() returned an app in namespace %q, want team-a", result[0].Namespace)
 	}
 }
 
