@@ -59,9 +59,19 @@ resolves `argocd version --client` (client-only, **no server round-trip** — no
 `ConnectivityCheck()`) and caches a successful result process-wide via `cachedSupportsManifestsAppNamespace`
 (a failed lookup is *not* cached, so it's retried on the next call). If the pinned CLI is `<3.5.0`,
 the flag is omitted entirely and app-of-apps discovery falls back to the CLI's implicit default
-namespace — nested Applications outside that namespace won't be found on an old CLI.
+namespace — nested Applications outside that namespace won't be found on an old CLI. Both false
+branches of `supportsManifestsAppNamespace()` (version undetectable, version too old) call
+`config.AddNotice()`, so the PR comment tells the reader a pinned CLI is why children are missing,
+rather than leaving them to read it off an unrelated ArgoCD error.
 
 ## Matching applications to a change
+
+`appKey(namespace, name)` builds a `namespace/name` composite key, used everywhere Applications are
+looked up by name: `appListToMap()`, the wave-3 multi-source dedup list (`multiSrcAppKeysDiffed`),
+and matching manifest-derived Applications back to the changed resources that named them
+(`argoAppsWithChanges()`). Name alone stopped being unique once app-in-any-namespace is enabled —
+`argocd app list` then spans namespaces, so two apps named the same in different namespaces would
+otherwise collide and diff the wrong one.
 
 `GetApplicationChanges(ctx, eventInfo)` is the one entry point `process_event` calls. It:
 

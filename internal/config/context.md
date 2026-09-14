@@ -39,9 +39,10 @@ There are two producers, and `Notices()` returns them in this order:
    deduped so a per-application code path can call it unconditionally, and capped at `maxNotices`
    (10) so it can't crowd the diffs out of the comment budget.
 
-Nothing calls `AddNotice()` yet — it is the seam for that first version-gated feature.
-`ConnectivityCheck()` in `internal/argocd/helper.go` already parses the client and server versions
-and then discards them, which is the obvious place to hook one in.
+The first caller is `supportsManifestsAppNamespace()` in `internal/argocd/argocd_client.go`: it
+raises a notice on both its false branches (client version undetectable, client older than
+`appNamespaceManifestsMinVersion`), so the PR comment explains why app-of-apps children outside
+ArgoCD's own namespace are missing rather than leaving the reader to guess.
 
 A notice is **advisory**, and renders differently from a warning or a fatal error. See the severity
 table in `internal/github/context.md`.
