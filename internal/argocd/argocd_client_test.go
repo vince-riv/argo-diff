@@ -502,6 +502,61 @@ func TestGetApplicationManifestsAppNamespaceArg(t *testing.T) {
 			t.Errorf("expected --app-namespace to still be applied on the second call, got args %v", captured)
 		}
 	})
+
+	// addNotice is swapped here (rather than reading config.Notices()) so
+	// each subtest captures only the notice its own call raises. config's
+	// list is process-wide and resetNotices() is unexported, so reading
+	// through config.Notices() would also pass on notices any other test -
+	// in this file or run concurrently - happened to have already raised.
+	t.Run("an old client raises a comment notice naming its version", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		origExec := execArgoCdCli
+		defer func() { execArgoCdCli = origExec }()
+		origNotice := addNotice
+		defer func() { addNotice = origNotice }()
+		var captured []string
+		var notices []string
+		execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.4.9", &captured)
+		addNotice = func(s string) { notices = append(notices, s) }
+		_, _ = getApplicationManifests(context.Background(), "my-app", "non-default-namespace", "abc123")
+		found := false
+		for _, n := range notices {
+			if strings.Contains(n, "3.4.9") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected a notice naming client version 3.4.9, got %v", notices)
+		}
+	})
+
+	t.Run("a failed client version lookup raises a comment notice", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		origExec := execArgoCdCli
+		defer func() { execArgoCdCli = origExec }()
+		origNotice := addNotice
+		defer func() { addNotice = origNotice }()
+		var notices []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			if slices.Equal(args, []string{"version", "--client"}) {
+				return nil, fmt.Errorf("exec: \"argocd\": executable file not found in $PATH")
+			}
+			return []byte(""), nil
+		}
+		addNotice = func(s string) { notices = append(notices, s) }
+		_, _ = getApplicationManifests(context.Background(), "my-app", "non-default-namespace", "abc123")
+		found := false
+		for _, n := range notices {
+			if strings.Contains(n, "could not determine") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected a notice saying the CLI version could not be determined, got %v", notices)
+		}
+	})
 }
 
 func TestAppManifestHelper(t *testing.T) {

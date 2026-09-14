@@ -20,9 +20,9 @@ Wrapper around the **`argocd` CLI** — not an HTTP API client. Everything here 
 optionally `--insecure`, `--plaintext`, `--grpc-web`, `--grpc-web-root-path`. It also captures
 `ARGOCD_OPTS` and validates `ARGOCD_APP_DIFF_SERVER_SIDE_DIFF` (must be `true`/`false`).
 
-`execArgoCdCli` is a **package-level `var`, so tests can replace it** — that is the mocking seam
-for this whole package. It prepends `commonCliArgv`, sets `KUBECTL_EXTERNAL_DIFF=diff -u` (hence
-`diffutils` in the Dockerfile), and re-injects `ARGOCD_OPTS`.
+`execArgoCdCli` is a **package-level `var`, so tests can replace it** — that is the main mocking
+seam for this package (see `addNotice` below for the other one). It prepends `commonCliArgv`, sets
+`KUBECTL_EXTERNAL_DIFF=diff -u` (hence `diffutils` in the Dockerfile), and re-injects `ARGOCD_OPTS`.
 
 **`commonCliArgv` must never be combined with per-call `args` via a plain `append`.** Depending on
 how many optional flags `init()` set, `commonCliArgv` can end up with spare capacity; `append`
@@ -59,9 +59,21 @@ resolves `argocd version --client` (client-only, **no server round-trip** — no
 `ConnectivityCheck()`) and caches a successful result process-wide via `cachedSupportsManifestsAppNamespace`
 (a failed lookup is *not* cached, so it's retried on the next call). If the pinned CLI is `<3.5.0`,
 the flag is omitted entirely and app-of-apps discovery falls back to the CLI's implicit default
-namespace — nested Applications outside that namespace won't be found on an old CLI.
+namespace — an old CLI can't find the children of a parent outside that namespace. Both false
+branches of `supportsManifestsAppNamespace()` (version undetectable, version too old) call
+`config.AddNotice()`, so the PR comment tells the reader a pinned CLI is why children are missing,
+rather than leaving them to read it off an unrelated ArgoCD error. They call it through `addNotice`,
+a second package-level seam: tests swap it to capture only their own call's notices, because
+`config.Notices()` reads a process-wide list that tests in this package cannot clear.
 
 ## Matching applications to a change
+
+`appKey(namespace, name)` builds a `namespace/name` composite key, used everywhere Applications are
+looked up by name: `appListToMap()`, the wave-3 multi-source dedup list (`multiSrcAppKeysDiffed`),
+and matching manifest-derived Applications back to the changed resources that named them
+(`argoAppsWithChanges()`). Name alone stopped being unique once app-in-any-namespace is enabled —
+`argocd app list` then spans namespaces, so two apps named the same in different namespaces would
+otherwise collide and diff the wrong one.
 
 `GetApplicationChanges(ctx, eventInfo)` is the one entry point `process_event` calls. It:
 
