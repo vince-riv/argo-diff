@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/vince-riv/argo-diff/internal/config"
 )
 
 // makeExitError runs a trivial failing command to obtain a real *exec.ExitError
@@ -500,6 +502,53 @@ func TestGetApplicationManifestsAppNamespaceArg(t *testing.T) {
 		}
 		if !slices.Contains(captured, "--app-namespace") {
 			t.Errorf("expected --app-namespace to still be applied on the second call, got args %v", captured)
+		}
+	})
+
+	// config.resetNotices() is unexported and only usable inside package
+	// config, so these two subtests can't clear notice state before or after
+	// running. They assert containment only, never absence - AddNotice()
+	// dedupes, so re-running this subtest (or others that raise the same
+	// notice) doesn't change the outcome.
+	t.Run("an old client raises a comment notice naming its version", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.4.9", &captured)
+		_, _ = getApplicationManifests(context.Background(), "my-app", "non-default-namespace", "abc123")
+		found := false
+		for _, n := range config.Notices() {
+			if strings.Contains(n, "3.4.9") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected a notice naming client version 3.4.9, got %v", config.Notices())
+		}
+	})
+
+	t.Run("a failed client version lookup raises a comment notice", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			if slices.Equal(args, []string{"version", "--client"}) {
+				return nil, fmt.Errorf("exec: \"argocd\": executable file not found in $PATH")
+			}
+			return []byte(""), nil
+		}
+		_, _ = getApplicationManifests(context.Background(), "my-app", "non-default-namespace", "abc123")
+		found := false
+		for _, n := range config.Notices() {
+			if strings.Contains(n, "could not determine") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected a notice saying the CLI version could not be determined, got %v", config.Notices())
 		}
 	})
 }
