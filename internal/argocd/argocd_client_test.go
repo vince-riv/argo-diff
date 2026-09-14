@@ -80,6 +80,38 @@ func TestParseArgoCDVersion(t *testing.T) {
 	}
 }
 
+func TestParseArgoCDClientVersion(t *testing.T) {
+	_, err := parseArgoCDClientVersion([]byte("garbage"))
+	if err == nil {
+		t.Error("Expected an error from garbage test string")
+	}
+	// "argocd version --client" output has no "argocd-server:" line at all.
+	clientOnlyOutput := `argocd: v3.5.2+dc12345
+  BuildDate: 2026-01-11T19:59:16Z
+  GitCommit: dc43124058130db9a747d141d86d7c2f4aac7bf9
+  GitTreeState: clean
+  GoVersion: go1.23.4
+  Compiler: gc
+  Platform: darwin/arm64
+`
+	clientV, err := parseArgoCDClientVersion([]byte(clientOnlyOutput))
+	if err != nil {
+		t.Errorf("Unexpected error from valid client-only test string: %v", err)
+	}
+	if clientV != "v3.5.2" {
+		t.Errorf("Client version %s is not expected (%s)", clientV, "v3.5.2")
+	}
+	// Also tolerant of the full "argocd version" output (extra
+	// "argocd-server:" line is simply ignored).
+	clientV, err = parseArgoCDClientVersion([]byte(argocdCliVersionOutput))
+	if err != nil {
+		t.Errorf("Unexpected error from full version output: %v", err)
+	}
+	if clientV != "v2.13.1" {
+		t.Errorf("Client version %s is not expected (%s)", clientV, "v2.13.1")
+	}
+}
+
 func TestExtractFirstLin(t *testing.T) {
 	firstLine, remaining := extractFirstLine(lokiClusterRoleDiff)
 	expectedFirstLine := "===== rbac.authorization.k8s.io/ClusterRoleBinding /loki-clusterrolebinding ======"
@@ -188,7 +220,7 @@ func TestDiffApplicationExitCodeHandling(t *testing.T) {
 		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 			return diffOutput, makeExitError(t, nil)
 		}
-		appResList, err := diffApplication(context.Background(), "argo-diff", "HEAD", nil, nil)
+		appResList, err := diffApplication(context.Background(), "argo-diff", "argocd", "HEAD", nil, nil)
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -204,7 +236,7 @@ func TestDiffApplicationExitCodeHandling(t *testing.T) {
 		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
 			return nil, makeExitError(t, []byte("FATA[0000] failed to generate manifest"))
 		}
-		appResList, err := diffApplication(context.Background(), "argo-diff", "HEAD", nil, nil)
+		appResList, err := diffApplication(context.Background(), "argo-diff", "argocd", "HEAD", nil, nil)
 		if err == nil {
 			t.Fatal("expected an error for exit 1 with empty stdout, got nil")
 		}
@@ -273,6 +305,203 @@ func writeArgvEchoScript(t *testing.T) string {
 		t.Fatalf("failed to write fake argocd script: %v", err)
 	}
 	return path
+}
+
+func TestDiffApplicationAppNamespaceArg(t *testing.T) {
+	t.Run("--app-namespace passed for default argocd namespace", func(t *testing.T) {
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			captured = args
+			return nil, nil
+		}
+		_, _ = diffApplication(context.Background(), "my-app", "argocd", "abc123", nil, nil)
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in args %v", captured)
+		}
+		if captured[nsIdx+1] != "argocd" {
+			t.Errorf("expected --app-namespace value 'argocd', got %q", captured[nsIdx+1])
+		}
+	})
+
+	t.Run("--app-namespace passed for non-default namespace", func(t *testing.T) {
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			captured = args
+			return nil, nil
+		}
+		_, _ = diffApplication(context.Background(), "my-app", "non-default-namespace", "abc123", nil, nil)
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in args %v", captured)
+		}
+		if captured[nsIdx+1] != "non-default-namespace" {
+			t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
+		}
+	})
+
+	t.Run("--app-namespace passed in multi-source path", func(t *testing.T) {
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			captured = args
+			return nil, nil
+		}
+		_, _ = diffApplication(context.Background(), "my-app", "non-default-namespace", "", []string{"abc123"}, []int{1})
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in multi-source args %v", captured)
+		}
+		if captured[nsIdx+1] != "non-default-namespace" {
+			t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
+		}
+	})
+}
+
+// mockExecArgoCdCliWithClientVersion returns an execArgoCdCli stub that
+// answers "version --client" with clientVersion and otherwise records the
+// call's args into *captured (last call wins) and returns empty output.
+func mockExecArgoCdCliWithClientVersion(clientVersion string, captured *[]string) func(ctx context.Context, args []string) ([]byte, error) {
+	return func(ctx context.Context, args []string) ([]byte, error) {
+		if slices.Equal(args, []string{"version", "--client"}) {
+			return []byte(fmt.Sprintf("argocd: %s\n", clientVersion)), nil
+		}
+		*captured = args
+		return []byte(""), nil
+	}
+}
+
+// resetSupportsManifestsAppNamespaceCache clears the process-wide cache
+// populated by supportsManifestsAppNamespace(), and restores it afterward so
+// other tests aren't affected by whichever client version this test fed it.
+func resetSupportsManifestsAppNamespaceCache(t *testing.T) {
+	t.Helper()
+	orig := cachedSupportsManifestsAppNamespace
+	cachedSupportsManifestsAppNamespace = nil
+	t.Cleanup(func() { cachedSupportsManifestsAppNamespace = orig })
+}
+
+func TestGetApplicationManifestsAppNamespaceArg(t *testing.T) {
+	t.Run("--app-namespace passed for default argocd namespace on a supporting client", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.5.2", &captured)
+		_, _ = getApplicationManifests(context.Background(), "my-app", "argocd", "abc123")
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in args %v", captured)
+		}
+		if captured[nsIdx+1] != "argocd" {
+			t.Errorf("expected --app-namespace value 'argocd', got %q", captured[nsIdx+1])
+		}
+	})
+
+	t.Run("--app-namespace passed for non-default namespace on a supporting client", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.5.2", &captured)
+		_, _ = getApplicationManifests(context.Background(), "my-app", "non-default-namespace", "abc123")
+		nsIdx := slices.Index(captured, "--app-namespace")
+		if nsIdx == -1 {
+			t.Fatalf("expected --app-namespace in args %v", captured)
+		}
+		if captured[nsIdx+1] != "non-default-namespace" {
+			t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
+		}
+	})
+
+	t.Run("--app-namespace omitted for a client older than 3.5.0", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.4.9", &captured)
+		_, _ = getApplicationManifests(context.Background(), "my-app", "non-default-namespace", "abc123")
+		if slices.Contains(captured, "--app-namespace") {
+			t.Errorf("expected --app-namespace to be omitted for an old client, got args %v", captured)
+		}
+	})
+
+	t.Run("--app-namespace omitted when the client version can't be determined", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			if slices.Equal(args, []string{"version", "--client"}) {
+				return nil, fmt.Errorf("exec: \"argocd\": executable file not found in $PATH")
+			}
+			captured = args
+			return []byte(""), nil
+		}
+		_, _ = getApplicationManifests(context.Background(), "my-app", "non-default-namespace", "abc123")
+		if slices.Contains(captured, "--app-namespace") {
+			t.Errorf("expected --app-namespace to be omitted when client version lookup fails, got args %v", captured)
+		}
+	})
+
+	t.Run("a failed lookup is retried on the next call rather than cached", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var versionCalls int
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			if slices.Equal(args, []string{"version", "--client"}) {
+				versionCalls++
+				if versionCalls == 1 {
+					return nil, fmt.Errorf("exec: \"argocd\": executable file not found in $PATH")
+				}
+				return []byte("argocd: v3.5.2\n"), nil
+			}
+			captured = args
+			return []byte(""), nil
+		}
+		_, _ = getApplicationManifests(context.Background(), "my-app", "argocd", "abc123")
+		if slices.Contains(captured, "--app-namespace") {
+			t.Fatalf("expected --app-namespace to be omitted on the first (failed lookup) call, got args %v", captured)
+		}
+		_, _ = getApplicationManifests(context.Background(), "my-app", "argocd", "def456")
+		if versionCalls != 2 {
+			t.Fatalf("expected the version lookup to be retried after a failure, got %d calls", versionCalls)
+		}
+		if !slices.Contains(captured, "--app-namespace") {
+			t.Errorf("expected --app-namespace to be applied once the retried lookup succeeds, got args %v", captured)
+		}
+	})
+
+	t.Run("client version is only looked up once per process", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var versionCalls int
+		var captured []string
+		execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+			if slices.Equal(args, []string{"version", "--client"}) {
+				versionCalls++
+				return []byte("argocd: v3.5.2\n"), nil
+			}
+			captured = args
+			return []byte(""), nil
+		}
+		_, _ = getApplicationManifests(context.Background(), "my-app", "argocd", "abc123")
+		_, _ = getApplicationManifests(context.Background(), "my-app", "argocd", "def456")
+		if versionCalls != 1 {
+			t.Errorf("expected exactly 1 client version lookup across 2 calls, got %d", versionCalls)
+		}
+		if !slices.Contains(captured, "--app-namespace") {
+			t.Errorf("expected --app-namespace to still be applied on the second call, got args %v", captured)
+		}
+	})
 }
 
 func TestAppManifestHelper(t *testing.T) {

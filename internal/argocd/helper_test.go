@@ -458,7 +458,7 @@ func buildTestApps(n int, repoURL string) []Application {
 	apps := make([]Application, n)
 	for i := range apps {
 		apps[i] = Application{
-			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pool-app-%d", i)},
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pool-app-%d", i), Namespace: "argocd"},
 			Spec: ApplicationSpec{
 				Source: &ApplicationSource{RepoURL: repoURL, TargetRevision: "main"},
 			},
@@ -594,7 +594,7 @@ func TestGetApplicationChangesOrderStable(t *testing.T) {
 // resource is an argoproj.io/Application named childName, the shape that
 // sends processTopLevelApp() down the nested-app enumeration path.
 func nestedAppDiffFixture(childName string) []byte {
-	return []byte(fmt.Sprintf(`===== argoproj.io/Application /%s ======
+	return []byte(fmt.Sprintf(`===== argoproj.io/Application argocd/%s ======
 --- a
 +++ b
 @@ -1 +1 @@
@@ -636,11 +636,11 @@ func TestGetApplicationChangesNestedAppsGroupedWithParent(t *testing.T) {
 	parents := buildTestApps(3, repoURL) // pool-app-0, pool-app-1, pool-app-2
 	children := []Application{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child"},
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child", Namespace: "argocd"},
 			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-2-child"},
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-2-child", Namespace: "argocd"},
 			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
 		},
 	}
@@ -711,7 +711,7 @@ func TestGetApplicationChangesNotDiffedGroupedWithParent(t *testing.T) {
 	parents := buildTestApps(3, repoURL) // pool-app-0, pool-app-1, pool-app-2
 	children := []Application{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child"},
+			ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child", Namespace: "argocd"},
 			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
 		},
 	}
@@ -767,18 +767,36 @@ func TestGetApplicationChangesNotDiffedGroupedWithParent(t *testing.T) {
 	}
 }
 
-func TestVersionCheck(t *testing.T) {
-	if !versionCheck("2.12.1") {
+func TestVersionAtLeastAgainstMinVersion(t *testing.T) {
+	if !versionAtLeast("2.12.1", minVersion) {
 		t.Error("v2.12.1 should pass")
 	}
-	if versionCheck("2.11.100") {
-		t.Error("v2.12.100 should not pass")
+	if versionAtLeast("2.11.100", minVersion) {
+		t.Error("v2.11.100 should not pass")
 	}
-	if !versionCheck("2.13.0") {
+	if !versionAtLeast("2.13.0", minVersion) {
 		t.Error("v2.13.0 should pass")
 	}
-	if versionCheck("1.150.0") {
+	if versionAtLeast("1.150.0", minVersion) {
 		t.Error("v1.150.0 should not pass")
+	}
+}
+
+func TestVersionAtLeastMalformed(t *testing.T) {
+	// A version string with fewer than 3 dot-separated components (or a
+	// non-numeric component) must fail safe rather than panic on an
+	// out-of-range index - this is now reachable at request time (not just
+	// process startup) via supportsManifestsAppNamespace(), which parses
+	// whatever the pinned argocd CLI reports for its own version.
+	cases := []string{"3.5", "3", "", "v3.x.0", "3.5.0-rc1.extra.junk"}
+	for _, v := range cases {
+		if versionAtLeast(v, "3.5.0") {
+			t.Errorf("versionAtLeast(%q, \"3.5.0\") = true, want false (malformed input)", v)
+		}
+	}
+	// A malformed `required` argument must fail safe too.
+	if versionAtLeast("3.5.0", "3.5") {
+		t.Error(`versionAtLeast("3.5.0", "3.5") = true, want false (malformed required)`)
 	}
 }
 
@@ -788,12 +806,37 @@ func TestArgoAppsWithChanges(t *testing.T) {
 		AppResource{ApiVersion: "v1", Group: "apps", Kind: "Deployment", Namespace: "test", Name: "testdeploy"},
 		AppResource{ApiVersion: "v1", Group: "", Kind: "ConfigMap", Namespace: "test", Name: "testcm"},
 	}
-	result, err := argoAppsWithChanges(ctx, "testapp", appResources, "abcdef")
+	result, err := argoAppsWithChanges(ctx, "testapp", "argocd", appResources, "abcdef")
 	if err != nil {
 		t.Errorf("argoAppsWithChanges() erroed: %v", err)
 	}
 	if len(result) != 0 {
 		t.Errorf("Expected no results, got %d", len(result))
+	}
+}
+
+func TestArgoAppsWithChangesNamespacePropagation(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+
+	// Include an argoproj.io/Application resource so argoAppsWithChanges proceeds
+	// past the early-exit and calls getApplicationManifests.
+	appResources := []AppResource{
+		{ApiVersion: "argoproj.io/v1alpha1", Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "argocd", Name: "child-app"},
+	}
+
+	var captured []string
+	execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.5.2", &captured) // empty manifests — no nested apps discovered
+
+	_, _ = argoAppsWithChanges(context.Background(), "parent-app", "non-default-namespace", appResources, "abc123")
+
+	nsIdx := slices.Index(captured, "--app-namespace")
+	if nsIdx == -1 {
+		t.Fatalf("expected --app-namespace in getApplicationManifests args %v", captured)
+	}
+	if captured[nsIdx+1] != "non-default-namespace" {
+		t.Errorf("expected --app-namespace value 'non-default-namespace', got %q", captured[nsIdx+1])
 	}
 }
 
