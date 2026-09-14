@@ -206,8 +206,8 @@ var addNotice = config.AddNotice
 // supportsManifestsAppNamespace reports whether the pinned argocd CLI is new
 // enough (>=3.5.0) to accept --app-namespace on `argocd app manifests`. An
 // operator can pin an older CLI via ARGOCD_CLI_CMD_NAME; without this check,
-// app-of-apps discovery for apps outside the CLI's default namespace would
-// pass a flag the CLI doesn't understand.
+// every `argocd app manifests` call would pass a flag the CLI doesn't
+// understand.
 //
 // The result is cached process-wide after the first successful lookup,
 // since the pinned CLI's version cannot change during the process lifetime.
