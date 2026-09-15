@@ -112,7 +112,7 @@ func main() {
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		log.Info().Msg("GITHUB_ACTIONS set in the environemtn - running once with event data from environment")
 		if process_event.RequireAppMatch() {
-			log.Warn().Msg("ARGO_DIFF_REQUIRE_APP_MATCH is set but has no effect under GitHub Actions - it only applies to webhook server deployments")
+			log.Warn().Msg("ARGO_DIFF_REQUIRE_APP_MATCH is set but has no effect under GitHub Actions, which skips commit statuses already")
 		}
 		err = server.ProcessGithubAction()
 		if err != nil {

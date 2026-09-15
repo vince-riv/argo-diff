@@ -26,6 +26,10 @@ into an exit code.
    the flag suppresses commit-status chatter on org-wide webhook installs, and Actions mode skips
    commit statuses anyway and only runs where the action was deliberately added. `cmd/main.go` logs
    a warning if the flag is set under Actions. Keep `README.md`'s env var table in step with this.
+
+   Actions mode is the *only* mode the flag is inert in. `-f` event-file mode decodes `Refresh`
+   from the JSON's `refresh` key, which the README's example event omits — so it defaults to
+   `false` and the match check does run. Don't describe the flag as webhook-only.
 5. Commit status → `pending`.
 6. `argocd.GetApplicationChanges(diffCtx, eventInfo)`.
 7. Build the markdown, choose the final status, comment.

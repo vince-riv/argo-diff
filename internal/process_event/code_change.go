@@ -61,9 +61,10 @@ func reportReserve(timeout time.Duration) time.Duration {
 // ARGO_DIFF_REQUIRE_APP_MATCH flag, which gates commit status and comment
 // posting behind a successful match check.
 //
-// The flag only takes effect in webhook server mode - see the bypass in
-// ProcessCodeChange(). It is exported so cmd/main.go can warn when it is set
-// under GitHub Actions, where it does nothing.
+// The flag applies in webhook server mode and in -f event-file mode, but is
+// inert under GitHub Actions - see the bypass in ProcessCodeChange(). It is
+// exported so cmd/main.go can warn when it is set under Actions, where it does
+// nothing.
 func RequireAppMatch() bool {
 	return strings.ToLower(strings.TrimSpace(os.Getenv("ARGO_DIFF_REQUIRE_APP_MATCH"))) == "true"
 }
@@ -154,6 +155,9 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	//     appearing on every PR of an org-wide webhook install; Actions mode skips commit
 	//     statuses entirely and only runs in repos someone deliberately added the action to,
 	//     so there is no chatter to suppress. cmd/main.go warns if the flag is set there.
+	//
+	// -f event-file mode is not a third case: it decodes Refresh from the event JSON, which
+	// normally omits the key, so the check runs there as it does for webhook events.
 	if RequireAppMatch() && !eventInfo.Refresh {
 		matched, err := argocd.HasMatchingApplications(ctx, eventInfo)
 		if err != nil {
