@@ -57,6 +57,13 @@ func reportReserve(timeout time.Duration) time.Duration {
 	return defaultReportReserve
 }
 
+// requireAppMatch returns true when the operator has opted into the
+// ARGO_DIFF_REQUIRE_APP_MATCH flag, which gates commit status and comment
+// posting behind a successful match check.
+func requireAppMatch() bool {
+	return strings.ToLower(strings.TrimSpace(os.Getenv("ARGO_DIFF_REQUIRE_APP_MATCH"))) == "true"
+}
+
 // timeoutMarkdown renders the PR comment warning about applications that
 // weren't diffed. The list of names is capped so a change matching hundreds of
 // applications can't crowd the diffs out of the comment.
@@ -128,6 +135,26 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		log.Error().Err(err).Msgf("Failed to list pull request files for %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 	} else {
 		eventInfo.ChangedFiles = changedFiles
+	}
+
+	// ARGO_DIFF_REQUIRE_APP_MATCH: check for a matching ArgoCD application before posting
+	// commit status, and stay silent when nothing matches. Explicit refresh requests
+	// (e.g. "argo diff" PR comments) bypass this so a human asking for a diff always gets
+	// an answer.
+	if requireAppMatch() && !eventInfo.Refresh {
+		matched, err := argocd.HasMatchingApplications(ctx, eventInfo)
+		if err != nil {
+			log.Error().Err(err).Msg("argocd.HasMatchingApplications() failed")
+			statusCtx, statusCancel := context.WithTimeout(context.Background(), reportReserve(timeout))
+			defer statusCancel()
+			_ = github.Status(statusCtx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+			*callerErr = err
+			return
+		}
+		if !matched {
+			log.Info().Msgf("Skipping commit status; no ArgoCD application matches %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+			return
+		}
 	}
 
 	// set commit status to PENDING
