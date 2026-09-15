@@ -94,8 +94,15 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
+# Read the logs once, up front: the REQUIRE_LOG assertion below matches against
+# this copy rather than re-running kubectl. Piping `kubectl logs` straight into
+# `grep -q` is a trap under `set -o pipefail` - grep exits at the first match,
+# kubectl dies of SIGPIPE writing whatever is left (exit 141, and silently, as
+# Go's runtime default for EPIPE on stdout), and pipefail turns that into a
+# failed assertion even though the string was present.
+pod_logs=$(kubectl -n argocd logs "$pod_name" 2>&1 || true)
 echo "--- Pod logs ($pod_name) ---"
-kubectl -n argocd logs "$pod_name" || true
+printf '%s\n' "$pod_logs"
 
 if [[ "$phase" != "Succeeded" && "$phase" != "Failed" ]]; then
   echo "::error::Pod $pod_name did not reach a terminal phase within timeout (last phase: $phase)"
@@ -125,7 +132,7 @@ case "$EXPECT_EXIT" in
 esac
 
 if [[ -n "${REQUIRE_LOG:-}" ]]; then
-  if ! kubectl -n argocd logs "$pod_name" | grep -qF -- "$REQUIRE_LOG"; then
+  if ! grep -qF -- "$REQUIRE_LOG" <<<"$pod_logs"; then
     echo "::error::Expected pod $pod_name logs to contain: $REQUIRE_LOG"
     exit 1
   fi
