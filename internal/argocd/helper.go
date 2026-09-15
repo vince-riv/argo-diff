@@ -281,6 +281,32 @@ func processMultiSrcApp(ctx context.Context, app Application, eventInfo webhook.
 	return res
 }
 
+// listAndMatchApplications calls listApplications and runs both filterApplications passes
+// (single-source, then multi-source), returning the raw item slice alongside the two
+// filtered sets. Returning the raw items lets callers that need them (e.g. for
+// appListToMap) avoid a second listApplications call.
+// An empty list is not an error here — callers decide what it means for them.
+func listAndMatchApplications(ctx context.Context, eventInfo webhook.EventInfo) (items []Application, singleSrc []Application, multiSrc []Application, err error) {
+	argoApps, err := listApplications(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	log.Trace().Msgf("listApplications() returned %d items", len(argoApps.Items))
+	items = argoApps.Items
+	if len(items) == 0 {
+		return items, nil, nil, nil
+	}
+	singleSrc, err = filterApplications(items, eventInfo, false)
+	if err != nil {
+		return items, nil, nil, err
+	}
+	multiSrc, err = filterApplications(items, eventInfo, true)
+	if err != nil {
+		return items, singleSrc, nil, err
+	}
+	return items, singleSrc, multiSrc, nil
+}
+
 // Called by processEvent() in main.go to fetch matching ArgoCD applications (based on repo owner & name)
 // and return their manifests.
 //
@@ -303,19 +329,14 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 	log.Trace().Msgf("GetApplicationChanges(%+v)", eventInfo)
 	var appResList []ApplicationResourcesWithChanges
 	var notDiffed []string
-	argoApps, err := listApplications(ctx)
+	items, apps, multiSrcApps, err := listAndMatchApplications(ctx, eventInfo)
 	if err != nil {
 		return appResList, notDiffed, err
 	}
-	log.Trace().Msgf("listApplications() returned %d items", len(argoApps.Items))
-	if len(argoApps.Items) == 0 {
+	if len(items) == 0 {
 		return appResList, notDiffed, fmt.Errorf("empty ArgoCD app list")
 	}
-	appLookup := appListToMap(argoApps.Items)
-	apps, err := filterApplications(argoApps.Items, eventInfo, false)
-	if err != nil {
-		return appResList, notDiffed, err
-	}
+	appLookup := appListToMap(items)
 	log.Debug().Msgf("Matching apps: %s", func() (s string) {
 		for _, app := range apps {
 			if s != "" {
@@ -373,13 +394,8 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		}
 	}
 
-	// re-filter applications, except this time with multi-source
-	apps, err = filterApplications(argoApps.Items, eventInfo, true)
-	if err != nil {
-		return appResList, notDiffed, err
-	}
 	log.Debug().Msgf("Matching multi-source apps: %s", func() (s string) {
-		for _, app := range apps {
+		for _, app := range multiSrcApps {
 			if s != "" {
 				s += ", " + app.Name
 			} else {
@@ -389,7 +405,7 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		return
 	}())
 	var wave3Apps []Application
-	for _, app := range apps {
+	for _, app := range multiSrcApps {
 		if slices.Contains(multiSrcAppKeysDiffed, appKey(app.Namespace, app.Name)) {
 			log.Debug().Msgf("Skipping multi-source %s, we already diff'ed it", app.Name)
 			continue
@@ -413,6 +429,25 @@ func GetApplicationChanges(ctx context.Context, eventInfo webhook.EventInfo) ([]
 		log.Error().Err(ctx.Err()).Msgf("Ran out of time; %d application(s) were not diffed: %s", len(notDiffed), strings.Join(notDiffed, ", "))
 	}
 	return appResList, notDiffed, nil
+}
+
+// HasMatchingApplications reports whether any ArgoCD application matches eventInfo, without
+// diffing anything. It shares listAndMatchApplications with GetApplicationChanges, so the
+// matching logic (listing + single-source filter + multi-source filter) is defined in one
+// place and cannot drift between the two entry points. A false result here guarantees
+// GetApplicationChanges would return an empty appResList and no error, since nested
+// app-of-apps children (the only matches this doesn't see directly) are only ever queued
+// by an already-matching parent app, which this function would already have found.
+func HasMatchingApplications(ctx context.Context, eventInfo webhook.EventInfo) (bool, error) {
+	items, singleSrc, multiSrc, err := listAndMatchApplications(ctx, eventInfo)
+	if err != nil {
+		return false, err
+	}
+	if len(items) == 0 {
+		log.Warn().Msg("HasMatchingApplications: empty ArgoCD app list; treating event as unmatched")
+		return false, nil
+	}
+	return len(singleSrc) > 0 || len(multiSrc) > 0, nil
 }
 
 // Returns a list of Applications whose git URLs match repo owner & name
