@@ -88,8 +88,8 @@ func TestRequireAppMatch(t *testing.T) {
 	}
 	for envVal, want := range cases {
 		t.Setenv("ARGO_DIFF_REQUIRE_APP_MATCH", envVal)
-		if got := requireAppMatch(); got != want {
-			t.Errorf("ARGO_DIFF_REQUIRE_APP_MATCH=%q: requireAppMatch() = %v, want %v", envVal, got, want)
+		if got := RequireAppMatch(); got != want {
+			t.Errorf("ARGO_DIFF_REQUIRE_APP_MATCH=%q: RequireAppMatch() = %v, want %v", envVal, got, want)
 		}
 	}
 }

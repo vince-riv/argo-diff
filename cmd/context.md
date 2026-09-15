@@ -25,7 +25,11 @@ Application entry point. A single file, `main.go` — there is no other command 
    `argocd` CLI must be on `PATH` (or named by `ARGOCD_CLI_CMD_NAME`) even for a run that would
    otherwise do nothing, and both client and server must be >= 2.12.0.
 5. `GITHUB_ACTIONS=true` → `server.ProcessGithubAction()`, then return. The GitHub connectivity
-   check is deliberately skipped here.
+   check is deliberately skipped here. This branch also warns when
+   `process_event.RequireAppMatch()` is true: `ARGO_DIFF_REQUIRE_APP_MATCH` is inert under Actions,
+   because `server.eventInfoFromEnv()` always sets `EventInfo.Refresh` and the match check is gated
+   behind `!Refresh`. That is the only reason `cmd` imports `internal/process_event` — the helper is
+   exported so the parsing rules live in one place. See `internal/process_event/context.md` step 4.
 6. Otherwise `github.ConnectivityCheck()`, then:
    - `-f <file>` → `server.ProcessFileEvent()` and return.
    - else fatal unless `GITHUB_WEBHOOK_SECRET` is set, and start the webhook server.
