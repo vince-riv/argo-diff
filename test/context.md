@@ -68,6 +68,13 @@ Required env: `POD_NAME_PREFIX`, `IMAGE`, `ARGO_DIFF_CONTEXT_STR`, `ARGO_DIFF_SH
 `ARGO_DIFF_HEAD_REF`, `ARGO_DIFF_REPOSITORY`, `GITHUB_TOKEN`, `PR_REF`, `EXPECT_EXIT`
 (`0` or `nonzero`). Optional `REQUIRE_LOG` asserts a substring appears in the pod logs.
 
+The script reads the pod's logs **once** into a variable and both prints and matches that copy. Do
+not turn the `REQUIRE_LOG` check back into `kubectl logs | grep -q`: the script runs under `set -o
+pipefail`, `grep -q` exits at the first match, and `kubectl` then dies of SIGPIPE (silently, exit
+141) writing the remainder — which pipefail reports as a failed assertion even when the substring
+was there. That produced a spurious e2e failure on a ~19 KB pod log where the matched line was near
+the end.
+
 `IMAGE` is a full image reference (`argo-diff:e2e`). `k3s.yml` builds it from the PR's own source
 and side-loads it into k3d, so the pod runs with `imagePullPolicy: Never` and there is no registry
 dependency.
