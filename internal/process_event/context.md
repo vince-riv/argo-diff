@@ -14,11 +14,18 @@ into an exit code.
    `github.GetPullRequest()` fills in `Sha`, `ChangeRef`, and `BaseRef` from the live PR.
 3. **Changed files** via `github.ListPullRequestFiles()`, used downstream by the
    `manifest-generate-paths` filter. A failure here is recorded but not fatal.
-4. **Optional match check.** If `ARGO_DIFF_REQUIRE_APP_MATCH=true` and the event is not a
-   refresh request, `argocd.HasMatchingApplications(ctx, eventInfo)` runs here — a cheap check
-   (list + filter, no diffing) — and the function returns with no commit status and no comment
-   at all if nothing matches. Explicit refresh requests (e.g. `argo diff` PR comments) bypass
-   this check so a human asking for a diff always gets an answer. See "Reporting rules" below.
+4. **Optional match check.** If `RequireAppMatch()` (`ARGO_DIFF_REQUIRE_APP_MATCH=true`) and the
+   event is not a refresh request, `argocd.HasMatchingApplications(ctx, eventInfo)` runs here — a
+   cheap check (list + filter, no diffing) — and the function returns with no commit status and no
+   comment at all if nothing matches. See "Reporting rules" below.
+
+   The `!eventInfo.Refresh` bypass covers **two** cases, because `Refresh` carries two meanings.
+   One is an explicit `argo diff` PR comment, so a human who asks for a diff always gets an answer.
+   The other is **GitHub Actions mode, which sets `Refresh` unconditionally**
+   (`server.eventInfoFromEnv()`), making the flag inert there. That is intended, not an oversight:
+   the flag suppresses commit-status chatter on org-wide webhook installs, and Actions mode skips
+   commit statuses anyway and only runs where the action was deliberately added. `cmd/main.go` logs
+   a warning if the flag is set under Actions. Keep `README.md`'s env var table in step with this.
 5. Commit status → `pending`.
 6. `argocd.GetApplicationChanges(diffCtx, eventInfo)`.
 7. Build the markdown, choose the final status, comment.

@@ -57,10 +57,14 @@ func reportReserve(timeout time.Duration) time.Duration {
 	return defaultReportReserve
 }
 
-// requireAppMatch returns true when the operator has opted into the
+// RequireAppMatch returns true when the operator has opted into the
 // ARGO_DIFF_REQUIRE_APP_MATCH flag, which gates commit status and comment
 // posting behind a successful match check.
-func requireAppMatch() bool {
+//
+// The flag only takes effect in webhook server mode - see the bypass in
+// ProcessCodeChange(). It is exported so cmd/main.go can warn when it is set
+// under GitHub Actions, where it does nothing.
+func RequireAppMatch() bool {
 	return strings.ToLower(strings.TrimSpace(os.Getenv("ARGO_DIFF_REQUIRE_APP_MATCH"))) == "true"
 }
 
@@ -138,10 +142,19 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 
 	// ARGO_DIFF_REQUIRE_APP_MATCH: check for a matching ArgoCD application before posting
-	// commit status, and stay silent when nothing matches. Explicit refresh requests
-	// (e.g. "argo diff" PR comments) bypass this so a human asking for a diff always gets
-	// an answer.
-	if requireAppMatch() && !eventInfo.Refresh {
+	// commit status, and stay silent when nothing matches.
+	//
+	// The eventInfo.Refresh bypass covers two distinct cases, both of which want the check
+	// skipped:
+	//
+	//  1. An explicit "argo diff" PR comment, so a human who asks for a diff always gets an
+	//     answer - even on a repo ArgoCD doesn't track.
+	//  2. GitHub Actions mode, which sets Refresh unconditionally (see
+	//     server.eventInfoFromEnv()). The flag exists to stop argo-diff commit statuses
+	//     appearing on every PR of an org-wide webhook install; Actions mode skips commit
+	//     statuses entirely and only runs in repos someone deliberately added the action to,
+	//     so there is no chatter to suppress. cmd/main.go warns if the flag is set there.
+	if RequireAppMatch() && !eventInfo.Refresh {
 		matched, err := argocd.HasMatchingApplications(ctx, eventInfo)
 		if err != nil {
 			log.Error().Err(err).Msg("argocd.HasMatchingApplications() failed")

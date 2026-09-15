@@ -14,6 +14,7 @@ import (
 	"github.com/vince-riv/argo-diff/internal/argocd"
 	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/github"
+	"github.com/vince-riv/argo-diff/internal/process_event"
 	"github.com/vince-riv/argo-diff/internal/server"
 )
 
@@ -110,6 +111,9 @@ func main() {
 	// if running under Github Actions, skip github connectivity check
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		log.Info().Msg("GITHUB_ACTIONS set in the environemtn - running once with event data from environment")
+		if process_event.RequireAppMatch() {
+			log.Warn().Msg("ARGO_DIFF_REQUIRE_APP_MATCH is set but has no effect under GitHub Actions - it only applies to webhook server deployments")
+		}
 		err = server.ProcessGithubAction()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
