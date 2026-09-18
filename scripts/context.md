@@ -31,7 +31,7 @@ Requirements and behavior:
 
 `.github/workflows/release.yml` then greps `action.yml` for the tagged version and **fails the
 release** if the prep commit was skipped, so the tag must point at a commit the script produced.
-GoReleaser builds the binaries and image, and the workflow moves the floating `v<major>` and
-`actions-v<major>` tags. Tags with a suffix (`2.13.0-rc1`) publish as prereleases.
+GoReleaser builds the binaries and image, and the workflow moves the floating `v<major>` tag.
+Tags with a suffix (`2.13.0-rc1`) publish as prereleases.
 
 The Helm chart releases on its own `chart-X.Y.Z` tag — see `charts/context.md`.

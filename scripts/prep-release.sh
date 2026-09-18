@@ -12,7 +12,7 @@
 # change. Once merged, tag the commit and push the tag:
 #   git tag <version> && git push origin <version>
 # The release workflow does the rest (image build, GitHub release, and moving
-# the floating v<major>/actions-v<major> tags).
+# the floating v<major> tags).
 
 set -euo pipefail
 

@@ -223,8 +223,7 @@ jobs:
 > the pull request to trigger a run by hand.
 
 > **Note:** Releases were previously published under an `actions-vX.Y.Z` tag prefix (with a floating
-> `actions-vX` major tag). Those tags are still maintained alongside the plain `vX`/`X.Y.Z` tags shown
-> above for existing consumers, but new workflows should prefer the plain tags.
+> `actions-vX` major tag). As of 3.0.0, the `actions-*` tags are deprecated and will not be maintained.
 
 ## Configuration
 
