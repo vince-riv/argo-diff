@@ -68,7 +68,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # This repo stacks chart-*/actions-*/plain-semver tags on the same commit;
+          # This repo stacks chart-*/plain-semver tags on the same commit;
           # pin the exact tag so GoReleaser doesn't guess the wrong one.
           GORELEASER_CURRENT_TAG: ${{ github.event.inputs.ref || github.ref_name }}
           # Empty on prereleases (step above is skipped) - GoReleaser falls back to
@@ -118,15 +118,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          VERSION="${{ steps.relmeta.outputs.version }}"
           MAJOR="${{ steps.relmeta.outputs.major }}"
 
-          # New: floating major tag (e.g. v2) - recommended entrypoint for the Action
+          # New: floating major tag (e.g. v3) - recommended entrypoint for the Action
           git tag -f "v${MAJOR}"
           git push origin "refs/tags/v${MAJOR}" --force
-
-          # Legacy: exact + floating actions-v tags, kept for existing consumers
-          git tag -a "actions-v${VERSION}" -m "actions-v${VERSION}"
-          git push origin "refs/tags/actions-v${VERSION}"
-          git tag -f "actions-v${MAJOR}"
-          git push origin "refs/tags/actions-v${MAJOR}" --force

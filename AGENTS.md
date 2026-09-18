@@ -104,8 +104,7 @@ Workflows in `.github/workflows/`:
 - **go.yml** — build, `go fmt`, tests, and lint (golangci-lint v2, `only-new-issues`; PRs only).
 - **dockerbuild.yml** — GoReleaser build + multi-arch image publish to `ghcr.io` on `push` to `main` / `release-*` (no tag trigger; PRs build only, no push).
 - **k3s.yml** — end-to-end test on a k3s cluster with ArgoCD, using `test/` (see `test/context.md`).
-- **release.yml** — cuts a release on an `X.Y.Z[-suffix]` tag and moves the floating `vX` /
-  `actions-vX` tags.
+- **release.yml** — cuts a release on an `X.Y.Z[-suffix]` tag and moves the floating `vX`
 - **helm.yml** / **chart-releaser.yml** — chart lint/unittest, and publish on a `chart-X.Y.Z` tag.
 
 Release prep is `scripts/prep-release.sh <version>` (needs `helm-docs` on `PATH`); `release.yml`

@@ -84,8 +84,8 @@ jobs:
         with:
           config: .github/cliff-chart.toml
           # tag-pattern scopes tag resolution to chart-* — this repo stacks chart-*,
-          # actions-*, and plain-semver tags on the same commits, and without it
-          # git-cliff splits the range into one section per tag scheme instead of one.
+          # and plain-semver tags on the same commits, and without it git-cliff splits
+          # the range into one section per tag scheme instead of one.
           args: >-
             --include-path 'charts/argo-diff/**'
             --tag-pattern '^chart-'
