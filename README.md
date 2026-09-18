@@ -192,7 +192,7 @@ jobs:
     steps:
       - name: ArgoCD Diff
         id: argo-diff
-        uses: vince-riv/argo-diff@v2  # or pin an exact release, e.g. @2.10.0
+        uses: vince-riv/argo-diff@v3  # or pin an exact release, e.g. @2.10.0
         with:
           argocd_auth_token: ${{ secrets.ARGOCD_AUTH_TOKEN }}
           argocd_server: argocd-server.argocd.svc.cluster.local:80  # argocd.domain.example when publicly available via https

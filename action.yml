@@ -103,7 +103,7 @@ inputs:
 
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/vince-riv/argo-diff:2.14.0'
+  image: 'docker://ghcr.io/vince-riv/argo-diff:3.0.0'
   entrypoint: '/app/argo-diff'
   env:
     ARGO_DIFF_COMMENT_COLLAPSE: ${{ inputs.comment_collapse }}
