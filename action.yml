@@ -72,7 +72,7 @@ inputs:
   comment_notice:
     description: 'Advisory text rendered as a note at the top of the Pull Request comment. Separate several notices with |'
     required: false
-    default: ''
+    default: 'The `actions-*` tags for Github actions invocations are fully deprecated. Migrate your github actions workflow to use semver (eg: `uses: vince-riv/argo-diff@v3`)'
   comment_preamble:
     description: 'String/markdown prefixed to comments. Keep to 150 chars or less in length'
     required: false
