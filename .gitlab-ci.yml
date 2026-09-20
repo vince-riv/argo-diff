@@ -8,7 +8,7 @@
 #   SYNC_MODE    "reset" (default): force GitLab main to equal GitHub main
 #                "merge": merge GitHub main into GitLab main (fails on conflicts)
 sync-from-github:
-  image: alpine:latest
+  image: alpine:latest@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
   resource_group: github-sync
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
