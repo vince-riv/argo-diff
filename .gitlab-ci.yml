@@ -1,0 +1,42 @@
+# Save as .gitlab-ci.yml at the root of main on GitHub. GitHub ignores it;
+# GitLab runs it on a schedule to sync GitLab's main from GitHub's main.
+#
+# Required CI/CD variable (GitLab: Settings > CI/CD > Variables, masked):
+#   GITLAB_PUSH_TOKEN  access token with write_repository scope, able to push to main
+#
+# Optional overrides (job variables below, or per-schedule variables):
+#   SYNC_MODE    "reset" (default): force GitLab main to equal GitHub main
+#                "merge": merge GitHub main into GitLab main (fails on conflicts)
+sync-from-github:
+  image: alpine:latest
+  resource_group: github-sync
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  variables:
+    GIT_STRATEGY: none
+    GITHUB_URL: "https://github.com/vince-riv/argo-diff.git"
+    SYNC_BRANCH: "main"
+    SYNC_MODE: "reset"
+  script:
+    - apk add --no-cache git
+    - |
+      set -eu
+      DEST="https://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+
+      git config --global user.name "mirror-bot"
+      git config --global user.email "mirror-bot@users.noreply.${CI_SERVER_HOST}"
+
+      git init -q repo
+      cd repo
+      git remote add origin "$DEST"
+      git remote add github "$GITHUB_URL"
+      git fetch -q github "$SYNC_BRANCH"
+
+      if [ "$SYNC_MODE" = "merge" ]; then
+        git fetch -q origin "$SYNC_BRANCH"
+        git checkout -q -B "$SYNC_BRANCH" "origin/$SYNC_BRANCH"
+        git merge --no-edit "github/$SYNC_BRANCH"
+        git push origin "$SYNC_BRANCH"
+      else
+        git push --force origin "github/$SYNC_BRANCH:refs/heads/$SYNC_BRANCH"
+      fi
