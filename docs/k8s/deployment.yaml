@@ -60,6 +60,7 @@ spec:
             #  value: |
             #    ^\s*app\.kubernetes\.io/version:\s
             #    ^\s*(helm\.sh/)?chart:\s+["']?[A-Za-z0-9][-A-Za-z0-9_.]*-v?\d+\.\d+\.\d+[-+A-Za-z0-9_.]*["']?\s*$
+            #    ^\s*controller-gen\.kubebuilder\.io/version:\s+["']?v?\d+\.\d+\.\d+[-+A-Za-z0-9_.]*["']?\s*$
             #- name: ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS
             #  value: "argoproj.io/*,rbac.authorization.k8s.io/ClusterRole"
             #- name: ARGO_DIFF_COMMENT_INDEX_COUNT
