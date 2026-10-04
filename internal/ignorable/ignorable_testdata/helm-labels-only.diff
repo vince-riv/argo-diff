@@ -1,0 +1,13 @@
+--- /tmp/argocd-diff123/fluent-bit-live.yaml	2026-01-01 00:00:00.000000000 +0000
++++ /tmp/argocd-diff123/fluent-bit	2026-01-01 00:00:00.000000000 +0000
+@@ -7,8 +7,8 @@
+     app.kubernetes.io/instance: fluent-bit
+     app.kubernetes.io/managed-by: Helm
+     app.kubernetes.io/name: fluent-bit
+-    app.kubernetes.io/version: 5.1.2
+-    helm.sh/chart: fluent-bit-0.58.2
++    app.kubernetes.io/version: 5.1.3
++    helm.sh/chart: fluent-bit-0.58.3
+   managedFields:
+   - apiVersion: v1
+     fieldsType: FieldsV1

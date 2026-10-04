@@ -1,0 +1,11 @@
+--- /tmp/argocd-diff987/grafana-live.yaml	2026-01-01 00:00:00.000000000 +0000
++++ /tmp/argocd-diff987/grafana	2026-01-01 00:00:00.000000000 +0000
+@@ -6,8 +6,8 @@
+   labels:
+     app.kubernetes.io/instance: apps
+-    app.kubernetes.io/version: 1.4.0
+-    helm.sh/chart: apps-1.4.0
++    app.kubernetes.io/version: 1.4.1
++    helm.sh/chart: apps-1.4.1
+   name: grafana
+   namespace: argocd

@@ -13,6 +13,7 @@ Kubernetes manifests when those manifests are delivered via [ArgoCD](https://arg
 - [Deploying as a Webhook receiver](#deploying-as-a-webhook-receiver)
 - [GitHub Actions](#github-actions)
 - [Configuration](#configuration)
+  - [Folding ignorable diffs](#folding-ignorable-diffs)
 - [Running locally](#running-locally)
 - [Development Notes](#development-notes)
 
@@ -249,9 +250,12 @@ can still be set through the chart's `deployment.env` / `deployment.envFrom` pas
 | ARGOCD_SERVER_PLAINTEXT          | argocd_server_plaintext     | no               | `false`  | Set `--plaintext` flag for argocd cli (`true`/`false`). |
 | ARGOCD_UI_BASE_URL               | argocd_ui_base_url          | no               |          | Base URL of ArgoCD UI (usually the server name prefixed with `https://`). |
 | ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS | N/A                      | no               |          | Comma-separated list of startup connectivity checks to skip: `github`, `argocd`, `true`/`all` for both, or `false`/`none` (default, skips nothing). Useful when `GITHUB_TOKEN` holds a GitHub App installation token, which can't call `GET /user` (a per-PR CI invocation minting its own token, eg: from Jenkins, is the common case — GitHub Actions mode doesn't need this, it already skips the check); for that case, bypass `github` specifically rather than `true`/`all`. Bypassing `github` also makes argo-diff match its own prior PR comments by marker only, the same as it does under GitHub Actions — so two instances sharing an empty `ARGO_DIFF_CONTEXT_STR` on one PR will overwrite each other's comments. Bypassing `argocd` skips reachability **and** the minimum ArgoCD version check (client and server must be `2.12.0`+), so it also silently drops that guard. |
-| ARGO_DIFF_COMMENT_COLLAPSE       | comment_collapse            | no               | `expanded` | Whether the collapsible sections in a PR comment start open. `expanded` (default) always starts them open; `collapsed` always starts them folded; `auto` keeps a small comment fully expanded, folds an application's own block once the comment covers more than `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT` applications, and folds an application's individual resource (diff) blocks once that application has more than `ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT` changed resources. |
-| ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT | comment_collapse_app_count | no           | `3`      | In `auto` collapse mode, the application count above which each application's own block starts folded. Must be positive; a non-positive value warns and falls back to the default. |
-| ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT | comment_collapse_resource_count | no | `5`      | In `auto` collapse mode, the count of changed resources within an application above which that application's individual resource (diff) blocks start folded — not the application's own block, which is governed by `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT`. Must be positive; a non-positive value warns and falls back to the default. |
+| ARGO_DIFF_COMMENT_COLLAPSE       | comment_collapse            | no               | `expanded` | Whether the collapsible sections in a PR comment start open. `expanded` (default) always starts them open; `collapsed` always starts them folded; `auto` folds [ignorable resource diffs](#folding-ignorable-diffs) and keeps everything else open. With `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE=false`, `auto` instead keeps a small comment fully expanded, folds an application's own block once the comment covers more than `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT` applications, and folds an application's individual resource (diff) blocks once that application has more than `ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT` changed resources. |
+| ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT | comment_collapse_app_count | no           | `3`      | In `auto` collapse mode with `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE=false` (it has no effect otherwise), the application count above which each application's own block starts folded. Must be positive; a non-positive value warns and falls back to the default. |
+| ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT | comment_collapse_resource_count | no | `5`      | In `auto` collapse mode with `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE=false` (it has no effect otherwise), the count of changed resources within an application above which that application's individual resource (diff) blocks start folded — not the application's own block, which is governed by `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT`. Must be positive; a non-positive value warns and falls back to the default. |
+| ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE | comment_collapse_ignorable | no | `true` | In `auto` collapse mode, fold resource diffs whose every changed line matches an ignorable regex, and ignore the two count thresholds. `false` brings the count thresholds back. Case-insensitive; any other value warns and means `true`. No effect outside `auto` mode. See [Folding ignorable diffs](#folding-ignorable-diffs). |
+| ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES | comment_collapse_ignorable_regexes | no | built-in defaults | Newline-separated RE2 regexes. A changed diff line is ignorable if it matches one. A value **replaces** the defaults; `[]` means no global regexes. See [Folding ignorable diffs](#folding-ignorable-diffs). |
+| ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS | comment_collapse_ignorable_exclude_kinds | no | `argoproj.io/*` | Comma- or newline-separated `group/Kind`, `group/*` or `Kind` (core group) entries that never fold. A value **replaces** the default; `[]` excludes nothing. |
 | ARGO_DIFF_COMMENT_INDEX_COUNT    | comment_index_count         | no               | `2`      | When to render the summary index — a table of every application with its change count, sync status and health — above the diffs. `-1` always renders it, `0` never does, and any other number is the count of applications at which it starts rendering. |
 | ARGO_DIFF_COMMENT_MAX_CHARS      | comment_max_chars           | no               | `262144` | Maximum size of a single PR comment, in bytes; argo-diff splits its output across more comments to stay under it. The default is GitHub's own limit and cannot be raised. Lower it for a GitHub Enterprise instance with a smaller cap. The operator preamble and argo-diff's HTML marker count against this. |
 | ARGO_DIFF_COMMENT_NOTICE         | comment_notice              | no               |          | Advisory text rendered as a note at the top of the PR comment — a deprecation warning, say, or a caveat about this environment. Separate several notices with `\|`. Rendered distinctly from argo-diff's own warnings and errors. |
@@ -275,6 +279,78 @@ can still be set through the chart's `deployment.env` / `deployment.envFrom` pas
 > **Note:** When running via GitHub Actions, argo-diff uses the following environment variables set by
 > GitHub: `GITHUB_ACTIONS`, `GITHUB_BASE_REF`, `GITHUB_EVENT_NAME`, `GITHUB_HEAD_REF`, `GITHUB_REF`, and
 > `GITHUB_REPOSITORY`. Do not set these yourself.
+
+### Folding ignorable diffs
+
+> **Behavior change:** `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE` defaults to `true`, so operators who already set `ARGO_DIFF_COMMENT_COLLAPSE=auto` see different folding: ignorable resources fold, everything else stays open, and `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT` / `ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT` stop having an effect. Set `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE=false` to keep the old `auto` behavior. The default mode (`expanded`) is unchanged.
+
+In `auto` mode, argo-diff folds every resource diff in which **every changed line matches a regex**, and keeps all other diffs open. The main use case is a Helm chart bump, where most resources change only the chart and app version labels. A folded diff keeps its full text one click away, and shows `🔕 ignorable` in its summary. The comment also says how many resources started folded.
+
+**Is it on?**
+
+| `ARGO_DIFF_COMMENT_COLLAPSE` | `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE` | Result |
+| --- | --- | --- |
+| `expanded` (default), empty, unknown, or `collapsed` | any | Off. Output does not change. |
+| `auto` | `true` (default) | On. Ignorable resources fold. An application folds only when all its resources are ignorable. The `_APP_COUNT` and `_RESOURCE_COUNT` thresholds have no effect. |
+| `auto` | `false` | Off. `auto` uses the `_APP_COUNT` and `_RESOURCE_COUNT` thresholds. |
+
+**How do I opt an application in or out?** Annotate the ArgoCD `Application` that argo-diff diffs. All three annotations work only when the feature is on globally; none can turn it on.
+
+| Global regexes | Application annotations | What folds in this application |
+| --- | --- | --- |
+| defaults or a custom list | none | Resources that match the global regexes |
+| defaults or a custom list | `collapse-ignorable-regexes` | Resources that match the global regexes **plus** the application regexes |
+| `[]` | none | Nothing (the application is not opted in) |
+| `[]` | `collapse-ignorable-regexes` | Resources that match the application regexes (**opt-in**) |
+| any | `collapse-ignorable: "false"` | Nothing (**opt-out**; wins over everything else) |
+
+In every row, excluded kinds never fold, unless `collapse-ignorable-include-kinds` names them.
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: my-app
+  annotations:
+    # "false" opts this application out. "true" is the default
+    argo-diff.vince-riv.io/collapse-ignorable: "true"
+    # newline-separated RE2 regexes, added to the global list
+    argo-diff.vince-riv.io/collapse-ignorable-regexes: |
+      ^\s*image:\s+registry\.example\.com/
+    # lifts global exclusions for this application: group/Kind, group/* or Kind, comma or newline separated
+    argo-diff.vince-riv.io/collapse-ignorable-include-kinds: argoproj.io/Application
+```
+
+The annotations belong on the Application **being diffed**. For an `argoproj.io/Application` resource inside an app-of-apps diff, that is the parent Application, not the child. argo-diff reads the **live** Application, so an annotation that a pull request adds or changes takes effect only after that Application syncs. An invalid annotation entry never fails a run: argo-diff skips it, logs a warning, and adds a note to that application's block.
+
+**What folds?**
+
+- A *changed line* is a line of the unified diff that starts with `+` or `-`. The `--- ` and `+++ ` file headers, context lines and `@@` lines do not count.
+- argo-diff removes one leading `+`/`-` and keeps the indentation. A resource is *ignorable* when it is not excluded, has at least one changed line, and every changed line matches at least one regex.
+- Matching is an unanchored RE2 search on the diff text. Anchor your regexes with `^` and `$`.
+- A resource with no changed lines never folds.
+
+**Default regexes** (used when `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES` is unset or empty):
+
+```
+^\s*app\.kubernetes\.io/version:\s
+^\s*(helm\.sh/)?chart:\s+["']?[A-Za-z0-9][-A-Za-z0-9_.]*-v?\d+\.\d+\.\d+[-+A-Za-z0-9_.]*["']?\s*$
+^\s*controller-gen\.kubebuilder\.io/version:\s+["']?v?\d+\.\d+\.\d+[-+A-Za-z0-9_.]*["']?\s*$
+```
+
+They match the app version label, the `helm.sh/chart` label (and the legacy `chart` label, which needs a `<name>-<semver>` value), and the CRD `controller-gen` version annotation. They deliberately do **not** match image tags or `checksum/*` annotations, so a chart bump that changes an image stays visible. A value of this variable **replaces** the defaults: copy the list above and extend it. Separate regexes with newlines, because regexes often contain `,` and `|`. Blank lines and lines that start with `#` are skipped; to match a literal leading `#`, write `\#` or `[#]`. Each list holds at most 32 entries of at most 1024 bytes. An invalid regex is skipped with a warning and a note in the comment. If every entry is invalid, the list is empty; it does not fall back to the defaults.
+
+> **Warning:** a regex that is too greedy can fold a diff that a reviewer needs to see. Keep regexes narrow and anchored. Choosing them is the operator's responsibility.
+
+**Excluded kinds.** Some resources must stay visible even when every changed line matches, because they change what the cluster runs or who can do what. `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS` lists them. The default is `argoproj.io/*` (`Application`, `ApplicationSet`, `AppProject`, ...). Entries:
+
+- `group/Kind`: one kind, for example `rbac.authorization.k8s.io/ClusterRole`
+- `group/*`: every kind in a group
+- `Kind` or `/Kind`: a kind in the core group, for example `Secret`
+
+Matching is exact on the group and case-insensitive. `*` as a group is not supported, and neither is a bare group such as `argoproj.io` (use `argoproj.io/*`). To also keep every `ClusterRole` visible: `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS=argoproj.io/*,rbac.authorization.k8s.io/ClusterRole`. The exclusion covers only a resource's own group: the `CustomResourceDefinition` that defines an `argoproj.io` kind belongs to `apiextensions.k8s.io`. An application lifts exclusions for itself with `collapse-ignorable-include-kinds`.
+
+**The `[]` value.** An unset or empty variable means "use the defaults". To say "none", set the variable to exactly `[]`. With `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES=[]`, only applications that carry the `collapse-ignorable-regexes` annotation fold anything. That is the way to opt in per application only.
 
 ## Running locally
 

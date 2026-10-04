@@ -61,6 +61,13 @@ into an exit code.
   is good but something alongside it degraded — today, an app-of-apps whose children couldn't be
   enumerated. It needs no term in the "should we comment at all" condition: `NoticeStr` is only ever
   set on an app that already has changed resources, so it implies `changeCount > 0`.
+- **Ignorable folding.** `ignorable.LoadGlobal()` runs once per event; its warnings become
+  comment-level notices through `config.AddNotice()`. For each application with changes,
+  `ForApp(a.ArgoApp.GetAnnotations())` yields the policy; each resource goes through
+  `AddIgnorableResourceDiff()` or `AddResourceDiff()`. Annotation problems are **advisory**: they are
+  joined onto that application's `NoticeStr` (`joinNotice()`) and never touch `errorCount`,
+  `firstError`, the status or `*callerErr`. Counting is unchanged: an app with only ignorable changes
+  is still an app with changes. See `internal/ignorable/context.md`.
 - The two travel in separate fields of `AppMarkdownOpts` rather than one string with an `"Error: "`
   prefix, which is what they used to share — severity a reader can see is worth a struct field.
 - `CommentMarkdown.Notices` is set from `config.Notices()` — comment-level advisories that describe

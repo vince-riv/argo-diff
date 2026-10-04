@@ -1,0 +1,12 @@
+--- /tmp/argocd-diff456/main-apiserver-live.yaml	2026-01-01 00:00:00.000000000 +0000
++++ /tmp/argocd-diff456/main-apiserver	2026-01-01 00:00:00.000000000 +0000
+@@ -35,8 +35,8 @@
+     app.kubernetes.io/instance: main
+     app.kubernetes.io/managed-by: Helm
+     app.kubernetes.io/part-of: main
+-    app.kubernetes.io/version: 91.6.0
+-    chart: kube-prometheus-stack-91.6.0
++    app.kubernetes.io/version: 91.7.1
++    chart: kube-prometheus-stack-91.7.1
+     heritage: Helm
+     release: main

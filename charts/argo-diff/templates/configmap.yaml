@@ -18,9 +18,30 @@ metadata:
 {{- if not (kindIs "invalid" .commentIndexCount) }}
 {{- $indexCount = toString .commentIndexCount }}
 {{- end }}
+{{- /* The ignorable keys keep a boolean `false` and an empty list meaningful
+       ("false" turns the rule off, "[]" means an explicit empty list), and
+       `with`/`or` drop both, so they are normalized to strings first. Unset
+       (null) stays "" and emits nothing. */ -}}
+{{- $ignorable := "" }}
+{{- if not (kindIs "invalid" .commentCollapseIgnorable) }}
+{{- $ignorable = toString .commentCollapseIgnorable }}
+{{- end }}
+{{- $ignorableRegexes := "" }}
+{{- if kindIs "slice" .commentCollapseIgnorableRegexes }}
+{{- $ignorableRegexes = ternary (join "\n" .commentCollapseIgnorableRegexes) "[]" (gt (len .commentCollapseIgnorableRegexes) 0) }}
+{{- else if kindIs "string" .commentCollapseIgnorableRegexes }}
+{{- $ignorableRegexes = .commentCollapseIgnorableRegexes }}
+{{- end }}
+{{- $ignorableKinds := "" }}
+{{- if kindIs "slice" .commentCollapseIgnorableExcludeKinds }}
+{{- $ignorableKinds = ternary (join "," .commentCollapseIgnorableExcludeKinds) "[]" (gt (len .commentCollapseIgnorableExcludeKinds) 0) }}
+{{- else if kindIs "string" .commentCollapseIgnorableExcludeKinds }}
+{{- $ignorableKinds = .commentCollapseIgnorableExcludeKinds }}
+{{- end }}
 {{- if or .argocd.grpcWeb .argocd.grpcWebRoot .argocd.serverAddr .argocd.serverInsecure
           .argocd.serverPlainText .argocd.uiBaseURL .commentPreamble .contextStr .commentLineMaxChars
           .commentNotice .commentCollapse .commentCollapseAppCount .commentCollapseResourceCount
+          $ignorable $ignorableRegexes $ignorableKinds
           $indexCount .commentMaxChars
           .maxWorkers .github.application.id .github.application.installationId }}
 data:
@@ -62,6 +83,15 @@ data:
   {{- end }}
   {{- with .commentCollapseResourceCount }}
   ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT: {{ . | quote }}
+  {{- end }}
+  {{- with $ignorable }}
+  ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE: {{ . | quote }}
+  {{- end }}
+  {{- with $ignorableRegexes }}
+  ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES: {{ . | quote }}
+  {{- end }}
+  {{- with $ignorableKinds }}
+  ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS: {{ . | quote }}
   {{- end }}
   {{- with $indexCount }}
   ARGO_DIFF_COMMENT_INDEX_COUNT: {{ . | quote }}

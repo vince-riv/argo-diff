@@ -106,6 +106,19 @@ the `---` rule and the block. Consequences worth knowing:
   back to the default on a non-positive value, the same guard `lineMaxChars()` uses. Because that
   decision needs totals `AddResourceDiff()` doesn't have, a resource stores its `Summary` and
   `Body` separately and `String()` renders it — nothing pre-renders a `<details>` tag.
+- **Ignorable folding** (`auto` only). While `config.CollapseIgnorableActive()` is true — mode `auto`
+  and `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE` not `false` — the ignorable rule **replaces** the count
+  thresholds: `resourceOpenFor()` folds a resource iff it is `Ignorable`, and `appOpen()` folds an
+  application iff `allIgnorable()` (the Notice/Err guard still wins). `collapseAppCount()` and
+  `collapseResourceCount()` are not consulted. With the rule off, `auto` is unchanged. This package
+  does not know about regexes: `process_event` calls `AddIgnorableResourceDiff()` for resources that
+  `internal/ignorable` classified. `addResourceDiff()` drops the flag unless the rule is active, so in
+  `expanded`/`collapsed` an ignorable resource renders exactly like an ordinary one.
+  Rendering: ` · 🔕 ignorable` is appended to the resource summary **before** `maxResourceBodyLen()`
+  counts it; the app summary reads `N changed · 🔕 M ignorable`; the index cell reads `N (🔕 M)`; and
+  one `<sub>🔕 M of N changed resources …</sub>` line follows the index table, outside every
+  `<details>`, so a reader can see that argo-diff folded things for them. All of these appear only
+  when the ignorable count is greater than 0.
 - The index table is gated by `ARGO_DIFF_COMMENT_INDEX_COUNT`: `-1` always, `0` never, any other `n`
   once `n` applications have an entry (default 2). Capped at `maxIndexRows` (50).
 
