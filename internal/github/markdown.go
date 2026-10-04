@@ -290,6 +290,7 @@ func truncateLines(s string, maxLen int) string {
 
 // diffStats counts added and removed lines in a unified diff, skipping the
 // ---/+++ file headers so they don't read as one added and one removed line.
+// Keep the header rule in step with Policy.Ignorable() in internal/ignorable.
 func diffStats(diffStr string) (added, removed int) {
 	for line := range strings.SplitSeq(diffStr, "\n") {
 		switch {
@@ -311,6 +312,9 @@ func diffStats(diffStr string) (added, removed int) {
 type resourceMarkdown struct {
 	Summary string // inner HTML of <summary>
 	Body    string // the ```diff fence, or the too-large marker
+	// Ignorable marks a resource whose every changed line matched an ignorable
+	// pattern (see internal/ignorable). It renders folded in auto mode.
+	Ignorable bool
 }
 
 func (r resourceMarkdown) render(open bool) string {
@@ -389,6 +393,8 @@ func (a ArgoAppMarkdown) summaryLine(continued bool) string {
 		parts = append(parts, "continued")
 	case a.ErrStr != "":
 		parts = append(parts, "❗ diff failed")
+	case a.ignorableCount() > 0:
+		parts = append(parts, fmt.Sprintf("%d changed · 🔕 %d ignorable", len(a.Resources), a.ignorableCount()))
 	default:
 		parts = append(parts, fmt.Sprintf("%d changed", len(a.Resources)))
 	}
@@ -457,7 +463,36 @@ func (a ArgoAppMarkdown) maxResourceBodyLen(summary string) int {
 	return n
 }
 
+// ignorableCount is how many of this application's resources are ignorable.
+func (a ArgoAppMarkdown) ignorableCount() int {
+	n := 0
+	for _, r := range a.Resources {
+		if r.Ignorable {
+			n++
+		}
+	}
+	return n
+}
+
+// allIgnorable reports whether the application has resources and all of them
+// are ignorable.
+func (a ArgoAppMarkdown) allIgnorable() bool {
+	return len(a.Resources) > 0 && a.ignorableCount() == len(a.Resources)
+}
+
 func (a *ArgoAppMarkdown) AddResourceDiff(group, kind, name, ns, diffStr string) {
+	a.addResourceDiff(group, kind, name, ns, diffStr, false)
+}
+
+// AddIgnorableResourceDiff adds a resource whose diff only changes ignorable
+// lines. Outside auto mode with the ignorable rule active it renders exactly
+// like AddResourceDiff.
+func (a *ArgoAppMarkdown) AddIgnorableResourceDiff(group, kind, name, ns, diffStr string) {
+	a.addResourceDiff(group, kind, name, ns, diffStr, true)
+}
+
+func (a *ArgoAppMarkdown) addResourceDiff(group, kind, name, ns, diffStr string, ignorable bool) {
+	ignorable = ignorable && config.CollapseIgnorableActive()
 	gk := kind
 	if group != "" {
 		gk = group + "/" + kind
@@ -466,6 +501,10 @@ func (a *ArgoAppMarkdown) AddResourceDiff(group, kind, name, ns, diffStr string)
 	if added, removed := diffStats(diffStr); added > 0 || removed > 0 {
 		summary += fmt.Sprintf(" · <b>+%d −%d</b>", added, removed)
 	}
+	// before maxResourceBodyLen(summary), so the budget counts these bytes
+	if ignorable {
+		summary += " · 🔕 ignorable"
+	}
 	body := ""
 	if strings.TrimSpace(diffStr) != "" {
 		body = "```diff\n" + truncateLines(diffStr, lineMaxChars()) + "```\n\n"
@@ -473,7 +512,7 @@ func (a *ArgoAppMarkdown) AddResourceDiff(group, kind, name, ns, diffStr string)
 	if len(body) > a.maxResourceBodyLen(summary) {
 		body = "`<<< DIFF TOO LARGE TO DISPLAY >>>`\n\n"
 	}
-	a.Resources = append(a.Resources, resourceMarkdown{Summary: summary, Body: body})
+	a.Resources = append(a.Resources, resourceMarkdown{Summary: summary, Body: body, Ignorable: ignorable})
 }
 
 // appOpen and resourceOpen decide whether a block renders folded.
@@ -490,6 +529,10 @@ func (c CommentMarkdown) appOpen(a *ArgoAppMarkdown) bool {
 	if a.NoticeStr != "" || a.ErrStr != "" {
 		return true
 	}
+	if config.CollapseIgnorableActive() {
+		// the ignorable rule replaces the count threshold
+		return !a.allIgnorable()
+	}
 	return len(c.ArgoApps) <= collapseAppCount()
 }
 
@@ -501,6 +544,31 @@ func (c CommentMarkdown) resourceOpen(a *ArgoAppMarkdown) bool {
 		return false
 	}
 	return len(a.Resources) <= collapseResourceCount()
+}
+
+// resourceOpenFor decides whether one resource renders open. With the ignorable
+// rule active it replaces the resource count threshold: only ignorable
+// resources fold.
+func (c CommentMarkdown) resourceOpenFor(a *ArgoAppMarkdown, r resourceMarkdown) bool {
+	switch config.CommentCollapseMode() {
+	case config.CollapseExpanded:
+		return true
+	case config.CollapseCollapsed:
+		return false
+	}
+	if config.CollapseIgnorableActive() {
+		return !r.Ignorable
+	}
+	return c.resourceOpen(a)
+}
+
+// ignorableTotal counts the ignorable resources across every application.
+func (c CommentMarkdown) ignorableTotal() (ignorable, total int) {
+	for _, a := range c.ArgoApps {
+		ignorable += a.ignorableCount()
+		total += len(a.Resources)
+	}
+	return ignorable, total
 }
 
 // indexTable renders the summary index: one row per application, so a reader
@@ -523,6 +591,9 @@ func (c CommentMarkdown) indexTable() string {
 			name = fmt.Sprintf("[%s](%s)", name, u)
 		}
 		changed := strconv.Itoa(len(a.Resources))
+		if n := a.ignorableCount(); n > 0 {
+			changed = fmt.Sprintf("%d (🔕 %d)", len(a.Resources), n)
+		}
 		if a.ErrStr != "" {
 			changed = "❗"
 		}
@@ -549,6 +620,11 @@ func (c CommentMarkdown) String() []string {
 		}
 	}
 	md += c.indexTable()
+	// tell the reader argo-diff folded things for them: the main defense against
+	// a regex that is too greedy. Outside every <details> block.
+	if n, total := c.ignorableTotal(); n > 0 {
+		md += fmt.Sprintf("\n<sub>🔕 %d of %d changed resources change only lines that match the ignorable patterns, so they start folded.</sub>\n\n", n, total)
+	}
 
 	flush := func() {
 		if md != "" {
@@ -574,20 +650,19 @@ func (c CommentMarkdown) String() []string {
 			continue
 		}
 		overview := head + a.OverviewStr(false, appOpen)
-		resOpen := c.resourceOpen(a)
 		// look ahead to the first resource: opening an application block at the
 		// tail of a body that can't hold any of its diffs just wastes a header.
 		// The second term is the same progress guard the resource loop uses - if
 		// it doesn't fit in an empty body either, splitting only emits the
 		// preamble on its own and still doesn't fit.
-		first := a.Resources[0].render(resOpen)
+		first := a.Resources[0].render(c.resourceOpenFor(a, a.Resources[0]))
 		if len(md)+len(overview)+len(first) > limit && len(overview)+len(first) <= limit {
 			flush()
 		}
 		md += overview
 		placed := 0
 		for _, r := range a.Resources {
-			rendered := r.render(resOpen)
+			rendered := r.render(c.resourceOpenFor(a, r))
 			// placed > 0 guarantees progress: a body holding nothing but this
 			// app's header has no more room than a fresh one would, so
 			// splitting there would emit an empty body and still not fit

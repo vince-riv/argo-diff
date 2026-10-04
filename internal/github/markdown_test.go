@@ -146,6 +146,7 @@ func TestErrStrAndNoticeStrRenderDistinctly(t *testing.T) {
 	// auto-collapse, whatever the thresholds say.
 	t.Run("an app carrying a notice is never auto-folded", func(t *testing.T) {
 		t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE", "auto")
+		t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE", "false") // the count thresholds are under test
 		t.Setenv("ARGO_DIFF_COMMENT_INDEX_COUNT", "0")
 		c := CommentMarkdown{}
 		for i := range 9 { // well past defaultCollapseAppCount
@@ -297,6 +298,8 @@ func TestCollapseMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("mode=%q/appCount=%q/resCount=%q/%dapps/%dres", tt.mode, tt.appCount, tt.resCount, tt.apps, tt.resources), func(t *testing.T) {
 			t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE", tt.mode)
+			// the count thresholds are what auto does when the ignorable rule is off
+			t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE", "false")
 			t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT", tt.appCount)
 			t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT", tt.resCount)
 			t.Setenv("ARGO_DIFF_COMMENT_INDEX_COUNT", "0")
@@ -565,4 +568,153 @@ func TestBoundPreamble(t *testing.T) {
 	if got := boundPreamble(v, strings.Repeat("α", maxPreambleLen)); !utf8.ValidString(got) {
 		t.Error("boundPreamble split a multi-byte rune")
 	}
+}
+
+// tagsOf returns the opening tag of every <details> block in body, in order.
+func tagsOf(body string) []string {
+	var tags []string
+	for _, line := range strings.Split(body, "\n") {
+		if line == "<details>" || line == "<details open>" {
+			tags = append(tags, line)
+		}
+	}
+	return tags
+}
+
+func TestIgnorableCollapse(t *testing.T) {
+	const diff = "-a\n+b\n"
+	build := func(apps int, ignorable, real int, notice string) CommentMarkdown {
+		c := CommentMarkdown{}
+		for i := range apps {
+			a := c.AppMarkdown(AppMarkdownOpts{
+				Name: fmt.Sprintf("app-%d", i), SyncStatus: "Synced", HealthStatus: "Healthy", NoticeStr: notice,
+			})
+			for j := range ignorable {
+				a.AddIgnorableResourceDiff("apps", "Deployment", fmt.Sprintf("ig-%d", j), "prod", diff)
+			}
+			for j := range real {
+				a.AddResourceDiff("apps", "Deployment", fmt.Sprintf("web-%d", j), "prod", diff)
+			}
+		}
+		return c
+	}
+	setup := func(t *testing.T, mode, flag string) {
+		t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE", mode)
+		t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE", flag)
+		t.Setenv("ARGO_DIFF_COMMENT_INDEX_COUNT", "0")
+	}
+
+	t.Run("thresholds are ignored while the rule is active", func(t *testing.T) {
+		setup(t, "auto", "")
+		t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT", "1")
+		t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT", "1")
+		body := build(9, 0, 9, "").String()[0]
+		for _, tag := range tagsOf(body) {
+			if tag != "<details open>" {
+				t.Fatalf("found a folded block, want everything open:\n%s", body)
+			}
+		}
+	})
+
+	t.Run("9 ignorable and 1 real resource", func(t *testing.T) {
+		setup(t, "auto", "true")
+		body := build(1, 9, 1, "").String()[0]
+		checkBodyWellFormed(t, 0, body)
+		tags := tagsOf(body) // app block, then 10 resources
+		if len(tags) != 11 || tags[0] != "<details open>" {
+			t.Fatalf("tags = %v", tags)
+		}
+		if got := strings.Count(body, "<details>\n<summary><code>"); got != 9 {
+			t.Errorf("%d folded resources, want 9", got)
+		}
+		if got := strings.Count(body, "<details open>\n<summary><code>"); got != 1 {
+			t.Errorf("%d open resources, want 1", got)
+		}
+		if got := strings.Count(body, "🔕 ignorable</summary>"); got != 9 {
+			t.Errorf("%d resource markers, want 9", got)
+		}
+		if !strings.Contains(body, "10 changed · 🔕 9 ignorable") {
+			t.Errorf("app summary lacks the ignorable count:\n%s", body)
+		}
+		if !strings.Contains(body, "<sub>🔕 9 of 10 changed resources") {
+			t.Errorf("comment lacks the 🔕 line:\n%s", body)
+		}
+	})
+
+	t.Run("an all-ignorable app folds, with a notice it stays open", func(t *testing.T) {
+		setup(t, "auto", "")
+		if tags := tagsOf(build(1, 2, 0, "").String()[0]); tags[0] != "<details>" {
+			t.Errorf("all-ignorable app should fold, tags = %v", tags)
+		}
+		if tags := tagsOf(build(1, 2, 0, "a notice").String()[0]); tags[0] != "<details open>" {
+			t.Errorf("app with a notice must stay open, tags = %v", tags)
+		}
+	})
+
+	t.Run("index cell", func(t *testing.T) {
+		setup(t, "auto", "")
+		t.Setenv("ARGO_DIFF_COMMENT_INDEX_COUNT", "-1")
+		if body := build(1, 3, 1, "").String()[0]; !strings.Contains(body, "| 4 (🔕 3) |") {
+			t.Errorf("index cell missing:\n%s", body)
+		}
+	})
+
+	t.Run("expanded and collapsed render ignorable resources as ordinary ones", func(t *testing.T) {
+		for _, mode := range []string{"", "expanded", "collapsed"} {
+			setup(t, mode, "")
+			c := build(2, 2, 1, "")
+			got := c.String()
+			plain := build(2, 0, 3, "")
+			// same resource names would differ; compare structure instead
+			body := got[0]
+			if strings.Contains(body, "🔕") {
+				t.Errorf("mode %q: ignorable markers must not render:\n%s", mode, body)
+			}
+			want := tagsOf(plain.String()[0])
+			if g := tagsOf(body); strings.Join(g, ",") != strings.Join(want, ",") {
+				t.Errorf("mode %q: tags %v, want %v", mode, g, want)
+			}
+		}
+	})
+
+	t.Run("auto with the rule off ignores ignorable marks", func(t *testing.T) {
+		setup(t, "auto", "false")
+		body := build(1, 2, 0, "").String()[0]
+		if strings.Contains(body, "🔕") {
+			t.Errorf("markers rendered with the rule off:\n%s", body)
+		}
+	})
+
+	t.Run("no ignorable resources leaves the output unchanged", func(t *testing.T) {
+		setup(t, "auto", "")
+		body := build(1, 0, 2, "").String()[0]
+		if strings.Contains(body, "🔕") || !strings.Contains(body, "2 changed ·") {
+			t.Errorf("unexpected ignorable output:\n%s", body)
+		}
+	})
+
+	t.Run("splitting stays well formed", func(t *testing.T) {
+		setup(t, "auto", "")
+		t.Setenv("ARGO_DIFF_COMMENT_MAX_CHARS", "6000")
+		c := CommentMarkdown{}
+		a := c.AppMarkdown(AppMarkdownOpts{Name: "big", SyncStatus: "Synced", HealthStatus: "Healthy"})
+		big := strings.Repeat("-  app.kubernetes.io/version: 1\n+  app.kubernetes.io/version: 2\n", 20)
+		for j := range 30 {
+			if j%3 == 0 {
+				a.AddResourceDiff("apps", "Deployment", fmt.Sprintf("web-%d", j), "prod", big)
+			} else {
+				a.AddIgnorableResourceDiff("apps", "Deployment", fmt.Sprintf("web-%d", j), "prod", big)
+			}
+		}
+		bodies := c.String()
+		if len(bodies) < 2 {
+			t.Fatalf("want a split, got %d bodies", len(bodies))
+		}
+		for i, b := range bodies {
+			checkBodyWellFormed(t, i, b)
+			if len(b) > commentBudget() {
+				t.Errorf("body %d is %d bytes, over the budget", i, len(b))
+			}
+		}
+	})
 }
