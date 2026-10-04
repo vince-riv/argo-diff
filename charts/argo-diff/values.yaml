@@ -55,12 +55,21 @@ config:
   commentLineMaxChars: ""
   # config.commentNotice -- Advisory text rendered as a note at the top of the Pull Request comment. Separate several notices with "|"
   commentNotice: ""
-  # config.commentCollapse -- Whether the collapsible sections in a Pull Request comment start open: "expanded" (default), "collapsed", or "auto"
+  # config.commentCollapse -- Whether the collapsible sections in a Pull Request comment start open: "expanded" (default), "collapsed", or "auto". "auto" folds ignorable resources (see commentCollapseIgnorable), or applies the count thresholds when that is false
   commentCollapse: ""
-  # config.commentCollapseAppCount -- In "auto" collapse mode, the application count above which each application's own block starts folded. Must be positive. Defaults to 3
+  # config.commentCollapseAppCount -- In "auto" collapse mode with commentCollapseIgnorable false, the application count above which each application's own block starts folded. Must be positive. Defaults to 3
   commentCollapseAppCount: ""
-  # config.commentCollapseResourceCount -- In "auto" collapse mode, the count of changed resources within an application above which that application's resource (diff) blocks start folded - not the application's own block, which commentCollapseAppCount governs. Must be positive. Defaults to 5
+  # config.commentCollapseResourceCount -- In "auto" collapse mode with commentCollapseIgnorable false, the count of changed resources within an application above which that application's resource (diff) blocks start folded - not the application's own block, which commentCollapseAppCount governs. Must be positive. Defaults to 5
   commentCollapseResourceCount: ""
+  # config.commentCollapseIgnorable -- In "auto" collapse mode, fold resource diffs whose every changed line matches an ignorable regex, instead of applying the count thresholds. Defaults to true; set false for the count thresholds. Has no effect outside "auto" mode
+  # @default -- unset (true)
+  commentCollapseIgnorable: ~
+  # config.commentCollapseIgnorableRegexes -- RE2 regexes (a list) that mark a changed diff line ignorable. A list replaces the built-in defaults (Helm chart and app version labels); `[]` means no global regexes, so only applications with the `argo-diff.vince-riv.io/collapse-ignorable-regexes` annotation fold anything
+  # @default -- unset (built-in defaults)
+  commentCollapseIgnorableRegexes: ~
+  # config.commentCollapseIgnorableExcludeKinds -- API groups and kinds that never fold, as `group/Kind`, `group/*` or `Kind` (core group). A list replaces the default `argoproj.io/*`; `[]` excludes nothing
+  # @default -- unset (`argoproj.io/*`)
+  commentCollapseIgnorableExcludeKinds: ~
   # config.commentIndexCount -- When to render the summary index table above the diffs: -1 always, 0 never, any other number is the application count at which it starts. Defaults to 2
   commentIndexCount: ""
   # config.commentMaxChars -- Maximum size of a single Pull Request comment, in bytes. Defaults to (and cannot exceed) GitHub's 262144 byte limit

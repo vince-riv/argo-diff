@@ -54,6 +54,14 @@ spec:
             #  value: "3"
             #- name: ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT
             #  value: "5"
+            #- name: ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE
+            #  value: "true"
+            #- name: ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES
+            #  value: |
+            #    ^\s*app\.kubernetes\.io/version:\s
+            #    ^\s*(helm\.sh/)?chart:\s+["']?[A-Za-z0-9][-A-Za-z0-9_.]*-v?\d+\.\d+\.\d+[-+A-Za-z0-9_.]*["']?\s*$
+            #- name: ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS
+            #  value: "argoproj.io/*,rbac.authorization.k8s.io/ClusterRole"
             #- name: ARGO_DIFF_COMMENT_INDEX_COUNT
             #  value: "2"
             #- name: ARGO_DIFF_COMMENT_MAX_CHARS

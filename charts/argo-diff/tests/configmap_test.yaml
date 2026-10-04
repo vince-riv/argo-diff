@@ -71,6 +71,83 @@ tests:
       - equal:
           path: data.ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT
           value: "8"
+  # `with`/`or` drop a boolean false, so the template normalizes it to a string;
+  # without that, false would silently mean the default true
+  - it: config commentCollapseIgnorable false
+    set:
+      config.commentCollapseIgnorable: false
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE
+          value: "false"
+  - it: config commentCollapseIgnorable true
+    set:
+      config.commentCollapseIgnorable: true
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE
+          value: "true"
+  - it: config commentCollapseIgnorable unset
+    set:
+      config.commentCollapse: auto
+    asserts:
+      - notExists:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE
+      - notExists:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES
+      - notExists:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS
+  - it: config commentCollapseIgnorableRegexes joined by newline
+    set:
+      config.commentCollapseIgnorableRegexes:
+        - '^\s*app\.kubernetes\.io/version:\s'
+        - '^\s*chart:\s'
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES
+          value: "^\\s*app\\.kubernetes\\.io/version:\\s\n^\\s*chart:\\s"
+  - it: config commentCollapseIgnorableRegexes empty list
+    set:
+      config.commentCollapseIgnorableRegexes: []
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES
+          value: "[]"
+  - it: config commentCollapseIgnorableExcludeKinds
+    set:
+      config.commentCollapseIgnorableExcludeKinds:
+        - argoproj.io/*
+        - rbac.authorization.k8s.io/ClusterRole
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS
+          value: "argoproj.io/*,rbac.authorization.k8s.io/ClusterRole"
+  - it: config commentCollapseIgnorableExcludeKinds empty list
+    set:
+      config.commentCollapseIgnorableExcludeKinds: []
+    asserts:
+      - equal:
+          path: data.ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS
+          value: "[]"
+  # the data: gate must open for each new key on its own
+  - it: only commentCollapseIgnorable set opens the data block
+    set:
+      config.commentCollapseIgnorable: false
+    asserts:
+      - exists:
+          path: data
+  - it: only commentCollapseIgnorableRegexes set opens the data block
+    set:
+      config.commentCollapseIgnorableRegexes: []
+    asserts:
+      - exists:
+          path: data
+  - it: only commentCollapseIgnorableExcludeKinds set opens the data block
+    set:
+      config.commentCollapseIgnorableExcludeKinds: []
+    asserts:
+      - exists:
+          path: data
   - it: config commentIndexCount
     set:
       config.commentIndexCount: 5

@@ -46,15 +46,28 @@ inputs:
     required: false
     default: ''
   comment_collapse:
-    description: 'Whether the collapsible sections in a PR comment start open: expanded (default), collapsed, or auto'
+    description: 'Whether the collapsible sections in a PR comment start open: expanded (default), collapsed, or auto. auto folds ignorable resource diffs (see comment_collapse_ignorable), or applies the count thresholds when that is false'
     required: false
     default: ''
   comment_collapse_app_count:
-    description: "In auto collapse mode, the application count above which each application's own block starts folded. Must be positive. Defaults to 3"
+    description: "In auto collapse mode with comment_collapse_ignorable set to false (it has no effect otherwise), the application count above which each application's own block starts folded. Must be positive. Defaults to 3"
     required: false
     default: ''
   comment_collapse_resource_count:
-    description: "In auto collapse mode, the count of changed resources within an application above which that application's resource (diff) blocks start folded - not the application's own block, which comment_collapse_app_count governs. Must be positive. Defaults to 5"
+    description: "In auto collapse mode with comment_collapse_ignorable set to false (it has no effect otherwise), the count of changed resources within an application above which that application's resource (diff) blocks start folded - not the application's own block, which comment_collapse_app_count governs. Must be positive. Defaults to 5"
+    required: false
+    default: ''
+  comment_collapse_ignorable:
+    description: 'In auto collapse mode, fold resource diffs whose every changed line matches an ignorable regex, instead of applying the count thresholds. true (default) or false. No effect outside auto mode'
+    required: false
+    default: ''
+  comment_collapse_ignorable_regexes:
+    description: |
+      Newline-separated RE2 regexes (use a | block scalar). A changed diff line is ignorable if it matches one. A value replaces the built-in defaults (Helm chart and app version labels); the literal value [] means no global regexes
+    required: false
+    default: ''
+  comment_collapse_ignorable_exclude_kinds:
+    description: 'Comma- or newline-separated group/Kind, group/* or Kind (core group) entries that never fold. A value replaces the default, argoproj.io/*; the literal value [] excludes nothing'
     required: false
     default: ''
   comment_index_count:
@@ -108,6 +121,9 @@ runs:
   env:
     ARGO_DIFF_COMMENT_COLLAPSE: ${{ inputs.comment_collapse }}
     ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT: ${{ inputs.comment_collapse_app_count }}
+    ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE: ${{ inputs.comment_collapse_ignorable }}
+    ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS: ${{ inputs.comment_collapse_ignorable_exclude_kinds }}
+    ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES: ${{ inputs.comment_collapse_ignorable_regexes }}
     ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT: ${{ inputs.comment_collapse_resource_count }}
     ARGO_DIFF_COMMENT_INDEX_COUNT: ${{ inputs.comment_index_count }}
     ARGO_DIFF_COMMENT_MAX_CHARS: ${{ inputs.comment_max_chars }}
