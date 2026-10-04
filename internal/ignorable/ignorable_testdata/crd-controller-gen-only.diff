@@ -1,0 +1,11 @@
+--- /tmp/argocd-diff654/backups.postgresql.cnpg.io-live.yaml	2026-01-01 00:00:00.000000000 +0000
++++ /tmp/argocd-diff654/backups.postgresql.cnpg.io	2026-01-01 00:00:00.000000000 +0000
+@@ -3,9 +3,9 @@
+ metadata:
+   annotations:
+-    controller-gen.kubebuilder.io/version: v0.21.0
++    controller-gen.kubebuilder.io/version: v0.22.0
+   labels:
+-    helm.sh/chart: cloudnative-pg-0.29.0
++    helm.sh/chart: cloudnative-pg-0.29.1
+     app.kubernetes.io/managed-by: Helm

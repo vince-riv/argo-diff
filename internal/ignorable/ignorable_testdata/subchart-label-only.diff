@@ -1,0 +1,8 @@
+--- /tmp/argocd-diff789/node-exporter-live.yaml	2026-01-01 00:00:00.000000000 +0000
++++ /tmp/argocd-diff789/node-exporter	2026-01-01 00:00:00.000000000 +0000
+@@ -11,7 +11,7 @@
+     app.kubernetes.io/name: prometheus-node-exporter
+     app.kubernetes.io/version: 1.12.1
+-    helm.sh/chart: prometheus-node-exporter-4.57.0
++    helm.sh/chart: prometheus-node-exporter-4.58.0
+     release: main

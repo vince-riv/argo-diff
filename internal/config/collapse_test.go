@@ -20,3 +20,20 @@ func TestCommentCollapseMode(t *testing.T) {
 		})
 	}
 }
+
+func TestCollapseIgnorableActive(t *testing.T) {
+	modes := []string{"", "expanded", "collapsed", "auto", "nonsense"}
+	flags := map[string]bool{"": true, "true": true, "TRUE": true, " true ": true, "false": false, "yes": true}
+	for _, mode := range modes {
+		for flag, flagOn := range flags {
+			t.Run(mode+"/"+flag, func(t *testing.T) {
+				t.Setenv("ARGO_DIFF_COMMENT_COLLAPSE", mode)
+				t.Setenv(CollapseIgnorableEnvVar, flag)
+				want := mode == "auto" && flagOn
+				if got := CollapseIgnorableActive(); got != want {
+					t.Errorf("CollapseIgnorableActive() = %v, want %v", got, want)
+				}
+			})
+		}
+	}
+}
