@@ -13,8 +13,20 @@ import (
 	"github.com/vince-riv/argo-diff/internal/argocd"
 	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/github"
+	"github.com/vince-riv/argo-diff/internal/ignorable"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
+
+// joinNotice appends per-application warnings to an existing NoticeStr, one
+// paragraph each.
+func joinNotice(notice string, warnings []string) string {
+	parts := make([]string, 0, len(warnings)+1)
+	if notice != "" {
+		parts = append(parts, notice)
+	}
+	parts = append(parts, warnings...)
+	return strings.Join(parts, "\n\n")
+}
 
 // How long a single event gets to process before we give up. Configurable via
 // ARGO_DIFF_TIMEOUT because the time needed scales with the number of ArgoCD
@@ -208,6 +220,12 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	changeCount := 0 // how many apps have changes
 	firstError := "" // string of the first error we receive - used in commit status message
 	cMarkdown := github.CommentMarkdown{}
+	// parsed once per event, not per application. A broken global setting shows
+	// up as a comment-level notice
+	ignorableCfg := ignorable.LoadGlobal()
+	for _, w := range ignorableCfg.Warnings {
+		config.AddNotice(w)
+	}
 	for _, a := range appResList {
 		appName := a.ArgoApp.Name
 		appSyncStatus := a.ArgoApp.Status.Sync.Status
@@ -233,12 +251,18 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 				// advisory: NoticeStr renders as a blue [!NOTE] alert above
 				// this app's diffs, and leaves errorCount, firstError and the
 				// commit status alone - unlike the fatal branch above
+				// an invalid annotation is advisory too: it joins this app's notice
+				policy, annotationWarnings := ignorableCfg.ForApp(a.ArgoApp.GetAnnotations())
 				appMarkdown := cMarkdown.AppMarkdown(github.AppMarkdownOpts{
-					Name: appName, NoticeStr: a.NoticeStr,
+					Name: appName, NoticeStr: joinNotice(a.NoticeStr, annotationWarnings),
 					SyncStatus: appSyncStatus, HealthStatus: appHealthStatus, HealthMsg: appHealthMsg,
 				})
 				for _, ar := range a.ChangedResources {
-					appMarkdown.AddResourceDiff(ar.Group, ar.Kind, ar.Name, ar.Namespace, ar.DiffStr)
+					if policy.Ignorable(ar.Group, ar.Kind, ar.DiffStr) {
+						appMarkdown.AddIgnorableResourceDiff(ar.Group, ar.Kind, ar.Name, ar.Namespace, ar.DiffStr)
+					} else {
+						appMarkdown.AddResourceDiff(ar.Group, ar.Kind, ar.Name, ar.Namespace, ar.DiffStr)
+					}
 				}
 			} else if a.NoticeStr != "" {
 				// today processTopLevelApp() returns before it can set NoticeStr
