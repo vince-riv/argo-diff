@@ -9,6 +9,7 @@ env var (most packages still read their own directly in `init()`, see each packa
 | File | Contents |
 | ---- | -------- |
 | `connectivity.go` | `ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS` parsing: `BypassConnectivityCheck()`, `LogBypassConfig()` |
+| `collapse.go` | `ARGO_DIFF_COMMENT_COLLAPSE` parsing: `CommentCollapseMode()` and the `CollapseAuto`/`CollapseExpanded`/`CollapseCollapsed` constants |
 | `notice.go` | `ARGO_DIFF_COMMENT_NOTICE` plus the in-process notice channel: `Notices()`, `AddNotice()` |
 
 ## `ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS`
@@ -24,6 +25,12 @@ calls it every event, not just at startup).
 
 `LogBypassConfig()` logs the resolved bypass state once. `cmd/main.go` calls it exactly once at
 startup — don't call it from a per-event path, or unknown-token warnings spam the log.
+
+## `ARGO_DIFF_COMMENT_COLLAPSE`
+
+`CommentCollapseMode()` returns `auto`, `expanded` (the default) or `collapsed`. It is
+case-insensitive and whitespace-trimmed; an unknown value logs a warning and means `expanded`. Read on
+call, so tests can `t.Setenv` it. `internal/github` reads it to decide which blocks render folded.
 
 ## `ARGO_DIFF_COMMENT_NOTICE`
 

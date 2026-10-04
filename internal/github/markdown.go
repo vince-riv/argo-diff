@@ -9,6 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/rs/zerolog/log"
+
+	"github.com/vince-riv/argo-diff/internal/config"
 )
 
 // githubCommentHardMax is GitHub's own cap on an issue comment body, per
@@ -35,19 +37,12 @@ const (
 	// defaultCollapse* are the "auto" collapse thresholds. Below them a comment
 	// is small enough to read fully expanded; above them an open wall of diffs
 	// hides the shape of the change. They're only consulted in "auto" mode -
-	// the default mode is collapseExpanded, which ignores them entirely.
+	// the default mode is config.CollapseExpanded, which ignores them entirely.
 	defaultCollapseAppCount      = 3
 	defaultCollapseResourceCount = 5
 	// minResourceLen keeps a very low ARGO_DIFF_COMMENT_MAX_CHARS from
 	// collapsing every diff into the "too large" marker.
 	minResourceLen = 512
-)
-
-// ARGO_DIFF_COMMENT_COLLAPSE values.
-const (
-	collapseAuto      = "auto"
-	collapseExpanded  = "expanded"
-	collapseCollapsed = "collapsed"
 )
 
 const (
@@ -128,7 +123,7 @@ func indexCount() int {
 }
 
 // collapseAppCount is the "auto" mode threshold on application count. Zero or
-// negative is invalid - collapseCollapsed is the only way to fold everything -
+// negative is invalid - config.CollapseCollapsed is the only way to fold everything -
 // so it warns and falls back to the default, the same guard lineMaxChars()
 // uses.
 func collapseAppCount() int {
@@ -149,18 +144,6 @@ func collapseResourceCount() int {
 		return defaultCollapseResourceCount
 	}
 	return n
-}
-
-func collapseMode() string {
-	raw := strings.ToLower(strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_COLLAPSE")))
-	switch raw {
-	case "":
-		return collapseExpanded
-	case collapseAuto, collapseExpanded, collapseCollapsed:
-		return raw
-	}
-	log.Warn().Msgf("Unknown ARGO_DIFF_COMMENT_COLLAPSE value %q - using %s", raw, collapseExpanded)
-	return collapseExpanded
 }
 
 // commentBudget is how much rendered markdown one comment body may hold, after
@@ -495,10 +478,10 @@ func (a *ArgoAppMarkdown) AddResourceDiff(group, kind, name, ns, diffStr string)
 
 // appOpen and resourceOpen decide whether a block renders folded.
 func (c CommentMarkdown) appOpen(a *ArgoAppMarkdown) bool {
-	switch collapseMode() {
-	case collapseExpanded:
+	switch config.CommentCollapseMode() {
+	case config.CollapseExpanded:
 		return true
-	case collapseCollapsed:
+	case config.CollapseCollapsed:
 		return false
 	}
 	// never fold an application carrying an advisory or an error: its alert
@@ -511,10 +494,10 @@ func (c CommentMarkdown) appOpen(a *ArgoAppMarkdown) bool {
 }
 
 func (c CommentMarkdown) resourceOpen(a *ArgoAppMarkdown) bool {
-	switch collapseMode() {
-	case collapseExpanded:
+	switch config.CommentCollapseMode() {
+	case config.CollapseExpanded:
 		return true
-	case collapseCollapsed:
+	case config.CollapseCollapsed:
 		return false
 	}
 	return len(a.Resources) <= collapseResourceCount()
