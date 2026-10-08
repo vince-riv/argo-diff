@@ -14,14 +14,28 @@ import (
 	"testing"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/vince-riv/argo-diff/internal/scm"
 )
+
+// testProject is the captured fixtures' project, as the API addresses it.
+const testProject = "vrivellino%2Fargo-diff"
+
+// testRepo is the captured fixtures' project.
+var testRepo = scm.RepoRef{Owner: "vrivellino", Name: "argo-diff"}
+
+// apiPath is the escaped API path of a project route, eg:
+// apiPath("merge_requests/1").
+func apiPath(route string) string {
+	return "/api/v4/projects/" + testProject + "/" + route
+}
 
 // fixtureRoute answers one request with a captured API fixture:
 // gitlab_testdata/api/<Fixture>.json, with the status line and headers of
 // <Fixture>.headers when that file exists.
 type fixtureRoute struct {
 	Method  string
-	Path    string // escaped path, eg: "/api/v4/projects/group%2Fproject/merge_requests/1"
+	Path    string // escaped path, eg: apiPath("merge_requests/1")
 	Query   string // when set, the request's raw query must contain it
 	Fixture string
 }
