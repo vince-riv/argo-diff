@@ -12,6 +12,7 @@ way `internal/github` does for GitHub. It is being built in issue #160, Phase 2;
 | `client.go` | Client construction and config, `ConnectivityCheck()`, `getCurrentUser()`, API error logging |
 | `merge_request.go` | `Provider.GetChangeRequest()`, `Provider.ListChangedFiles()` |
 | `notes.go` | The comment primitives (`ListComments`, `CreateComment`, `UpdateComment`, `CurrentUser`) on MR notes, and `Dialect()` |
+| `status.go` | `Provider.SetStatus()` — commit statuses |
 | `provider.go` | `Provider` — the startup methods so far: `Enabled`, `ValidateConfig`, `CredentialsHint`, `ConnectivityCheck`, `RepoHosts` |
 
 client-go types stay inside this package, as go-github types do in `internal/github`.
@@ -72,6 +73,21 @@ reuse algorithm over the primitives in `notes.go` (see `internal/scm/context.md`
   bypass.
 - `Dialect()` is `comment.GitLab`: a 1,048,576-**byte** hard max (GitLab answers 400 above it),
   alerts hoisted out of `<details>` like GitHub. See `internal/comment/context.md`.
+
+## Commit statuses
+
+`SetStatus()` posts `POST /projects/:id/statuses/:sha`.
+
+- **States are mapped**: `pending` and `success` pass through; `failure` and `error` become
+  `failed`. GitLab rejects `failure` with a 400 (its states are `pending`, `running`, `success`,
+  `failed`, `canceled`, `skipped`).
+- The status `name` is `argo-diff`, or `argo-diff/<ARGO_DIFF_CONTEXT_STR>` (read in `init()`),
+  the same string GitHub uses as its context. GitLab keeps **one status per name and SHA** and
+  updates it in place.
+- The description is cut to **255 characters** (runes, not bytes), ending in `...`; GitLab
+  answers 400 above that.
+- `dryRun` (dev mode) logs instead of calling the API. Skipping statuses under GitLab CI is
+  Phase 3 of issue #160.
 
 ## Connectivity check and user
 

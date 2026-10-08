@@ -19,7 +19,7 @@ changes.
 | `internal/config/` | Cross-package operator config, eg: the connectivity-check bypass |
 | `internal/comment/` | Renders diffs into comment bodies; per-provider `Dialect`; preamble and marker wrapper |
 | `internal/github/` | The GitHub provider (`github.Provider`): API client, PR comments, commit statuses, webhook parsing and signatures, GitHub Actions detection |
-| `internal/gitlab/` | The GitLab provider (`gitlab.Provider`), in progress (issue #160 Phase 2): API client and config, MR lookups, MR notes, plus captured API, webhook and CI fixtures |
+| `internal/gitlab/` | The GitLab provider (`gitlab.Provider`), in progress (issue #160 Phase 2): API client and config, MR lookups, MR notes, commit statuses, plus captured API, webhook and CI fixtures |
 | `internal/ignorable/` | Classifies resource diffs as ignorable (folded in `auto` collapse mode); config and annotations |
 | `internal/process_event/` | Orchestrates one event: diff → commit status → PR comment |
 | `internal/scm/` | Source-control-provider abstraction: the `Provider` and `WebhookHandler` interfaces, the registry, neutral types, and the shared comment-reuse algorithm |
