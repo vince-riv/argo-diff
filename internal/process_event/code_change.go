@@ -320,12 +320,13 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	// comment-level advisories: the operator's ARGO_DIFF_COMMENT_NOTICE plus
 	// anything config.AddNotice() raised during the run
 	cMarkdown.Notices = config.Notices()
+	repo := scm.RepoRef{Owner: eventInfo.RepoOwner, Name: eventInfo.RepoName}
 	if changeCount == 0 && firstError == "" && len(notDiffed) == 0 {
 		// if there are no changes or warnings, don't comment (but clear out any existing comments).
 		// NoticeStr needs no term here: it's only ever set on an app that already
 		// has changed resources, so it implies changeCount > 0.
-		_, _ = github.Comment(reportCtx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, []string{})
+		_, _ = scm.PostComments(reportCtx, github.Provider{}, repo, eventInfo.PrNum, eventInfo.Sha, []string{})
 	} else {
-		_, _ = github.Comment(reportCtx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
+		_, _ = scm.PostComments(reportCtx, github.Provider{}, repo, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
 	}
 }

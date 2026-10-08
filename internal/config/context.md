@@ -58,8 +58,7 @@ table in `internal/comment/context.md`.
 
 - `internal/process_event/code_change.go` — sets `CommentMarkdown.Notices` from `Notices()`.
 - `cmd/main.go` — guards `argocd.ConnectivityCheck()` with `BypassConnectivityCheck(ComponentArgoCD)`.
-- `internal/github/comment.go` — guards `ConnectivityCheck()`, the `getCommentUser()` call inside
-  `getExistingComments()`, and the comment-author match, all with
-  `BypassConnectivityCheck(ComponentGithub)`. See that package's `context.md` for what bypassing
+- `internal/github/` — guards `ConnectivityCheck()` and `Provider.CurrentUser()` (which decides
+  whether comments are matched by author) with `BypassConnectivityCheck(ComponentGithub)`. See that package's `context.md` for what bypassing
   `github` does to comment matching (it degrades to the same marker-only match GitHub Actions mode
   already uses).
