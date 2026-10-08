@@ -45,7 +45,14 @@ func (Provider) CurrentUser(ctx context.Context) (string, error) {
 	if err := getCommentUser(ctx); err != nil {
 		return "", err
 	}
-	return getCommentLogin(), nil
+	// an empty login means "match any author" to scm.ExistingComments, which
+	// would let argo-diff edit other users' marker-bearing comments. Outside
+	// the two marker-only cases above that is never what we want.
+	login := getCommentLogin()
+	if login == "" {
+		return "", fmt.Errorf("github comment user resolved to an empty login")
+	}
+	return login, nil
 }
 
 // ListComments returns every comment on the pull request, oldest first.
