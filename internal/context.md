@@ -7,7 +7,9 @@ All application code beyond the entry point. Each package has its own `context.m
 ```
 cmd/main.go
   ├── internal/server ──── internal/process_event ─┬── internal/argocd ── internal/webhook
-  │       └── internal/webhook                     ├── internal/github ─┬─ internal/config
+  │       └── internal/webhook                     ├── internal/comment ── internal/config
+  │                                                ├── internal/github ─┬─ internal/comment
+  │                                                │                    ├─ internal/config
   │                                                │                    └─ internal/scm
   │                                                ├── internal/ignorable ── internal/config
   │                                                ├── internal/scm
@@ -21,8 +23,9 @@ internal/gendiff  (no importers — see its context.md)
 | Package | Role |
 | ------- | ---- |
 | `argocd/` | Runs the `argocd` CLI; matches applications to a change and diffs them |
+| `comment/` | Renders diffs into comment bodies (per-provider `Dialect`), plus the preamble/marker wrapper |
 | `github/` | GitHub API client: PR comments, commit statuses, PR/file lookups |
-| `ignorable/` | Decides which resource diffs are "ignorable" (every changed line matches a regex), so `github/` can fold them |
+| `ignorable/` | Decides which resource diffs are "ignorable" (every changed line matches a regex), so `comment/` can fold them |
 | `scm/` | Provider-neutral types (`RepoRef`, `ChangeRequest`, `Status`); imports no provider |
 | `process_event/` | Orchestrates one event end to end, including the timeout budget |
 | `server/` | HTTP webhook handlers and the two run-once entry points |

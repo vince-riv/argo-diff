@@ -1,4 +1,4 @@
-package github
+package comment
 
 import (
 	"fmt"
@@ -7,14 +7,14 @@ import (
 	"unicode/utf8"
 )
 
-// wrappedLen is the size of what Comment() actually posts, so a test can assert
+// wrappedLen is the size of what gets posted, so a test can assert
 // on the bytes sent to GitHub rather than on String()'s output alone.
 func wrappedLen(body string) int {
-	return len(wrapComment(body))
+	return len(Wrap(body))
 }
 
 // setWrapper installs a preamble and identifier for the duration of a test.
-// They're package vars set by comment.go's init(), which t.Setenv can't reach.
+// They're package vars set by wrap.go's init(), which t.Setenv can't reach.
 func setWrapper(t *testing.T, preamble, identifier string) {
 	t.Helper()
 	origP, origI := commentPreamble, commentIdentifier
@@ -192,8 +192,8 @@ func TestBodiesStayWithinBudgetIncludingWrapper(t *testing.T) {
 	}
 	for i, b := range bodies {
 		checkBodyWellFormed(t, i, b)
-		if got := wrappedLen(b); got > commentMaxLen() {
-			t.Errorf("body %d is %d bytes once wrapped, over the %d byte cap", i, got, commentMaxLen())
+		if got := wrappedLen(b); got > commentMaxLen(GitHub) {
+			t.Errorf("body %d is %d bytes once wrapped, over the %d byte cap", i, got, commentMaxLen(GitHub))
 		}
 		if !strings.Contains(b, "part ") {
 			t.Errorf("body %d is missing its 'part i of n' header:\n%s", i, b)
@@ -216,8 +216,8 @@ func TestOversizedResourceStaysInBudget(t *testing.T) {
 
 	for i, b := range c.String() {
 		checkBodyWellFormed(t, i, b)
-		if got := wrappedLen(b); got > commentMaxLen() {
-			t.Errorf("body %d is %d bytes once wrapped, over the %d byte cap", i, got, commentMaxLen())
+		if got := wrappedLen(b); got > commentMaxLen(GitHub) {
+			t.Errorf("body %d is %d bytes once wrapped, over the %d byte cap", i, got, commentMaxLen(GitHub))
 		}
 	}
 }
@@ -419,7 +419,7 @@ func TestCommentWrapperLenMatchesWrapComment(t *testing.T) {
 	for _, preamble := range []string{"", "Argo-Diff for **prod**"} {
 		setWrapper(t, preamble, "<!-- comment produced by argo-diff[prod] -->")
 		body := "some rendered markdown"
-		want := len(wrapComment(body))
+		want := len(Wrap(body))
 		if got := len(body) + commentWrapperLen(); got != want {
 			t.Errorf("preamble %q: body+wrapper = %d, want %d", preamble, got, want)
 		}
@@ -448,8 +448,8 @@ func TestAlertPlusLargeResourceStaysWellFormed(t *testing.T) {
 			bodies := c.String()
 			for i, b := range bodies {
 				checkBodyWellFormed(t, i, b)
-				if got := wrappedLen(b); got > commentMaxLen() {
-					t.Errorf("body %d is %d bytes once wrapped, over the %d byte cap", i, got, commentMaxLen())
+				if got := wrappedLen(b); got > commentMaxLen(GitHub) {
+					t.Errorf("body %d is %d bytes once wrapped, over the %d byte cap", i, got, commentMaxLen(GitHub))
 				}
 				if strings.TrimSpace(b) == "" {
 					t.Errorf("body %d is empty", i)
@@ -496,7 +496,7 @@ func TestAbsurdlyLowCapStillProducesUsableBodies(t *testing.T) {
 			a := c.AppMarkdown(AppMarkdownOpts{Name: "app", SyncStatus: "Synced", HealthStatus: "Healthy"})
 			a.AddResourceDiff("apps", "Deployment", "web", "prod", fakeDiff(50))
 
-			budget := commentBudget()
+			budget := commentBudget(GitHub)
 			for i, b := range c.String() {
 				checkBodyWellFormed(t, i, b)
 				if len(b) > budget {
@@ -531,7 +531,7 @@ func TestBudgetFloorNeverExceedsTheHardMax(t *testing.T) {
 			setWrapper(t, tt.preamble, "<!-- argo-diff -->")
 			t.Setenv("ARGO_DIFF_COMMENT_MAX_CHARS", tt.cap)
 
-			budget := commentBudget()
+			budget := commentBudget(GitHub)
 			if room := githubCommentHardMax - commentWrapperLen(); budget > room {
 				t.Errorf("budget %d exceeds the %d bytes GitHub actually leaves - every body is a 422", budget, room)
 			}
@@ -712,7 +712,7 @@ func TestIgnorableCollapse(t *testing.T) {
 		}
 		for i, b := range bodies {
 			checkBodyWellFormed(t, i, b)
-			if len(b) > commentBudget() {
+			if len(b) > commentBudget(GitHub) {
 				t.Errorf("body %d is %d bytes, over the budget", i, len(b))
 			}
 		}

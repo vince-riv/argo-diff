@@ -17,6 +17,7 @@ changes.
 | `cmd/` | Entry point: flags, env validation, mode dispatch |
 | `internal/argocd/` | Wrapper around the `argocd` CLI; application matching and diffing |
 | `internal/config/` | Cross-package operator config, eg: the connectivity-check bypass |
+| `internal/comment/` | Renders diffs into comment bodies; per-provider `Dialect`; preamble and marker wrapper |
 | `internal/github/` | GitHub API client, PR comments, commit statuses |
 | `internal/ignorable/` | Classifies resource diffs as ignorable (folded in `auto` collapse mode); config and annotations |
 | `internal/scm/` | Source-control-provider abstraction: neutral types shared by every provider |

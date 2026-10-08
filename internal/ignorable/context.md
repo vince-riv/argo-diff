@@ -1,7 +1,7 @@
 # internal/ignorable/
 
 Decides which resource diffs are **ignorable**: every changed line matches a configured regex (the
-default case is a Helm chart bump that only touches version labels). `internal/github` renders those
+default case is a Helm chart bump that only touches version labels). `internal/comment` renders those
 resources folded in `auto` collapse mode. Pure package: imports `internal/config` only.
 
 ## Files
@@ -15,7 +15,7 @@ resources folded in `auto` collapse mode. Pure package: imports `internal/config
 ## Gating
 
 The feature is active only when `config.CollapseIgnorableActive()`: `ARGO_DIFF_COMMENT_COLLAPSE=auto`
-and `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE` not `false`. `internal/github` asks the same function, so the
+and `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE` not `false`. `internal/comment` asks the same function, so the
 two cannot disagree. When inactive, `LoadGlobal()` parses nothing, and annotations are ignored: they
 can never turn the feature on.
 
@@ -49,7 +49,7 @@ Classify the raw `DiffStr`, before `truncateLines()` or the "too large" replacem
 ## Gotchas
 
 - The changed-line header rule (`+++ ` / `--- `, trailing space significant) must stay in step with
-  `diffStats()` in `internal/github/markdown.go`. A removed YAML separator renders as `----`.
+  `diffStats()` in `internal/comment/markdown.go`. A removed YAML separator renders as `----`.
 - `ArgoApp` is the live Application, so an annotation a PR adds only takes effect after the Application
   syncs.
 - Go's `regexp` is RE2 (linear time), so an annotation regex cannot cause catastrophic backtracking.
