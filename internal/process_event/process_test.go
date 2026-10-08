@@ -95,6 +95,8 @@ func (f *fakeProvider) UpdateComment(_ context.Context, _ scm.RepoRef, _ int, id
 
 func (f *fakeProvider) CurrentUser(context.Context) (string, error) { return "argo-bot", nil }
 
+func (f *fakeProvider) WebhookHandler() scm.WebhookHandler { return nil }
+
 func (f *fakeProvider) lastStatus(t *testing.T) statusCall {
 	t.Helper()
 	if len(f.statuses) == 0 {

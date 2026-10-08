@@ -12,7 +12,7 @@ providers before any of these run.
 
 ## http_server.go
 
-`StartWebhookProcessor(addr, secret, devMode)` registers handlers on the **default** `http.ServeMux`
+`StartWebhookProcessor(addr, devMode)` registers handlers on the **default** `http.ServeMux`
 (`http.HandleFunc`), starts the listener in a goroutine, blocks on `SIGTERM`/`SIGINT`, then does a
 30s graceful shutdown followed by `wg.Wait()` so in-flight event processing finishes.
 
@@ -20,18 +20,22 @@ Routes:
 
 | Path | Handler | Notes |
 | ---- | ------- | ----- |
-| `/webhook` | `handleWebhook` | The real endpoint |
+| `/webhook` | `webhookHandler("")` → `handleWebhook` | The real endpoint, for the default provider |
 | `/webhook_log` | `printWebHook` | Logs the payload; verifies the signature but does nothing else |
 | `/healthz` | `healthZ` | Returns `healthy` |
 | `/dev` | `devHandler` | Registered only in dev mode; accepts a raw `EventInfo` JSON POST |
 
-`handleWebhook` verifies `X-Hub-Signature-256` (skipped in dev mode), then dispatches on
-`X-GitHub-Event`:
+`/webhook` is served by `webhookHandler("")`, which looks up the default provider (GitHub) and
+calls `handleWebhook(p, ...)`. That reads the body, calls `p.WebhookHandler().Verify()` (skipped in
+dev mode; failure → 401) and then `Parse()`:
 
-- `ping` → acknowledged.
-- `pull_request` → `webhook.ProcessPullRequest()`.
-- `issue_comment` → `webhook.ProcessComment()` (the `argo diff` refresh trigger).
-- anything else → ignored with a 200.
+- `scm.WebhookPing` → acknowledged.
+- `scm.WebhookIgnored` → ignored with a 200.
+- a parse error → 500 `Could not process <event> event data`.
+- `scm.WebhookChange` → processed with `p`.
+
+`/webhook_log` verifies against the default provider's handler. `/dev` and `-f` files pick the
+provider from `EventInfo.Provider` (empty → default).
 
 An `EventInfo` with `Ignore` set is answered 200 and dropped. Otherwise processing is dispatched to
 a goroutine and the response returns immediately — GitHub gets its ack long before the diff
@@ -55,5 +59,6 @@ left to report it to.
 
 ## Tests
 
-None in this package. The handlers are thin; the logic they call is tested in `webhook/`,
-`argocd/`, `github/`, and `process_event/`.
+`http_server_test.go` drives `webhookHandler()` with a stub provider whose `WebhookHandler` returns
+canned results, and checks each response code and body above. The logic the handlers call is
+tested in `github/`, `argocd/`, `scm/` and `process_event/`.

@@ -8,6 +8,7 @@ issue #160 adds GitLab.
 | ---- | -------- |
 | `types.go` | `RepoRef`, `ChangeRequest`, `Status` and its four states |
 | `provider.go` | `Provider` interface, `DefaultProvider`, the registry (`Register`, `Lookup`, `Providers`) |
+| `webhook.go` | `WebhookHandler` interface, `WebhookEvent`, `WebhookKind` |
 | `comment.go` | `Comment`, the `Commenter` primitive interface, `ExistingComments()`, `PostComments()` |
 
 ## Types
@@ -29,6 +30,15 @@ issue #160 adds GitLab.
 `cmd/main.go` calls `Register()` at startup. `Lookup(name)` returns a provider by name; **an empty
 name means `DefaultProvider` (`github`)**, which keeps event files and webhooks from before
 multi-provider support working. `Providers()` lists them sorted by name.
+
+## Webhooks
+
+Each provider's `WebhookHandler()` verifies and parses its webhook requests; the server reads the
+body once and calls `Verify(headers, body)` (skipped in dev mode) then `Parse(headers, body)`.
+`Parse` classifies the request as `WebhookPing` (acknowledged), `WebhookIgnored` (an event type
+argo-diff doesn't handle) or `WebhookChange`, whose `Info` is the `EventInfo` with `Provider` set.
+A `WebhookChange` may still carry `Info.Ignore` (eg: a closed PR). This package imports
+`internal/webhook` for `EventInfo`.
 
 ## Posting comments
 

@@ -23,7 +23,7 @@ changes.
 | `internal/scm/` | Source-control-provider abstraction: neutral types shared by every provider |
 | `internal/process_event/` | Orchestrates one event: diff → commit status → PR comment |
 | `internal/server/` | HTTP webhook server plus the run-once entry points |
-| `internal/webhook/` | Webhook payload parsing (`EventInfo`) and signature verification |
+| `internal/webhook/` | `EventInfo`, the provider-neutral event; payload parsing lives in each provider package |
 | `internal/gendiff/` | Unified-diff helper; currently unused by the rest of the code |
 | `charts/` | Helm chart for deploying argo-diff, plus a fixture chart for e2e tests |
 | `docs/` | Screenshots and example raw Kubernetes manifests |
@@ -95,8 +95,8 @@ Selected in `cmd/main.go`, in this order:
 ## Testing
 
 `go test ./...`. Fixtures live in `*_testdata/` directories next to the packages that use them
-(`internal/argocd/argocd_testdata/`, `internal/github/github_testdata/`,
-`internal/webhook/webhook_testdata/`) and are captured from real `argocd` CLI output and GitHub API
+(`internal/argocd/argocd_testdata/`, `internal/github/github_testdata/`, including its
+`webhook/` payloads) and are captured from real `argocd` CLI output and GitHub API
 responses. Package-level `var` seams (`execArgoCdCli`, the `github` package clients) are the
 mocking points — see the relevant `context.md`.
 

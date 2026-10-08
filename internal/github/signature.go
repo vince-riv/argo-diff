@@ -1,4 +1,4 @@
-package webhook
+package github
 
 import (
 	"crypto/hmac"

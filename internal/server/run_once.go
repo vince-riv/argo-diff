@@ -105,6 +105,7 @@ func eventInfoFromEnv() (*webhook.EventInfo, error) {
 	}
 	repoParts := strings.SplitN(os.Getenv("GITHUB_REPOSITORY"), "/", 2)
 	evt := webhook.EventInfo{
+		Provider:       "github",
 		RepoOwner:      repoParts[0],
 		RepoName:       repoParts[1],
 		RepoDefaultRef: os.Getenv("REPO_DEFAULT_REF"),
@@ -150,7 +151,7 @@ func ProcessFileEvent(filePath string, devMode bool) error {
 		return err
 	}
 	log.Info().Msgf("Processing event data from %s: %+v", filePath, *evtp)
-	p, err := scm.Lookup("")
+	p, err := scm.Lookup(evtp.Provider)
 	if err != nil {
 		return err
 	}
@@ -169,7 +170,7 @@ func ProcessGithubAction() error {
 	if err != nil {
 		return err
 	}
-	p, err := scm.Lookup("github")
+	p, err := scm.Lookup(evtp.Provider)
 	if err != nil {
 		return err
 	}

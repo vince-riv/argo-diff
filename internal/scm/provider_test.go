@@ -21,6 +21,7 @@ func (p namedProvider) ListChangedFiles(context.Context, RepoRef, int) ([]string
 func (p namedProvider) SetStatus(context.Context, RepoRef, string, Status, string, bool) error {
 	return nil
 }
+func (p namedProvider) WebhookHandler() WebhookHandler { return nil }
 
 // withRegistry gives a test an empty registry and restores the real one after.
 func withRegistry(t *testing.T) {

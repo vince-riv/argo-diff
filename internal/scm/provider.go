@@ -27,6 +27,8 @@ type Provider interface {
 	// SetStatus sets the commit status for sha. dryRun (dev mode) logs instead
 	// of calling the API.
 	SetStatus(ctx context.Context, repo RepoRef, sha string, state Status, description string, dryRun bool) error
+	// WebhookHandler verifies and parses this provider's webhook requests.
+	WebhookHandler() WebhookHandler
 }
 
 var (

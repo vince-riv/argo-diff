@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,50 +20,18 @@ import (
 )
 
 var (
-	commentClient          *github.Client
-	appsClient             *github.Client
-	commentClientIsApp     bool
-	contextStr             string
-	lowerContextStr        string
-	refreshCommentKeywords []string
-	commentLogin           string
-	isGithubAction         bool
-	mux                    *sync.RWMutex
+	commentClient      *github.Client
+	appsClient         *github.Client
+	commentClientIsApp bool
+	commentLogin       string
+	isGithubAction     bool
+	mux                *sync.RWMutex
 )
-
-// defaultRefreshCommentKeywords is used when ARGO_DIFF_REFRESH_COMMENT_KEYWORDS is unset, blank, or
-// parses to zero usable keywords (eg: a value of just ",").
-const defaultRefreshCommentKeywords = "argo diff,argo-diff"
-
-// parseRefreshCommentKeywords splits a comma-separated ARGO_DIFF_REFRESH_COMMENT_KEYWORDS value into
-// lower-cased, trimmed keywords, falling back to defaultRefreshCommentKeywords when raw is blank or
-// parses to no usable keywords.
-func parseRefreshCommentKeywords(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		raw = defaultRefreshCommentKeywords
-	}
-	var keywords []string
-	for _, keyword := range strings.Split(raw, ",") {
-		keyword = strings.ToLower(strings.TrimSpace(keyword))
-		if keyword != "" {
-			keywords = append(keywords, keyword)
-		}
-	}
-	if len(keywords) == 0 {
-		log.Warn().Msg("ARGO_DIFF_REFRESH_COMMENT_KEYWORDS parsed to zero keywords; using defaults")
-		return strings.Split(defaultRefreshCommentKeywords, ",")
-	}
-	return keywords
-}
 
 func init() {
 	commentClientIsApp = false
 	mux = &sync.RWMutex{}
 	isGithubAction = os.Getenv("ARGO_DIFF_CI") != "true" && os.Getenv("GITHUB_ACTIONS") == "true"
-	contextStr = strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
-	lowerContextStr = strings.ToLower(contextStr)
-	refreshCommentKeywords = parseRefreshCommentKeywords(os.Getenv("ARGO_DIFF_REFRESH_COMMENT_KEYWORDS"))
 	if isGithubAction {
 		log.Debug().Msg("Running in github actions")
 		// concurrent PRs running the action must not match each other's comments
@@ -141,20 +108,6 @@ func ConnectivityCheck() error {
 	defer cancel()
 	log.Info().Msg("Calling Github API for a connectivity test")
 	return getCommentUser(ctx)
-}
-
-// IsRefreshComment reports whether a PR comment should trigger a refresh. It matches any keyword in
-// refreshCommentKeywords (parsed once in init() from ARGO_DIFF_REFRESH_COMMENT_KEYWORDS, default
-// "argo diff,argo-diff"), each optionally followed by a trailing ARGO_DIFF_CONTEXT_STR suffix
-// (eg: "argo diff prod") so one comment can target a single instance in a multi-instance setup.
-func IsRefreshComment(comment string) bool {
-	input := strings.ToLower(strings.TrimSpace(comment))
-	for _, keyword := range refreshCommentKeywords {
-		if input == keyword || input == keyword+" "+lowerContextStr {
-			return true
-		}
-	}
-	return false
 }
 
 // getCommentLogin returns the cached commentLogin under a read lock. Every
