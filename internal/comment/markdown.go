@@ -100,6 +100,7 @@ func lineMaxChars() int {
 // instance with a smaller cap, or forcing a split in testing) but never raised
 // past what the dialect's API accepts.
 func commentMaxLen(d Dialect) int {
+	d = d.orDefault()
 	n := envInt("ARGO_DIFF_COMMENT_MAX_CHARS", d.HardMax)
 	if n <= 0 || n > d.HardMax {
 		if n != d.HardMax {
@@ -151,6 +152,7 @@ func collapseResourceCount() int {
 // themselves - but the warning is the part they need, since nothing else says
 // their preamble has eaten the comment.
 func commentBudget(d Dialect) int {
+	d = d.orDefault()
 	n := commentMaxLen(d) - commentWrapperLen()
 	if n >= minResourceLen {
 		return n
@@ -365,10 +367,7 @@ type AppMarkdownOpts struct {
 // dialect is c.Dialect, or GitHub for the zero value - GitHub is the default
 // provider.
 func (c CommentMarkdown) dialect() Dialect {
-	if c.Dialect.HardMax <= 0 {
-		return GitHub
-	}
-	return c.Dialect
+	return c.Dialect.orDefault()
 }
 
 func (c *CommentMarkdown) AppMarkdown(o AppMarkdownOpts) *ArgoAppMarkdown {

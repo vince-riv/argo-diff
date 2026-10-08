@@ -80,3 +80,18 @@ func TestZeroDialectIsGitHub(t *testing.T) {
 		t.Error("zero-value Dialect renders differently from GitHub")
 	}
 }
+
+// An ArgoAppMarkdown built without AppMarkdown() has a zero dialect. It must
+// still be sized against GitHub's budget, not a HardMax of 0.
+func TestZeroDialectAppIsSizedAsGitHub(t *testing.T) {
+	setWrapper(t, "", "<!-- argo-diff -->")
+	t.Setenv("ARGO_DIFF_COMMENT_MAX_CHARS", "")
+	if got, want := commentBudget(Dialect{}), commentBudget(GitHub); got != want {
+		t.Errorf("commentBudget(Dialect{}) = %d, want GitHub's %d", got, want)
+	}
+	a := &ArgoAppMarkdown{AppName: "bare"}
+	a.AddResourceDiff("apps", "Deployment", "web", "prod", fakeDiff(20))
+	if strings.Contains(a.Resources[0].Body, "DIFF TOO LARGE") {
+		t.Error("a small diff on an app with a zero dialect rendered as too large")
+	}
+}
