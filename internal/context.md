@@ -12,7 +12,7 @@ cmd/main.go
   │                                                │                    ├─ internal/config
   │                                                │                    └─ internal/scm
   │                                                ├── internal/ignorable ── internal/config
-  │                                                ├── internal/scm
+  │                                                ├── internal/scm ── internal/comment
   │                                                └── internal/webhook
   └── internal/argocd, internal/github  (connectivity checks only)
 
@@ -26,7 +26,7 @@ internal/gendiff  (no importers — see its context.md)
 | `comment/` | Renders diffs into comment bodies (per-provider `Dialect`), plus the preamble/marker wrapper |
 | `github/` | GitHub API client: PR comments, commit statuses, PR/file lookups |
 | `ignorable/` | Decides which resource diffs are "ignorable" (every changed line matches a regex), so `comment/` can fold them |
-| `scm/` | Provider-neutral types (`RepoRef`, `ChangeRequest`, `Status`); imports no provider |
+| `scm/` | Provider-neutral types (`RepoRef`, `ChangeRequest`, `Status`) and the comment-reuse algorithm over provider primitives; imports no provider |
 | `process_event/` | Orchestrates one event end to end, including the timeout budget |
 | `server/` | HTTP webhook handlers and the two run-once entry points |
 | `webhook/` | `EventInfo` (the event data structure everything passes around) and HMAC checks |
@@ -46,7 +46,8 @@ every producer: `webhook.ProcessPullRequest`, `webhook.ProcessComment`, `server.
   captured in `init()`); they assign to the package vars directly instead. Functions that read env
   vars on each call (`gitRepoMatch`, `checkSource`, `processTimeout`) *are* `t.Setenv`-testable.
 - **Seams for mocking** are package-level `var`s: `argocd.execArgoCdCli` (the CLI), and the
-  `github` package's `commentClient` / `statusClient` (swapped for `httptest`-backed clients).
+  `github` package's `commentClient` / `statusClient` (swapped for `httptest`-backed clients). The
+  `scm.Commenter` interface lets provider-neutral code run against an in-memory fake.
 - **Errors** are logged where they occur and returned upward; the top-level orchestrator decides
   whether one becomes a failed commit status, a PR comment warning, or a process exit code.
 - **Fixtures** live in `<pkg>_testdata/` beside each package. `go.yml` triggers on `**/_testdata/**`

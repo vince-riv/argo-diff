@@ -7,6 +7,7 @@ issue #160 adds GitLab.
 | File | Contents |
 | ---- | -------- |
 | `types.go` | `RepoRef`, `ChangeRequest`, `Status` and its four states |
+| `comment.go` | `Comment`, the `Commenter` primitive interface, `ExistingComments()`, `PostComments()` |
 
 ## Types
 
@@ -19,6 +20,31 @@ issue #160 adds GitLab.
 - `Status` is `pending` / `success` / `failure` / `error`, the GitHub spelling. Providers map these
   onto their own states (GitLab rejects `failure` and wants `failed`). `Valid()` guards the set.
 
+## Posting comments
+
+`PostComments()` is the one comment-reuse algorithm; providers implement only `Commenter`'s
+primitives. In order:
+
+1. **HEAD check.** `GetChangeRequest()`; if `sha` is no longer the head, return without posting, so
+   a slow run can't overwrite a newer comment. A lookup **error assumes HEAD** (a flaky API must not
+   suppress the comment); an **empty head SHA assumes not HEAD**.
+2. **Find earlier comments** (`ExistingComments()`): every comment containing
+   `comment.Identifier()` and, when `CurrentUser()` returns a login, written by that login. **An
+   empty login means "identity unknown": match by marker alone** — GitHub uses this under Actions and
+   with the `github` connectivity bypass.
+3. **Reuse in order.** Body *i* (wrapped with `comment.Wrap()`) edits existing comment *i*; extra
+   bodies are created; an edit or create error aborts with that error.
+4. **Outdate leftovers.** Remaining earlier comments are overwritten with
+   `[Outdated argo-diff content]` + the marker rather than deleted, so a later run can reuse them.
+   An error here is logged and skipped. An empty body list therefore clears every earlier comment.
+
+`ListComments()` must return every page, oldest first, and leave out system comments (GitLab system
+notes). Never compare comment bodies for equality — GitLab trims a trailing newline on save; match
+with `strings.Contains` on the marker, as `ExistingComments()` does.
+
+`comment_test.go` drives the algorithm with an in-memory fake `Commenter`.
+
 ## Rules
 
-- This package must not import a provider package. Providers import it.
+- This package must not import a provider package. Providers import it. It imports
+  `internal/comment` for `Wrap()` / `Identifier()`.

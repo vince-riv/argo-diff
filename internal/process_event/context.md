@@ -84,7 +84,7 @@ into an exit code.
 - An app with a `NoticeStr` but no changed resources cannot happen today (`processTopLevelApp()`
   returns first), but the `else if` logs a warning rather than dropping the advisory in silence,
   since that invariant lives in another package.
-- No changes, no warnings, and nothing skipped → `github.Comment()` is called with an **empty**
+- No changes, no warnings, and nothing skipped → `scm.PostComments()` is called with an **empty**
   body list, which clears out any stale argo-diff comments.
 - `ARGO_DIFF_REQUIRE_APP_MATCH`'s no-match case returns before any status or comment call —
   not even the empty-body "clear stale comments" call above. So a PR that previously matched (and
