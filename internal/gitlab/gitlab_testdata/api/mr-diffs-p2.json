@@ -1,0 +1,41 @@
+[
+  {
+    "diff": "@@ -0,0 +1 @@\n+Phase 0 spike file for vince-riv/argo-diff#160. Safe to delete.\n",
+    "collapsed": false,
+    "too_large": false,
+    "new_path": "spike/c.txt",
+    "old_path": "spike/c.txt",
+    "a_mode": "0",
+    "b_mode": "100644",
+    "new_file": true,
+    "renamed_file": false,
+    "deleted_file": false,
+    "generated_file": false
+  },
+  {
+    "diff": "@@ -0,0 +1 @@\n+Phase 0 spike file for vince-riv/argo-diff#160. Safe to delete.\n",
+    "collapsed": false,
+    "too_large": false,
+    "new_path": "spike/d.txt",
+    "old_path": "spike/d.txt",
+    "a_mode": "0",
+    "b_mode": "100644",
+    "new_file": true,
+    "renamed_file": false,
+    "deleted_file": false,
+    "generated_file": false
+  },
+  {
+    "diff": "@@ -40,3 +40,32 @@ sync-from-github:\n       else\n         git push --force origin \"github/$SYNC_BRANCH:refs/heads/$SYNC_BRANCH\"\n       fi\n+\n+# argo-diff issue #160 Phase 0 spike - not for main.\n+phase0-spike:\n+  image: alpine:latest@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6\n+  rules:\n+    - if: $CI_PIPELINE_SOURCE == \"merge_request_event\"\n+  variables:\n+    GIT_STRATEGY: none\n+  script:\n+    - apk add --no-cache curl >/dev/null\n+    - |\n+      echo \"=== CI env (secret-like names redacted) ===\"\n+      env | grep -E '^(CI|GITLAB)_' | sort | while IFS= read -r line; do\n+        name=\"${line%%=*}\"\n+        case \"$name\" in\n+          *TOKEN*|*PASSWORD*|*SECRET*|*KEY*|*JWT*|*AUTH*) echo \"$name=<redacted>\" ;;\n+          *) printf '%s\\n' \"$line\" ;;\n+        esac\n+      done\n+      echo \"=== end CI env ===\"\n+    - |\n+      A=\"$CI_API_V4_URL/projects/$CI_PROJECT_ID\"\n+      t() { echo \"--- $1\"; shift; curl -s -o /tmp/out -w 'HTTP %{http_code}\\n' -H \"JOB-TOKEN: $CI_JOB_TOKEN\" \"$@\"; head -c 300 /tmp/out; echo; }\n+      t \"GET /user\" \"$CI_API_V4_URL/user\"\n+      t \"GET MR\" \"$A/merge_requests/$CI_MERGE_REQUEST_IID\"\n+      t \"GET MR diffs\" \"$A/merge_requests/$CI_MERGE_REQUEST_IID/diffs\"\n+      t \"GET MR notes\" \"$A/merge_requests/$CI_MERGE_REQUEST_IID/notes\"\n+      t \"POST MR note\" -X POST --data-urlencode \"body=CI_JOB_TOKEN note test (argo-diff #160 phase 0)\" \"$A/merge_requests/$CI_MERGE_REQUEST_IID/notes\"\n+      t \"POST commit status\" -X POST -d \"state=success&name=argo-diff/job-token-test\" \"$A/statuses/$CI_COMMIT_SHA\"\n",
+    "collapsed": false,
+    "too_large": false,
+    "new_path": ".gitlab-ci.yml",
+    "old_path": ".gitlab-ci.yml",
+    "a_mode": "100644",
+    "b_mode": "100644",
+    "new_file": false,
+    "renamed_file": false,
+    "deleted_file": false,
+    "generated_file": false
+  }
+]

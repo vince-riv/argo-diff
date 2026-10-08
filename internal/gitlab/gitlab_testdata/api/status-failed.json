@@ -1,0 +1,25 @@
+{
+  "id": 17017510884,
+  "sha": "bb6a46bd76030008e38a5a986cfd7c67f48a8687",
+  "ref": "refs/merge-requests/1/head",
+  "status": "failed",
+  "name": "argo-diff/ctx",
+  "target_url": null,
+  "description": "argo-diff failed",
+  "created_at": "2026-10-08T01:37:23.870Z",
+  "started_at": null,
+  "finished_at": "2026-10-08T01:37:23.867Z",
+  "allow_failure": false,
+  "coverage": null,
+  "pipeline_id": 2924650572,
+  "author": {
+    "id": 42633434,
+    "username": "brushmtnai",
+    "public_email": "",
+    "name": "BrushMtn",
+    "state": "active",
+    "locked": false,
+    "avatar_url": "https://secure.gravatar.com/avatar/0000000000000000000000000000000000000000000000000000000000000000?s=80&d=identicon",
+    "web_url": "https://gitlab.com/brushmtnai"
+  }
+}

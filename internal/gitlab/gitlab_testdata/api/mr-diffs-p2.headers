@@ -1,0 +1,9 @@
+HTTP/2 200
+content-type: application/json
+link: <https://gitlab.com/api/v4/projects/vrivellino%2Fargo-diff/merge_requests/1/diffs?id=vrivellino%2Fargo-diff&merge_request_iid=1&page=1&per_page=3&unidiff=false>; rel="prev", <https://gitlab.com/api/v4/projects/vrivellino%2Fargo-diff/merge_requests/1/diffs?id=vrivellino%2Fargo-diff&merge_request_iid=1&page=1&per_page=3&unidiff=false>; rel="first", <https://gitlab.com/api/v4/projects/vrivellino%2Fargo-diff/merge_requests/1/diffs?id=vrivellino%2Fargo-diff&merge_request_iid=1&page=2&per_page=3&unidiff=false>; rel="last"
+x-next-page:
+x-page: 2
+x-per-page: 3
+x-prev-page: 1
+x-total: 6
+x-total-pages: 2
