@@ -27,15 +27,16 @@ func TestParseBypassList(t *testing.T) {
 	}{
 		{"empty", "", nil, nil},
 		{"github", "github", []string{"github"}, nil},
+		{"gitlab", "gitlab", []string{"gitlab"}, nil},
 		{"argocd", "argocd", []string{"argocd"}, nil},
-		{"true", "true", []string{"argocd", "github"}, nil},
-		{"all", "all", []string{"argocd", "github"}, nil},
+		{"true", "true", []string{"argocd", "github", "gitlab"}, nil},
+		{"all", "all", []string{"argocd", "github", "gitlab"}, nil},
 		{"false", "false", nil, nil},
 		{"none", "none", nil, nil},
 		{"mixed case with spaces", "GitHub, ARGOCD", []string{"argocd", "github"}, nil},
 		{"empty tokens", " ,, github ,", []string{"github"}, nil},
-		{"one unknown mixed with known", "github,gitlab", []string{"github"}, []string{"gitlab"}},
-		{"unknown only", "gitlab", nil, []string{"gitlab"}},
+		{"one unknown mixed with known", "github,bitbucket", []string{"github"}, []string{"bitbucket"}},
+		{"unknown only", "bitbucket", nil, []string{"bitbucket"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -61,6 +62,8 @@ func TestBypassConnectivityCheck(t *testing.T) {
 		{"unset", "", ComponentGithub, false, false},
 		{"github only bypasses github", "github", ComponentGithub, true, false},
 		{"github only does not bypass argocd", "github", ComponentArgoCD, false, false},
+		{"github only does not bypass gitlab", "github", ComponentGitlab, false, false},
+		{"gitlab only bypasses gitlab", "gitlab", ComponentGitlab, true, false},
 		{"true bypasses both", "true", ComponentGithub, true, true},
 		{"all bypasses both", "all", ComponentArgoCD, true, true},
 		{"false bypasses nothing", "false", ComponentGithub, false, false},

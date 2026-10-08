@@ -19,6 +19,7 @@ changes.
 | `internal/config/` | Cross-package operator config, eg: the connectivity-check bypass |
 | `internal/comment/` | Renders diffs into comment bodies; per-provider `Dialect`; preamble and marker wrapper |
 | `internal/github/` | The GitHub provider (`github.Provider`): API client, PR comments, commit statuses, webhook parsing and signatures, GitHub Actions detection |
+| `internal/gitlab/` | The GitLab provider (`gitlab.Provider`), in progress (issue #160 Phase 2): API client and config, plus captured API, webhook and CI fixtures |
 | `internal/ignorable/` | Classifies resource diffs as ignorable (folded in `auto` collapse mode); config and annotations |
 | `internal/process_event/` | Orchestrates one event: diff → commit status → PR comment |
 | `internal/scm/` | Source-control-provider abstraction: the `Provider` and `WebhookHandler` interfaces, the registry, neutral types, and the shared comment-reuse algorithm |
@@ -96,9 +97,9 @@ Selected in `cmd/main.go`, in this order:
 
 `go test ./...`. Fixtures live in `*_testdata/` directories next to the packages that use them
 (`internal/argocd/argocd_testdata/`, `internal/github/github_testdata/`, including its
-`webhook/` payloads) and are captured from real `argocd` CLI output and GitHub API
-responses. Package-level `var` seams (`execArgoCdCli`, the `github` package clients) are the
-mocking points — see the relevant `context.md`.
+`webhook/` payloads, and `internal/gitlab/gitlab_testdata/`) and are captured from real `argocd`
+CLI output and GitHub and GitLab API responses. Package-level `var` seams (`execArgoCdCli`, the
+`github` and `gitlab` package clients) are the mocking points — see the relevant `context.md`.
 
 ## CI and releases
 
