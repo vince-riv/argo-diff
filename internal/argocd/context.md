@@ -112,10 +112,14 @@ do append their `WarnStr` result.
 
 Matching rules worth knowing:
 
-- `gitRepoMatch()` matches `github.com/owner/repo[.git]` (and the scp-style `github.com:owner/repo`)
-  by suffix, then falls back to a **host-agnostic, case-insensitive** `/owner/repo` or `:owner/repo`
-  suffix match for GitHub Enterprise, CodeConnections, mirrors, etc. That fallback is disabled by
-  `ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH=true`, and never applies to Helm chart/OCI sources
+- `gitRepoMatch()` matches `<host>/owner/repo[.git]` (and the scp-style `<host>:owner/repo`) by
+  suffix for every host in `repoHosts`, then falls back to a **host-agnostic, case-insensitive**
+  `/owner/repo` or `:owner/repo` suffix match for GitHub Enterprise, CodeConnections, mirrors, etc.
+  `repoHosts` defaults to `github.com`; `cmd/main.go` replaces it at startup with the enabled
+  providers' `RepoHosts()` via `SetRepoHosts()` (an empty list is ignored). The fallback is
+  disabled by `ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH=true` — despite its name, that leaves the
+  hosts of every enabled provider matching, not just `github.com`. The name is kept for
+  compatibility (decided in #160 PR 1.6). The fallback never applies to Helm chart/OCI sources
   (`source.chart != ""`), which are not git remotes.
 - `checkSource()` compares the PR's base ref against the source's `targetRevision`, normalizing
   `refs/heads/x` → `x` (`normalizeBranchRef`). `targetRevision: HEAD` means "the repo default

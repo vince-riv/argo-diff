@@ -1,14 +1,12 @@
 package server
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/vince-riv/argo-diff/internal/comment"
 	"github.com/vince-riv/argo-diff/internal/scm"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
@@ -20,6 +18,7 @@ type stubHandler struct {
 	parseErr  error
 }
 
+func (h stubHandler) CheckConfig() error           { return nil }
 func (h stubHandler) EventName(http.Header) string { return h.evt.Name }
 func (h stubHandler) Verify(http.Header, []byte) error {
 	return h.verifyErr
@@ -29,21 +28,15 @@ func (h stubHandler) Parse(http.Header, []byte) (scm.WebhookEvent, error) {
 }
 
 // stubProvider is an scm.Provider whose only working part is its webhook
-// handler; the server must not reach anything else for these requests.
+// handler; the embedded nil Provider panics if the server reaches anything
+// else for these requests.
 type stubProvider struct {
-	scm.Commenter
+	scm.Provider
 	handler stubHandler
 }
 
 func (p stubProvider) Name() string                       { return scm.DefaultProvider }
-func (p stubProvider) Dialect() comment.Dialect           { return comment.GitHub }
 func (p stubProvider) WebhookHandler() scm.WebhookHandler { return p.handler }
-func (p stubProvider) ListChangedFiles(context.Context, scm.RepoRef, int) ([]string, error) {
-	return nil, errors.New("unexpected call")
-}
-func (p stubProvider) SetStatus(context.Context, scm.RepoRef, string, scm.Status, string, bool) error {
-	return errors.New("unexpected call")
-}
 
 func TestHandleWebhookResponses(t *testing.T) {
 	ignored := webhook.NewEventInfo()

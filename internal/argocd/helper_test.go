@@ -1069,3 +1069,27 @@ func TestGitRepoMatch_DisableNonGithubFallback(t *testing.T) {
 		})
 	}
 }
+
+// gitRepoMatch matches the hosts of every enabled provider exactly, even with
+// the host-agnostic fallback disabled.
+func TestGitRepoMatch_RepoHosts(t *testing.T) {
+	orig := repoHosts
+	t.Cleanup(func() { repoHosts = orig })
+	t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", "true")
+
+	src := ApplicationSource{RepoURL: "https://gitlab.example.com/acme/widgets.git"}
+	if gitRepoMatch(src, "acme", "widgets") {
+		t.Error("gitRepoMatch() matched a host no provider names, with the fallback disabled")
+	}
+	SetRepoHosts([]string{"github.com", "gitlab.example.com"})
+	if !gitRepoMatch(src, "acme", "widgets") {
+		t.Error("gitRepoMatch() missed a source on an enabled provider's host")
+	}
+	if !gitRepoMatch(ApplicationSource{RepoURL: "git@github.com:acme/widgets.git"}, "acme", "widgets") {
+		t.Error("gitRepoMatch() missed github.com after SetRepoHosts()")
+	}
+	SetRepoHosts(nil) // ignored: an empty list would match nothing
+	if len(repoHosts) != 2 {
+		t.Errorf("SetRepoHosts(nil) changed the hosts to %v", repoHosts)
+	}
+}

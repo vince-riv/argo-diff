@@ -26,6 +26,9 @@ type statusCall struct {
 // comments ProcessCodeChange sends, and keeps posted comments so a second run
 // can find and reuse them.
 type fakeProvider struct {
+	// the embedded nil Provider covers the startup methods (Enabled,
+	// DetectCI, ...) ProcessCodeChange never calls; calling one panics
+	scm.Provider
 	mu       sync.Mutex
 	dialect  comment.Dialect
 	cr       scm.ChangeRequest
@@ -94,8 +97,6 @@ func (f *fakeProvider) UpdateComment(_ context.Context, _ scm.RepoRef, _ int, id
 }
 
 func (f *fakeProvider) CurrentUser(context.Context) (string, error) { return "argo-bot", nil }
-
-func (f *fakeProvider) WebhookHandler() scm.WebhookHandler { return nil }
 
 func (f *fakeProvider) lastStatus(t *testing.T) statusCall {
 	t.Helper()

@@ -172,7 +172,7 @@ func ProcessCodeChange(p scm.Provider, eventInfo webhook.EventInfo, devMode bool
 	//  1. An explicit "argo diff" PR comment, so a human who asks for a diff always gets an
 	//     answer - even on a repo ArgoCD doesn't track.
 	//  2. GitHub Actions mode, which sets Refresh unconditionally (see
-	//     server.eventInfoFromEnv()). The flag exists to stop argo-diff commit statuses
+	//     github.Provider.EventFromCIEnv()). The flag exists to stop argo-diff commit statuses
 	//     appearing on every PR of an org-wide webhook install; Actions mode skips commit
 	//     statuses entirely and only runs in repos someone deliberately added the action to,
 	//     so there is no chatter to suppress. cmd/main.go warns if the flag is set there.

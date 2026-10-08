@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -93,31 +91,6 @@ func logEnvironmentVariables() {
 	log.Debug().Msg("=== End Environment Variables ===")
 }
 
-func eventInfoFromEnv() (*webhook.EventInfo, error) {
-	if ghEvent := os.Getenv("GITHUB_EVENT_NAME"); ghEvent != "pull_request" {
-		return nil, fmt.Errorf("unexpected value for GITHUB_EVENT_NAME: %s (expecting pull_request)", ghEvent)
-	}
-	prRef := os.Getenv("GITHUB_REF")
-	prRefParts := strings.SplitN(prRef, "/", 4)
-	prNum, err := strconv.Atoi(prRefParts[2])
-	if err != nil {
-		return nil, fmt.Errorf("failed extract pull request number from GITHUB_REF %s: %s", prRef, err.Error())
-	}
-	repoParts := strings.SplitN(os.Getenv("GITHUB_REPOSITORY"), "/", 2)
-	evt := webhook.EventInfo{
-		Provider:       "github",
-		RepoOwner:      repoParts[0],
-		RepoName:       repoParts[1],
-		RepoDefaultRef: os.Getenv("REPO_DEFAULT_REF"),
-		PrNum:          prNum,
-		ChangeRef:      os.Getenv("GITHUB_HEAD_REF"),
-		BaseRef:        os.Getenv("GITHUB_BASE_REF"),
-		Refresh:        true, // have argo-diff refresh sha, change-ref, and base-ref
-	}
-
-	return &evt, nil
-}
-
 func eventInfoFromFile(filePath string) (*webhook.EventInfo, error) {
 	var reader io.Reader
 
@@ -163,20 +136,19 @@ func ProcessFileEvent(filePath string, devMode bool) error {
 	return err
 }
 
-func ProcessGithubAction() error {
-	log.Debug().Msg("ProcessGithubAction()")
+// ProcessCI runs once for the change request described by provider p's CI
+// environment (eg: GitHub Actions). Commit statuses are skipped there; the
+// returned error is the job's verdict.
+func ProcessCI(p scm.Provider) error {
+	log.Debug().Msgf("ProcessCI(%s)", p.Name())
 	logEnvironmentVariables()
-	evtp, err := eventInfoFromEnv()
-	if err != nil {
-		return err
-	}
-	p, err := scm.Lookup(evtp.Provider)
+	evt, err := p.EventFromCIEnv()
 	if err != nil {
 		return err
 	}
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go process_event.ProcessCodeChange(p, *evtp, true, &wg, &err)
+	go process_event.ProcessCodeChange(p, evt, true, &wg, &err)
 	wg.Wait()
 	return err
 }

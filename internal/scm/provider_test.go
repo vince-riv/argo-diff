@@ -1,27 +1,17 @@
 package scm
 
 import (
-	"context"
 	"testing"
-
-	"github.com/vince-riv/argo-diff/internal/comment"
 )
 
-// namedProvider is a Provider that only knows its name.
+// namedProvider is a Provider that only knows its name; the embedded nil
+// Provider panics if anything else is called.
 type namedProvider struct {
-	*fakeCommenter
+	Provider
 	name string
 }
 
-func (p namedProvider) Name() string             { return p.name }
-func (p namedProvider) Dialect() comment.Dialect { return comment.GitHub }
-func (p namedProvider) ListChangedFiles(context.Context, RepoRef, int) ([]string, error) {
-	return nil, nil
-}
-func (p namedProvider) SetStatus(context.Context, RepoRef, string, Status, string, bool) error {
-	return nil
-}
-func (p namedProvider) WebhookHandler() WebhookHandler { return nil }
+func (p namedProvider) Name() string { return p.name }
 
 // withRegistry gives a test an empty registry and restores the real one after.
 func withRegistry(t *testing.T) {
