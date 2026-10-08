@@ -78,6 +78,24 @@ Observed but not kept:
 - Four more `action: update` Note Hooks, same shape as `note-merge-request-update`.
 - No Note Hook was sent for the `added 1 commit` system note.
 
-Not captured yet: `reopen`, `close`, `merge`, `update` with title change only, `update` with
-target-branch change, Note Hook with the refresh keyword, Note Hook on an issue. Anything added
-later that is hand-written rather than captured must be listed here as derived.
+### Derived (hand-written) webhook fixtures
+
+Files named `*.derived.json` / `*.derived.headers` are **not captures**. They were built from the
+captured `merge-request-open` (MR cases) and `note-merge-request-create` (note cases) payloads by
+changing only the fields listed below, following the GitLab webhook docs. Each has a fresh
+`webhook-id` / `idempotency-key` / `x-gitlab-event-uuid`, a later `webhook-timestamp`, and a
+signature from the same test key. Capturing the real payloads is a planned follow-up; when a real
+capture replaces a derived file, drop the `.derived` suffix and update this table.
+
+| Fixture | `X-Gitlab-Event` | Fields changed from the base payload |
+| --- | --- | --- |
+| `merge-request-close.derived` | Merge Request Hook | `action: close`, `state: closed`, `state_id: 2`; `changes.state_id` 1 -> 2 |
+| `merge-request-reopen.derived` | Merge Request Hook | `action: reopen`, `state: opened`, `state_id: 1`; `changes.state_id` 2 -> 1 |
+| `merge-request-update-title.derived` | Merge Request Hook | `action: update`, new `title`, `last_edited_at` / `last_edited_by_id`; `changes.title`; no `oldrev` |
+| `merge-request-update-target-branch.derived` | Merge Request Hook | `action: update`, `target_branch: release-3.1`; `changes.target_branch` main -> release-3.1; no `oldrev` |
+| `merge-request-merge.derived` | Merge Request Hook | `action: merge`, `state: merged`, `state_id: 3`, `merged_at`, `merge_user_id`, placeholder `merge_commit_sha`, `draft: false`; `changes.state_id` 1 -> 3 |
+| `note-merge-request-refresh.derived` | Note Hook | `note` / `description` = `argo-diff` (a default refresh keyword), new note `id`, `discussion_id`, `url` |
+| `note-issue.derived` | Note Hook | `noteable_type: Issue`, `noteable_id`, `issue` object replaces `merge_request`, note `argo-diff`, issue `url`. Must be ignored |
+
+Known gaps in the derived files: real GitLab may add more `changes` keys (eg: `merge_status`,
+`last_edited_at`) or other fields per action; the `issue` object is a minimal subset of the real one.
