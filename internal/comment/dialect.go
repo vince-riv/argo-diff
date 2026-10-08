@@ -20,6 +20,16 @@ type Dialect struct {
 	HardMax int
 }
 
+// orDefault is d, or GitHub for a dialect with no HardMax - the zero value
+// included, since GitHub is the default provider. Everything that reads a
+// dialect's rules goes through it, so no caller can size a body against 0.
+func (d Dialect) orDefault() Dialect {
+	if d.HardMax <= 0 {
+		return GitHub
+	}
+	return d
+}
+
 // GitHub is the github.com dialect.
 var GitHub = Dialect{Name: "github", HardMax: githubCommentHardMax}
 
