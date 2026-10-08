@@ -18,12 +18,13 @@ Application entry point. A single file, `main.go` — there is no other command 
 `main()` validates the environment and then dispatches, in this order:
 
 1. Fatals unless `ARGOCD_AUTH_TOKEN` and `ARGOCD_SERVER_ADDR` are set.
-2. `registerProviders()` walks `knownProviders` (today just `github.Provider{}`). A provider whose
+2. `registerProviders()` walks `knownProviders` (`github.Provider{}`, `gitlab.Provider{}`). A provider whose
    `Enabled()` is true — its credentials are present — must pass `ValidateConfig()` (fatal
    otherwise) and is registered in the `scm` registry; the rest are skipped. **No enabled provider
    is fatal**, naming each provider's `CredentialsHint()`. For GitHub, any of
    `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN` or the `GITHUB_APP_*` trio enables it, and with no
-   token all three App variables are required.
+   token all three App variables are required. For GitLab, `GITLAB_TOKEN` enables it, and
+   `ValidateConfig()` fails on a malformed `GITLAB_BASE_URL` or an unreadable `GITLAB_CA_FILE`.
 3. `APP_ENV=dev` turns on dev mode.
 4. `argocd.ConnectivityCheck()` — always runs, in every mode. It executes `argocd version`, so the
    `argocd` CLI must be on `PATH` (or named by `ARGOCD_CLI_CMD_NAME`) even for a run that would

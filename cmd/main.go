@@ -14,6 +14,7 @@ import (
 	"github.com/vince-riv/argo-diff/internal/argocd"
 	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/github"
+	"github.com/vince-riv/argo-diff/internal/gitlab"
 	"github.com/vince-riv/argo-diff/internal/ignorable"
 	"github.com/vince-riv/argo-diff/internal/process_event"
 	"github.com/vince-riv/argo-diff/internal/scm"
@@ -78,7 +79,7 @@ func startServer(listenHost string, listenPort int, devMode bool) {
 
 // knownProviders lists every scm provider argo-diff supports. main()
 // registers the ones whose credentials are present.
-var knownProviders = []scm.Provider{github.Provider{}}
+var knownProviders = []scm.Provider{github.Provider{}, gitlab.Provider{}}
 
 // registerProviders registers every enabled provider and fatals when none is,
 // or when an enabled one is misconfigured.

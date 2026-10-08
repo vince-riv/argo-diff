@@ -229,8 +229,9 @@ When deployed as a web service, argo-diff accepts all configuration options via 
 When used via GitHub Actions, the relevant options are accepted via inputs. The following table describes
 the accepted environment variables and their respective GitHub Actions inputs.
 
-> **Important:** Valid GitHub API credentials are required to run — either the `GITHUB_APP_*` variables
-> must be set, or `GITHUB_TOKEN` / `GITHUB_PERSONAL_ACCESS_TOKEN` must be set.
+> **Important:** Valid source control credentials are required to run. For GitHub, either the
+> `GITHUB_APP_*` variables must be set, or `GITHUB_TOKEN` / `GITHUB_PERSONAL_ACCESS_TOKEN` must be set.
+> For GitLab, `GITLAB_TOKEN` must be set. Both can be set at once.
 
 Many of these variables have a typed Helm values key (`config.*`, `logLevel`, `secret.*`) — see
 `charts/argo-diff/README.md`. Any variable without a typed key — including ones not listed here —
@@ -249,7 +250,7 @@ can still be set through the chart's `deployment.env` / `deployment.envFrom` pas
 | ARGOCD_SERVER_INSECURE           | argocd_server_insecure      | no               | `false`  | Set `--insecure` flag for argocd cli (`true`/`false`). |
 | ARGOCD_SERVER_PLAINTEXT          | argocd_server_plaintext     | no               | `false`  | Set `--plaintext` flag for argocd cli (`true`/`false`). |
 | ARGOCD_UI_BASE_URL               | argocd_ui_base_url          | no               |          | Base URL of ArgoCD UI (usually the server name prefixed with `https://`). |
-| ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS | N/A                      | no               |          | Comma-separated list of startup connectivity checks to skip: `github`, `argocd`, `true`/`all` for both, or `false`/`none` (default, skips nothing). Useful when `GITHUB_TOKEN` holds a GitHub App installation token, which can't call `GET /user` (a per-PR CI invocation minting its own token, eg: from Jenkins, is the common case — GitHub Actions mode doesn't need this, it already skips the check); for that case, bypass `github` specifically rather than `true`/`all`. Bypassing `github` also makes argo-diff match its own prior PR comments by marker only, the same as it does under GitHub Actions — so two instances sharing an empty `ARGO_DIFF_CONTEXT_STR` on one PR will overwrite each other's comments. Bypassing `argocd` skips reachability **and** the minimum ArgoCD version check (client and server must be `2.12.0`+), so it also silently drops that guard. |
+| ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS | N/A                      | no               |          | Comma-separated list of startup connectivity checks to skip: `github`, `gitlab`, `argocd`, `true`/`all` for every one, or `false`/`none` (default, skips nothing). Useful when `GITHUB_TOKEN` holds a GitHub App installation token, which can't call `GET /user` (a per-PR CI invocation minting its own token, eg: from Jenkins, is the common case — GitHub Actions mode doesn't need this, it already skips the check); for that case, bypass `github` specifically rather than `true`/`all`. Bypassing `github` also makes argo-diff match its own prior PR comments by marker only, the same as it does under GitHub Actions — so two instances sharing an empty `ARGO_DIFF_CONTEXT_STR` on one PR will overwrite each other's comments. Bypassing `gitlab` does the same for GitLab merge request notes. Bypassing `argocd` skips reachability **and** the minimum ArgoCD version check (client and server must be `2.12.0`+), so it also silently drops that guard. |
 | ARGO_DIFF_COMMENT_COLLAPSE       | comment_collapse            | no               | `expanded` | Whether the collapsible sections in a PR comment start open. `expanded` (default) always starts them open; `collapsed` always starts them folded; `auto` folds [ignorable resource diffs](#folding-ignorable-diffs) and keeps everything else open. With `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE=false`, `auto` instead keeps a small comment fully expanded, folds an application's own block once the comment covers more than `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT` applications, and folds an application's individual resource (diff) blocks once that application has more than `ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT` changed resources. |
 | ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT | comment_collapse_app_count | no           | `3`      | In `auto` collapse mode with `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE=false` (it has no effect otherwise), the application count above which each application's own block starts folded. Must be positive; a non-positive value warns and falls back to the default. |
 | ARGO_DIFF_COMMENT_COLLAPSE_RESOURCE_COUNT | comment_collapse_resource_count | no | `5`      | In `auto` collapse mode with `ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE=false` (it has no effect otherwise), the count of changed resources within an application above which that application's individual resource (diff) blocks start folded — not the application's own block, which is governed by `ARGO_DIFF_COMMENT_COLLAPSE_APP_COUNT`. Must be positive; a non-positive value warns and falls back to the default. |
@@ -257,11 +258,11 @@ can still be set through the chart's `deployment.env` / `deployment.envFrom` pas
 | ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_REGEXES | comment_collapse_ignorable_regexes | no | built-in defaults | Newline-separated RE2 regexes. A changed diff line is ignorable if it matches one. A value **replaces** the defaults; `[]` means no global regexes. See [Folding ignorable diffs](#folding-ignorable-diffs). |
 | ARGO_DIFF_COMMENT_COLLAPSE_IGNORABLE_EXCLUDE_KINDS | comment_collapse_ignorable_exclude_kinds | no | `argoproj.io/*` | Comma- or newline-separated `group/Kind`, `group/*` or `Kind` (core group) entries that never fold. A value **replaces** the default; `[]` excludes nothing. |
 | ARGO_DIFF_COMMENT_INDEX_COUNT    | comment_index_count         | no               | `2`      | When to render the summary index — a table of every application with its change count, sync status and health — above the diffs. `-1` always renders it, `0` never does, and any other number is the count of applications at which it starts rendering. |
-| ARGO_DIFF_COMMENT_MAX_CHARS      | comment_max_chars           | no               | `262144` | Maximum size of a single PR comment, in bytes; argo-diff splits its output across more comments to stay under it. The default is GitHub's own limit and cannot be raised. Lower it for a GitHub Enterprise instance with a smaller cap. The operator preamble and argo-diff's HTML marker count against this. |
+| ARGO_DIFF_COMMENT_MAX_CHARS      | comment_max_chars           | no               | `262144` | Maximum size of a single PR comment, in bytes; argo-diff splits its output across more comments to stay under it. The default is the provider's own limit and cannot be raised: `262144` on GitHub, `1048576` (1 MiB) on GitLab. Lower it for a GitHub Enterprise instance with a smaller cap. The operator preamble and argo-diff's HTML marker count against this. |
 | ARGO_DIFF_COMMENT_NOTICE         | comment_notice              | no               |          | Advisory text rendered as a note at the top of the PR comment — a deprecation warning, say, or a caveat about this environment. Separate several notices with `\|`. Rendered distinctly from argo-diff's own warnings and errors. |
 | ARGO_DIFF_COMMENT_PREAMBLE       | comment_preamble            | no               |          | String/markdown prefixed to comments. Keep to 150 chars or less. |
 | ARGO_DIFF_CONTEXT_STR            | context_str                 | no               |          | Unique identifier of the argo-diff instance. Use when deploying multiple instances (eg: one per cluster); a brief cluster nickname is recommended. |
-| ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH | N/A                   | no               | `false`  | Set to `true` to disable matching ArgoCD application sources on non-`github.com` git hosts (GitHub Enterprise, AWS CodeConnections, GitLab, mirrors, etc.) by `owner/repo` path suffix; matching on `github.com` URLs is unaffected. (Strictly: matching stays on for the hosts of every enabled source control provider, and `github.com` is the only one today.) |
+| ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH | N/A                   | no               | `false`  | Set to `true` to disable matching ArgoCD application sources on non-`github.com` git hosts (GitHub Enterprise, AWS CodeConnections, GitLab, mirrors, etc.) by `owner/repo` path suffix; matching on `github.com` URLs is unaffected. (Strictly: matching stays on for the hosts of every enabled source control provider: `github.com`, and the host of `GITLAB_BASE_URL` when GitLab is enabled.) |
 | ARGO_DIFF_MAX_WORKERS            | max_workers                 | no               | `4`      | Max number of ArgoCD applications diffed concurrently (capped at 32). Raising this speeds up runs that match many applications, at the cost of more concurrent load on the ArgoCD repo-server; pair a higher value with a longer `argocd` CLI `--timeout` via `ARGOCD_OPTS` if the repo-server is slow under that load. |
 | ARGO_DIFF_REFRESH_COMMENT_KEYWORDS | N/A                       | no               | `argo diff,argo-diff` | Comma-separated list of PR comments (case-insensitive, trimmed) that re-trigger argo-diff, replacing the default keywords. Each keyword also matches with a trailing `ARGO_DIFF_CONTEXT_STR` suffix (eg: `argo diff prod`). Only takes effect when deployed as a webhook service — GitHub Actions mode doesn't process `issue_comment` events. |
 | ARGO_DIFF_REQUIRE_APP_MATCH  | N/A                         | no               | `false`  | Set to `true` to check for a matching ArgoCD application *before* posting anything to GitHub, and stay completely silent (no commit status, no comment) when nothing matches, instead of posting a `pending` status up front followed by an unconditional `success`. Mainly useful when deployed as a webhook server installed org-wide: without it, every PR in every repo the GitHub App can see gets an argo-diff commit status, even repos ArgoCD doesn't track, which tends to confuse people. The match check itself is cheap (one `argocd app list` call plus local filtering, no `argocd app diff` calls), but it does mean one extra `argocd app list` call on PRs that do match, and it skips clearing a stale prior comment if a later push makes a previously-matching PR stop matching. Has no effect in GitHub Actions mode — it skips commit statuses already and only runs in repos the action was added to, so there is no chatter to suppress; argo-diff logs a warning if the flag is set there. |
@@ -273,6 +274,9 @@ can still be set through the chart's `deployment.env` / `deployment.envFrom` pas
 | GITHUB_PERSONAL_ACCESS_TOKEN     | N/A                         | no               |          | Bearer token for GitHub API calls; same as `GITHUB_TOKEN`. |
 | GITHUB_TOKEN                     | github_token                | yes for GHA      |          | Bearer token for GitHub API calls (in a GitHub Actions workflow, usually `secrets.GITHUB_TOKEN`). Required in GitHub Actions. |
 | GITHUB_WEBHOOK_SECRET            | N/A                         | yes for deployed |          | Shared secret for GitHub webhook validation. Required when deployed. |
+| GITLAB_BASE_URL                  | N/A                         | no               | `https://gitlab.com` | URL of the GitLab instance, eg: `https://gitlab.example.com`. Falls back to `CI_SERVER_URL`, then gitlab.com. |
+| GITLAB_CA_FILE                   | N/A                         | no               |          | Path to a PEM bundle of extra CA certificates to trust for a self-managed GitLab instance. Falls back to `CI_SERVER_TLS_CA_FILE`. |
+| GITLAB_TOKEN                     | N/A                         | yes for GitLab   |          | GitLab access token (personal, project or group access token with `api` scope). Enables GitLab support. `CI_JOB_TOKEN` cannot be used: it cannot write merge request notes. GitLab support is in progress: today it works with `-f` event files only (see [Running locally](#running-locally)). |
 | LOG_LEVEL                        | log_level                   | no               | `info`   | Log level of argo-diff. |
 | REPO_DEFAULT_REF                 | repo_default_ref            | no               |          | Default branch of the repository (eg: `main`). Only needed in GitHub Actions when `HEAD` is specified as the target revision in the ArgoCD application source. |
 
@@ -404,17 +408,35 @@ unmarshalled into an `EventInfo` struct (defined in `internal/webhook/process.go
 
 Description of those fields:
 
-- `provider`: the source control provider; optional, defaults to `github` (the only one today)
+- `provider`: the source control provider, `github` or `gitlab`; optional, defaults to `github`
 - `ignore`: tells argo-diff to ignore the event
-- `owner`: GitHub organization name
-- `repo`: GitHub repository name
+- `owner`: GitHub organization name, or the GitLab namespace path, which may hold nested groups (eg: `group/subgroup`)
+- `repo`: GitHub repository name, or the GitLab project name
 - `default_ref`: the default branch of the repository
 - `commit_sha`: the sha that triggered the event — should be HEAD of the branch of the PR if you want it to comment
-- `pr`: pull request number (duh)
+- `pr`: pull request number (duh), or the merge request IID on GitLab (the `!123` number)
 - `change_ref`: the source branch of the PR (the feature branch)
 - `base_ref`: the branch to which the PR is getting merged
+- `refresh`: optional; when `true`, argo-diff reads `commit_sha`, `change_ref` and `base_ref` from the PR/MR itself
 
 This JSON file can be passed to argo-diff via the `-f` argument or posted to the `/dev` HTTP endpoint.
+
+For a GitLab merge request, set `GITLAB_TOKEN` (and `GITLAB_BASE_URL` for a self-managed instance)
+and name the provider. For the project `https://gitlab.com/group/subgroup/project`:
+
+```json
+{
+    "provider": "gitlab",
+    "owner": "group/subgroup",
+    "repo": "project",
+    "default_ref": "main",
+    "pr": 42,
+    "refresh": true
+}
+```
+
+`"refresh": true` makes argo-diff read the head commit and branches from the merge request, so
+`commit_sha`, `change_ref` and `base_ref` can be left out.
 
 ### Testing HTTP endpoints locally
 

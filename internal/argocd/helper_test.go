@@ -1093,3 +1093,30 @@ func TestGitRepoMatch_RepoHosts(t *testing.T) {
 		t.Errorf("SetRepoHosts(nil) changed the hosts to %v", repoHosts)
 	}
 }
+
+// GitLab projects sit in nested groups, so the owner may contain "/". Both the
+// exact host match and the host-agnostic fallback handle it.
+func TestGitRepoMatch_NestedGroups(t *testing.T) {
+	orig := repoHosts
+	t.Cleanup(func() { repoHosts = orig })
+	SetRepoHosts([]string{"github.com", "gitlab.com"})
+
+	t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", "true")
+	for _, url := range []string{
+		"https://gitlab.com/group/sub/project.git",
+		"https://gitlab.com/group/sub/project",
+		"git@gitlab.com:group/sub/project.git",
+	} {
+		if !gitRepoMatch(ApplicationSource{RepoURL: url}, "group/sub", "project") {
+			t.Errorf("gitRepoMatch(%q, group/sub, project) = false", url)
+		}
+	}
+	if gitRepoMatch(ApplicationSource{RepoURL: "https://gitlab.com/other/sub/project.git"}, "group/sub", "project") {
+		t.Error("gitRepoMatch() matched a project in another top-level group")
+	}
+
+	t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", "")
+	if !gitRepoMatch(ApplicationSource{RepoURL: "https://gitlab.example.com/group/sub/project.git"}, "group/sub", "project") {
+		t.Error("the host-agnostic fallback missed a nested-group project")
+	}
+}

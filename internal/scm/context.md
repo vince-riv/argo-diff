@@ -1,8 +1,9 @@
 # internal/scm/
 
 The source-control-provider abstraction: neutral types that the rest of argo-diff uses instead of
-any one provider's API types. GitHub (`internal/github`) is the only provider today; the plan in
-issue #160 adds GitLab.
+any one provider's API types. The providers are GitHub (`internal/github`) and GitLab
+(`internal/gitlab`, in progress in issue #160: it runs from `-f` event files only, with CI and
+webhook support to come).
 
 | File | Contents |
 | ---- | -------- |

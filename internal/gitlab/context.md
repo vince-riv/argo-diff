@@ -1,9 +1,13 @@
 # internal/gitlab/
 
-The GitLab provider: `Provider` will implement `scm.Provider` on top of the GitLab REST API, the
-way `internal/github` does for GitHub. It is being built in issue #160, Phase 2; until
-`Provider` implements the whole interface it is not registered in `cmd/main.go`. Built on
-`gitlab.com/gitlab-org/api/client-go`.
+The GitLab provider: `Provider` implements `scm.Provider` on top of the GitLab REST API, the way
+`internal/github` does for GitHub, and `cmd/main.go` registers it when `GITLAB_TOKEN` is set.
+Built on `gitlab.com/gitlab-org/api/client-go`.
+
+**Today it runs from `-f` event files (and `/dev`) only.** GitLab CI detection is Phase 3 of
+issue #160 and webhooks are Phase 4; until then `DetectCI()` is false, `EventFromCIEnv()` errors,
+and `WebhookHandler` is a placeholder whose `Verify()` rejects every request. Its `CheckConfig()`
+only warns, so a server with `GITLAB_TOKEN` set still starts and serves GitHub.
 
 ## Files
 
@@ -13,9 +17,23 @@ way `internal/github` does for GitHub. It is being built in issue #160, Phase 2;
 | `merge_request.go` | `Provider.GetChangeRequest()`, `Provider.ListChangedFiles()` |
 | `notes.go` | The comment primitives (`ListComments`, `CreateComment`, `UpdateComment`, `CurrentUser`) on MR notes, and `Dialect()` |
 | `status.go` | `Provider.SetStatus()` — commit statuses |
-| `provider.go` | `Provider` — the startup methods so far: `Enabled`, `ValidateConfig`, `CredentialsHint`, `ConnectivityCheck`, `RepoHosts` |
+| `provider.go` | `Provider` — the startup methods (`Enabled`, `ValidateConfig`, `CredentialsHint`, `ConnectivityCheck`, `RepoHosts`), and the CI and webhook placeholders |
 
 client-go types stay inside this package, as go-github types do in `internal/github`.
+
+## Event files
+
+A `-f` event names the provider and the project's namespace path as the owner, which may hold
+nested groups (see README's "Craft a local file with event data"):
+
+```json
+{"provider": "gitlab", "owner": "group/subgroup", "repo": "project", "default_ref": "main", "pr": 42, "refresh": true}
+```
+
+`pr` is the MR **IID**. `process_event` builds `scm.RepoRef{Owner, Name}`, and every call here
+uses `RepoRef.FullPath()`. ArgoCD sources match on the GitLab host (`RepoHosts()`) or through
+`internal/argocd`'s host-agnostic `/owner/repo` suffix fallback, both of which handle an owner
+with `/` in it.
 
 ## Configuration
 
