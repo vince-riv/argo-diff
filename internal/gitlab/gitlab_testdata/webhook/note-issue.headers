@@ -1,0 +1,12 @@
+POST /webhook/gitlab HTTP/1.1
+content-type: application/json
+user-agent: GitLab/19.5.0-pre
+idempotency-key: 1c9146d2-b5f3-4c9a-bffb-88f045e3742f
+webhook-id: 1c9146d2-b5f3-4c9a-bffb-88f045e3742f
+webhook-timestamp: 1791458430
+x-gitlab-event: Note Hook
+x-gitlab-event-uuid: 40d5b97b-c23a-487b-8c04-5067fa848be2
+x-gitlab-instance: https://gitlab.com
+x-gitlab-webhook-uuid: 17c72bba-51fc-4f73-97c5-0be2aff4430c
+webhook-signature: v1,hQvybK4tVQgG/bLyLZJ8NyIxXlW6u/iTE/SWFuC6jt4=
+content-length: 2689

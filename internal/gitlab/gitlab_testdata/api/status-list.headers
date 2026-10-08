@@ -1,0 +1,9 @@
+HTTP/2 200
+content-type: application/json
+link: <https://gitlab.com/api/v4/projects/vrivellino%2Fargo-diff/repository/commits/bb6a46bd76030008e38a5a986cfd7c67f48a8687/statuses?id=vrivellino%2Fargo-diff&order_by=id&page=1&per_page=20&sha=bb6a46bd76030008e38a5a986cfd7c67f48a8687>; rel="first", <https://gitlab.com/api/v4/projects/vrivellino%2Fargo-diff/repository/commits/bb6a46bd76030008e38a5a986cfd7c67f48a8687/statuses?id=vrivellino%2Fargo-diff&order_by=id&page=1&per_page=20&sha=bb6a46bd76030008e38a5a986cfd7c67f48a8687>; rel="last"
+x-next-page:
+x-page: 1
+x-per-page: 20
+x-prev-page:
+x-total: 3
+x-total-pages: 1

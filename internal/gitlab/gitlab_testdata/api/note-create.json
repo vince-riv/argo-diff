@@ -1,0 +1,28 @@
+{
+  "id": 3974493431,
+  "type": null,
+  "body": "<!-- comment produced by argo-diff[test] -->\n> [!note]\n> top-level lowercase note\n\n> [!NOTE]\n> top-level uppercase NOTE\n\n> [!CAUTION]\n> top-level CAUTION\n\n> [!WARNING]\n> top-level WARNING\n\n<details>\n<summary>app <code>guestbook</code>: 1 resource changed</summary>\n\n> [!NOTE]\n> alert nested inside details\n\n```diff\n apiVersion: v1\n-  replicas: 1\n+  replicas: 2\n```\n\n</details>\n\n<details open>\n<summary>open details</summary>\n\nbody\n</details>",
+  "author": {
+    "id": 42633434,
+    "username": "brushmtnai",
+    "public_email": "",
+    "name": "BrushMtn",
+    "state": "active",
+    "locked": false,
+    "avatar_url": "https://secure.gravatar.com/avatar/0000000000000000000000000000000000000000000000000000000000000000?s=80&d=identicon",
+    "web_url": "https://gitlab.com/brushmtnai"
+  },
+  "created_at": "2026-10-08T01:36:02.656Z",
+  "updated_at": "2026-10-08T01:36:02.656Z",
+  "system": false,
+  "noteable_id": 544901469,
+  "noteable_type": "MergeRequest",
+  "project_id": 86684588,
+  "resolvable": false,
+  "confidential": false,
+  "internal": false,
+  "imported": false,
+  "imported_from": "none",
+  "noteable_iid": 1,
+  "commands_changes": {}
+}

@@ -1,0 +1,77 @@
+[
+  {
+    "id": 17017510810,
+    "sha": "bb6a46bd76030008e38a5a986cfd7c67f48a8687",
+    "ref": "refs/merge-requests/1/head",
+    "status": "success",
+    "name": "argo-diff",
+    "target_url": "https://argocd.example.com/applications",
+    "description": "2 apps changed",
+    "created_at": "2026-10-08T01:37:23.220Z",
+    "started_at": null,
+    "finished_at": "2026-10-08T01:37:23.532Z",
+    "allow_failure": false,
+    "coverage": null,
+    "pipeline_id": 2924650572,
+    "author": {
+      "id": 42633434,
+      "username": "brushmtnai",
+      "public_email": "",
+      "name": "BrushMtn",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://secure.gravatar.com/avatar/0000000000000000000000000000000000000000000000000000000000000000?s=80&d=identicon",
+      "web_url": "https://gitlab.com/brushmtnai"
+    }
+  },
+  {
+    "id": 17017510884,
+    "sha": "bb6a46bd76030008e38a5a986cfd7c67f48a8687",
+    "ref": "refs/merge-requests/1/head",
+    "status": "failed",
+    "name": "argo-diff/ctx",
+    "target_url": null,
+    "description": "argo-diff failed",
+    "created_at": "2026-10-08T01:37:23.870Z",
+    "started_at": null,
+    "finished_at": "2026-10-08T01:37:23.867Z",
+    "allow_failure": false,
+    "coverage": null,
+    "pipeline_id": 2924650572,
+    "author": {
+      "id": 42633434,
+      "username": "brushmtnai",
+      "public_email": "",
+      "name": "BrushMtn",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://secure.gravatar.com/avatar/0000000000000000000000000000000000000000000000000000000000000000?s=80&d=identicon",
+      "web_url": "https://gitlab.com/brushmtnai"
+    }
+  },
+  {
+    "id": 17017510915,
+    "sha": "bb6a46bd76030008e38a5a986cfd7c67f48a8687",
+    "ref": "refs/merge-requests/1/head",
+    "status": "success",
+    "name": "argo-diff/desc255",
+    "target_url": null,
+    "description": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "created_at": "2026-10-08T01:37:24.544Z",
+    "started_at": null,
+    "finished_at": "2026-10-08T01:37:24.540Z",
+    "allow_failure": false,
+    "coverage": null,
+    "pipeline_id": 2924650572,
+    "author": {
+      "id": 42633434,
+      "username": "brushmtnai",
+      "public_email": "",
+      "name": "BrushMtn",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://secure.gravatar.com/avatar/0000000000000000000000000000000000000000000000000000000000000000?s=80&d=identicon",
+      "web_url": "https://gitlab.com/brushmtnai"
+    }
+  }
+]
