@@ -7,14 +7,14 @@ All application code beyond the entry point. Each package has its own `context.m
 ```
 cmd/main.go
   ├── internal/server ──── internal/process_event ─┬── internal/argocd ── internal/webhook
-  │       └── internal/webhook                     ├── internal/comment ── internal/config
-  │                                                ├── internal/github ─┬─ internal/comment
-  │                                                │                    ├─ internal/config
-  │                                                │                    └─ internal/scm
-  │                                                ├── internal/ignorable ── internal/config
+  │       ├── internal/scm                         ├── internal/comment ── internal/config
+  │       └── internal/webhook                     ├── internal/ignorable ── internal/config
   │                                                ├── internal/scm ── internal/comment
   │                                                └── internal/webhook
-  └── internal/argocd, internal/github  (connectivity checks only)
+  ├── internal/github ─┬─ internal/comment, internal/config
+  │                    └─ internal/scm   (github.Provider implements scm.Provider)
+  ├── internal/scm      (registers the providers)
+  └── internal/argocd, internal/github  (connectivity checks)
 
 internal/webhook ── internal/github   (only for IsRefreshComment)
 internal/gendiff  (no importers — see its context.md)
@@ -26,7 +26,7 @@ internal/gendiff  (no importers — see its context.md)
 | `comment/` | Renders diffs into comment bodies (per-provider `Dialect`), plus the preamble/marker wrapper |
 | `github/` | GitHub API client: PR comments, commit statuses, PR/file lookups |
 | `ignorable/` | Decides which resource diffs are "ignorable" (every changed line matches a regex), so `comment/` can fold them |
-| `scm/` | Provider-neutral types (`RepoRef`, `ChangeRequest`, `Status`) and the comment-reuse algorithm over provider primitives; imports no provider |
+| `scm/` | The `Provider` interface and registry, neutral types (`RepoRef`, `ChangeRequest`, `Status`), and the comment-reuse algorithm over provider primitives; imports no provider |
 | `process_event/` | Orchestrates one event end to end, including the timeout budget |
 | `server/` | HTTP webhook handlers and the two run-once entry points |
 | `webhook/` | `EventInfo` (the event data structure everything passes around) and HMAC checks |

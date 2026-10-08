@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/vince-riv/argo-diff/internal/process_event"
+	"github.com/vince-riv/argo-diff/internal/scm"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
@@ -149,10 +150,14 @@ func ProcessFileEvent(filePath string, devMode bool) error {
 		return err
 	}
 	log.Info().Msgf("Processing event data from %s: %+v", filePath, *evtp)
+	p, err := scm.Lookup("")
+	if err != nil {
+		return err
+	}
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go process_event.ProcessCodeChange(*evtp, devMode, &wg, &err)
+	go process_event.ProcessCodeChange(p, *evtp, devMode, &wg, &err)
 	wg.Wait()
 	return err
 }
@@ -164,9 +169,13 @@ func ProcessGithubAction() error {
 	if err != nil {
 		return err
 	}
+	p, err := scm.Lookup("github")
+	if err != nil {
+		return err
+	}
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go process_event.ProcessCodeChange(*evtp, true, &wg, &err)
+	go process_event.ProcessCodeChange(p, *evtp, true, &wg, &err)
 	wg.Wait()
 	return err
 }

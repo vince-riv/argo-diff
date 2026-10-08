@@ -13,7 +13,6 @@ import (
 	"github.com/vince-riv/argo-diff/internal/argocd"
 	"github.com/vince-riv/argo-diff/internal/comment"
 	"github.com/vince-riv/argo-diff/internal/config"
-	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/ignorable"
 	"github.com/vince-riv/argo-diff/internal/scm"
 	"github.com/vince-riv/argo-diff/internal/webhook"
@@ -109,12 +108,20 @@ func shortSha(str string) string {
 }
 */
 
-// Processes github webhook event data by getting a list of matching argo applications & their manifests and generating diffs
-// Sets Github status checks for the relevant commit sha and posts a Github comment it is a pull-request event
-// Designed to run within a gorouting to decouple from the webhook response
-func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitGroup, callerErr *error) {
+// Seams for tests: the argocd entry points ProcessCodeChange calls, which
+// otherwise shell out to the argocd CLI.
+var (
+	getApplicationChanges   = argocd.GetApplicationChanges
+	hasMatchingApplications = argocd.HasMatchingApplications
+)
+
+// ProcessCodeChange processes one change request event: it diffs the matching
+// ArgoCD applications, sets a commit status on the change's head commit, and
+// posts the diffs as a comment. Every provider call goes through p.
+// Designed to run within a goroutine to decouple from the webhook response
+func ProcessCodeChange(p scm.Provider, eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitGroup, callerErr *error) {
 	defer wg.Done()
-	// TODO figure out how to call github.Status() with an error status when there's a timeout
+	// TODO figure out how to call p.SetStatus() with an error status when there's a timeout
 	timeout := processTimeout()
 	log.Debug().Msgf("Processing event with a %s timeout", timeout)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -127,11 +134,13 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		return
 	}
 
+	repo := scm.RepoRef{Owner: eventInfo.RepoOwner, Name: eventInfo.RepoName}
+
 	// Get PR details if this is a refresh event
 	if eventInfo.Refresh {
-		pull, err := github.GetPullRequest(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+		pull, err := p.GetChangeRequest(ctx, repo, eventInfo.PrNum)
 		if err != nil {
-			log.Error().Err(err).Msgf("github.GetPullRequest(%s, %s, %d) failed", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+			log.Error().Err(err).Msgf("%s GetChangeRequest(%s, %s, %d) failed", p.Name(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 			*callerErr = err
 			return
 		}
@@ -146,7 +155,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 
 	// Get list of changed files in the PR
-	changedFiles, err := github.ListPullRequestFiles(ctx, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
+	changedFiles, err := p.ListChangedFiles(ctx, repo, eventInfo.PrNum)
 	if err != nil {
 		*callerErr = err
 		log.Error().Err(err).Msgf("Failed to list pull request files for %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
@@ -171,12 +180,12 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	// -f event-file mode is not a third case: it decodes Refresh from the event JSON, which
 	// normally omits the key, so the check runs there as it does for webhook events.
 	if RequireAppMatch() && !eventInfo.Refresh {
-		matched, err := argocd.HasMatchingApplications(ctx, eventInfo)
+		matched, err := hasMatchingApplications(ctx, eventInfo)
 		if err != nil {
 			log.Error().Err(err).Msg("argocd.HasMatchingApplications() failed")
 			statusCtx, statusCancel := context.WithTimeout(context.Background(), reportReserve(timeout))
 			defer statusCancel()
-			_ = github.Status(statusCtx, scm.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+			_ = p.SetStatus(statusCtx, repo, eventInfo.Sha, scm.StatusError, err.Error(), devMode)
 			*callerErr = err
 			return
 		}
@@ -187,7 +196,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 
 	// set commit status to PENDING
-	err = github.Status(ctx, scm.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	err = p.SetStatus(ctx, repo, eventInfo.Sha, scm.StatusPending, "", devMode)
 	if err != nil {
 		log.Warn().Err(err).Msgf("Failed to set commit status %s for %s/%s@%s", scm.StatusPending, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
 	}
@@ -200,7 +209,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	reserve := reportReserve(timeout)
 	diffCtx, diffCancel := context.WithTimeout(ctx, timeout-reserve)
 	defer diffCancel()
-	appResList, notDiffed, err := argocd.GetApplicationChanges(diffCtx, eventInfo)
+	appResList, notDiffed, err := getApplicationChanges(diffCtx, eventInfo)
 
 	// report on a context of its own: the one above may be at or past its
 	// deadline, and a partial comment is far more useful than no comment
@@ -209,7 +218,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 
 	if err != nil {
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
-		_ = github.Status(reportCtx, scm.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+		_ = p.SetStatus(reportCtx, repo, eventInfo.Sha, scm.StatusError, err.Error(), devMode)
 		*callerErr = err
 		return // we're done due to a processing error
 	}
@@ -219,7 +228,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	errorCount := 0  // keep track of the number of errors
 	changeCount := 0 // how many apps have changes
 	firstError := "" // string of the first error we receive - used in commit status message
-	cMarkdown := comment.CommentMarkdown{Dialect: comment.GitHub}
+	cMarkdown := comment.CommentMarkdown{Dialect: p.Dialect()}
 	// parsed once per event, not per application. A broken global setting shows
 	// up as a comment-level notice
 	ignorableCfg := ignorable.LoadGlobal()
@@ -306,7 +315,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 		}
 	}
 	// send the commit status
-	_ = github.Status(reportCtx, newStatus, statusDescription, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	_ = p.SetStatus(reportCtx, repo, eventInfo.Sha, newStatus, statusDescription, devMode)
 
 	// Post PR comment when something has happened
 	t := time.Now()
@@ -320,13 +329,12 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	// comment-level advisories: the operator's ARGO_DIFF_COMMENT_NOTICE plus
 	// anything config.AddNotice() raised during the run
 	cMarkdown.Notices = config.Notices()
-	repo := scm.RepoRef{Owner: eventInfo.RepoOwner, Name: eventInfo.RepoName}
 	if changeCount == 0 && firstError == "" && len(notDiffed) == 0 {
 		// if there are no changes or warnings, don't comment (but clear out any existing comments).
 		// NoticeStr needs no term here: it's only ever set on an app that already
 		// has changed resources, so it implies changeCount > 0.
-		_, _ = scm.PostComments(reportCtx, github.Provider{}, repo, eventInfo.PrNum, eventInfo.Sha, []string{})
+		_, _ = scm.PostComments(reportCtx, p, repo, eventInfo.PrNum, eventInfo.Sha, []string{})
 	} else {
-		_, _ = scm.PostComments(reportCtx, github.Provider{}, repo, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
+		_, _ = scm.PostComments(reportCtx, p, repo, eventInfo.PrNum, eventInfo.Sha, cMarkdown.String())
 	}
 }

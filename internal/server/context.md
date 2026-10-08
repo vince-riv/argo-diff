@@ -1,6 +1,9 @@
 # internal/server/
 
-Entry points that turn an incoming event into a `process_event.ProcessCodeChange()` call.
+Entry points that turn an incoming event into a `process_event.ProcessCodeChange()` call. Each one
+picks the provider with `scm.Lookup()`: `ProcessGithubAction()` asks for `github` by name, every
+other entry point for the default provider (`""`, which is GitHub). `cmd/main.go` registers the
+providers before any of these run.
 
 | File | Contents |
 | ---- | -------- |
@@ -44,7 +47,7 @@ left to report it to.
   from the API rather than trusted from the environment.
 - `eventInfoFromFile()` decodes an `EventInfo` JSON document; `-` reads stdin.
 - **`ProcessGithubAction()` passes `devMode=true`.** That is not a bug: dev mode's only remaining
-  effect at that point is dry-running commit statuses, which `github.Status()` already skips under
+  effect at that point is dry-running commit statuses, which `github.Status()` (via `Provider.SetStatus()`) already skips under
   Actions. Comments are still posted.
 - `logEnvironmentVariables()` dumps configuration at debug level, redacting the sensitive vars to
   their first three characters. **Add new env vars to one of its two lists** when you introduce

@@ -3,6 +3,10 @@
 The orchestrator. `ProcessCodeChange()` in `code_change.go` is the whole business logic for one
 event: resolve the PR, diff the matching ArgoCD applications, set a commit status, post a comment.
 
+**Every source-control call goes through the `scm.Provider` passed in** — change request lookup,
+changed files, commit statuses, comments (`scm.PostComments()`), and the comment `Dialect`. This
+package imports no provider. Callers pick the provider from the `scm` registry.
+
 It is always launched in a goroutine with a `sync.WaitGroup` and a `*error` out-parameter, so the
 webhook server can return `200 OK` immediately while the run-once modes wait and turn `*callerErr`
 into an exit code.
@@ -11,9 +15,9 @@ into an exit code.
 
 1. **PR-only guard.** `eventInfo.PrNum <= 0` is an immediate error — push events are not supported.
 2. **Refresh.** When `eventInfo.Refresh` is set (GitHub Actions mode, or an `argo diff` PR comment),
-   `github.GetPullRequest()` fills in `Sha`, `ChangeRef`, and `BaseRef` from the live PR. It returns
+   `p.GetChangeRequest()` fills in `Sha`, `ChangeRef`, and `BaseRef` from the live PR. It returns
    a neutral `scm.ChangeRequest`; any of the three left empty fails the run.
-3. **Changed files** via `github.ListPullRequestFiles()`, used downstream by the
+3. **Changed files** via `p.ListChangedFiles()`, used downstream by the
    `manifest-generate-paths` filter. A failure here is recorded but not fatal.
 4. **Optional match check.** If `RequireAppMatch()` (`ARGO_DIFF_REQUIRE_APP_MATCH=true`) and the
    event is not a refresh request, `argocd.HasMatchingApplications(ctx, eventInfo)` runs here — a
@@ -92,7 +96,11 @@ into an exit code.
 
 ## Tests
 
-`code_change_test.go` covers the pure helpers only — `processTimeout()`, `reportReserve()`,
-`timeoutMarkdown()`. Those read env on each call, so `t.Setenv` works. `ProcessCodeChange()` itself
-has no test: it reaches the network through the `argocd` and `github` packages, which have no
-injection point at this level.
+`code_change_test.go` covers the pure helpers — `processTimeout()`, `reportReserve()`,
+`timeoutMarkdown()`. Those read env on each call, so `t.Setenv` works.
+
+`process_test.go` drives `ProcessCodeChange()` end to end with an in-memory `fakeProvider` (it
+records statuses and keeps posted comments, so a second run can reuse them) and replaces the two
+argocd entry points through the package-level seams `getApplicationChanges` and
+`hasMatchingApplications` (`fakeArgo()`). Add a case there for any change to the flow or the
+reporting rules above.
