@@ -25,10 +25,10 @@ internal/gendiff  (no importers — see its context.md)
 | ------- | ---- |
 | `argocd/` | Runs the `argocd` CLI; matches applications to a change and diffs them |
 | `comment/` | Renders diffs into comment bodies (per-provider `Dialect`), plus the preamble/marker wrapper |
-| `github/` | GitHub API client: PR comments, commit statuses, PR/file lookups |
+| `github/` | The GitHub provider (`github.Provider`): API client, PR comments, commit statuses, PR/file lookups, webhook parsing and signatures, GitHub Actions detection |
 | `ignorable/` | Decides which resource diffs are "ignorable" (every changed line matches a regex), so `comment/` can fold them |
-| `scm/` | The `Provider` interface and registry, neutral types (`RepoRef`, `ChangeRequest`, `Status`), and the comment-reuse algorithm over provider primitives; imports no provider |
 | `process_event/` | Orchestrates one event end to end, including the timeout budget |
+| `scm/` | The `Provider` interface and registry, neutral types (`RepoRef`, `ChangeRequest`, `Status`), and the comment-reuse algorithm over provider primitives; imports no provider |
 | `server/` | HTTP webhook handlers and the two run-once entry points |
 | `webhook/` | `EventInfo`, the provider-neutral event everything passes around (parsing lives in each provider) |
 | `gendiff/` | Unified-diff helper, currently unused |

@@ -1,8 +1,9 @@
 # internal/github/
 
-Everything that talks to the GitHub API. Comment rendering lives in `internal/comment`. Built on
-`github.com/google/go-github/v92` (the major version is in the import path — a Renovate bump
-requires a code change).
+The GitHub provider: `Provider` implements `scm.Provider`, so everything GitHub-specific lives here
+— the API client, PR comments, commit statuses, webhook parsing and signature checks, and GitHub
+Actions detection. Comment rendering lives in `internal/comment`. Built on `github.com/google/go-
+github/v92` (the major version is in the import path — a Renovate bump requires a code change).
 
 ## Files
 
