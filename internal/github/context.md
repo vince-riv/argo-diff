@@ -61,7 +61,9 @@ environment.
   Jenkins plugin), which 403s on `GET /user` the same way an Actions token would. It's checked at
   every `isGithubAction` site: `ConnectivityCheck()` and `Provider.CurrentUser()`. Either one makes
   `CurrentUser()` return an empty login without calling `getCommentUser()`, and an empty login is
-  how `scm.ExistingComments()` knows to match comments by the identifier marker alone.
+  how `scm.ExistingComments()` knows to match comments by the identifier marker alone. Outside those two
+  cases an empty login is an **error**, not a marker-only match, so argo-diff can never start
+  editing other users' marker-bearing comments.
 - Whether an `issue_comment` re-runs the diff is decided by `comment.IsRefreshComment()` (see
   `internal/comment/context.md`).
 

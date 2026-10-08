@@ -273,7 +273,7 @@ func (p Policy) Ignorable(group, kind, diffStr string) bool {
 	}
 	changed := 0
 	for line := range strings.SplitSeq(diffStr, "\n") {
-		// the same header rule as diffStats() in internal/github/markdown.go: keep
+		// the same header rule as diffStats() in internal/comment/markdown.go: keep
 		// the two in step. The trailing space matters, a removed YAML document
 		// separator renders as "----" and is a real change
 		if strings.HasPrefix(line, "+++ ") || strings.HasPrefix(line, "--- ") {

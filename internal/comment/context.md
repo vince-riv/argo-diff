@@ -17,7 +17,9 @@ in through a `Dialect`. Nothing here calls an API.
 
 A `Dialect` carries what differs between providers. Today that is `HardMax`, the largest body the
 API accepts, in bytes. `CommentMarkdown.Dialect` selects one; **the zero value means `GitHub`**, the
-default provider. `AppMarkdown()` copies the dialect into each `ArgoAppMarkdown`, so set
+default provider. That fallback lives in `Dialect.orDefault()`, which `commentMaxLen()` and
+`commentBudget()` apply themselves, so even an `ArgoAppMarkdown` built without `AppMarkdown()` is
+never sized against a `HardMax` of 0. `AppMarkdown()` copies the dialect into each `ArgoAppMarkdown`, so set
 `Dialect` before the first `AppMarkdown()` call.
 
 Every supported dialect uses the GitHub alert syntax and renders alerts only at the top level, so
