@@ -68,12 +68,12 @@ func init() {
 	flag.StringVarP(&eventFile, "event-file", "f", "", "Run once and read event data from file")
 }
 
-func startServer(listenHost string, listenPort int, githubWebhookSecret string, devMode bool) {
+func startServer(listenHost string, listenPort int, devMode bool) {
 	addr := fmt.Sprintf("%s:%d", listenHost, listenPort)
 	if addr == ":0" {
 		addr = ":8080"
 	}
-	server.StartWebhookProcessor(addr, githubWebhookSecret, devMode)
+	server.StartWebhookProcessor(addr, devMode)
 }
 
 func main() {
@@ -146,5 +146,5 @@ func main() {
 	if githubWebhookSecret == "" {
 		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
 	}
-	startServer(serverListenHost, serverListenPort, githubWebhookSecret, serverDevMode)
+	startServer(serverListenHost, serverListenPort, serverDevMode)
 }

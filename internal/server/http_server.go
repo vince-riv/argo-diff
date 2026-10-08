@@ -19,12 +19,9 @@ import (
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
-const sigHeaderName = "X-Hub-Signature-256"
-
 type WebhookProcessor struct {
-	GithubWebhookSecret string
-	DevMode             bool
-	Wg                  sync.WaitGroup
+	DevMode bool
+	Wg      sync.WaitGroup
 }
 
 // HTTP Handler for futzing around locally
@@ -40,7 +37,7 @@ func (wp *WebhookProcessor) devHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot unmarshal POST'ed json to webhook.EventInfo struct", http.StatusBadRequest)
 		return
 	}
-	p, err := scm.Lookup("")
+	p, err := scm.Lookup(evt.Provider)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -51,8 +48,22 @@ func (wp *WebhookProcessor) devHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.WriteString(w, "Event dispatched to process_event.ProcessCodeChange()\n")
 }
 
-// HTTP handler for github webhook events
-func (wp *WebhookProcessor) handleWebhook(w http.ResponseWriter, r *http.Request) {
+// webhookHandler serves webhook requests for the provider registered as
+// providerName ("" is the default provider).
+func (wp *WebhookProcessor) webhookHandler(providerName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p, err := scm.Lookup(providerName)
+		if err != nil {
+			log.Error().Err(err).Msg("No provider for webhook route")
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+		wp.handleWebhook(p, w, r)
+	}
+}
+
+// HTTP handler for provider webhook events
+func (wp *WebhookProcessor) handleWebhook(p scm.Provider, w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Error().Err(err).Msg("Error reading request body")
@@ -60,20 +71,18 @@ func (wp *WebhookProcessor) handleWebhook(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	handler := p.WebhookHandler()
 	if wp.DevMode {
 		log.Info().Msg("Running in dev mode - skipping signature validation")
-	} else {
-		signature := r.Header.Get(sigHeaderName)
-		if !webhook.VerifySignature(payload, signature, wp.GithubWebhookSecret) {
-			http.Error(w, "Invalid signature", http.StatusUnauthorized)
-			return
-		}
+	} else if err := handler.Verify(r.Header, payload); err != nil {
+		log.Warn().Err(err).Msgf("Rejecting %s webhook", p.Name())
+		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		return
 	}
 
-	event := r.Header.Get("X-GitHub-Event")
-	eventInfo := webhook.NewEventInfo()
-	switch event {
-	case "ping":
+	evt, err := handler.Parse(r.Header, payload)
+	switch {
+	case evt.Kind == scm.WebhookPing:
 		log.Info().Str("method", r.Method).Str("url", r.URL.String()).Msg("ping event received")
 		_, err := io.WriteString(w, "ping event processed\n")
 		if err != nil {
@@ -81,30 +90,22 @@ func (wp *WebhookProcessor) handleWebhook(w http.ResponseWriter, r *http.Request
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 		return // we're done when it's a ping event
-	case "pull_request":
-		eventInfo, err = webhook.ProcessPullRequest(payload)
-		if err != nil {
-			http.Error(w, "Could not process pull request event data", http.StatusInternalServerError)
-			return
-		}
-	case "issue_comment":
-		eventInfo, err = webhook.ProcessComment(payload)
-		if err != nil {
-			http.Error(w, "Could not process issue comment data", http.StatusInternalServerError)
-			return
-		}
-	default:
-		log.Info().Str("method", r.Method).Str("url", r.URL.String()).Msgf("Ignoring X-GitHub-Event %s", event)
+	case evt.Kind == scm.WebhookIgnored:
+		log.Info().Str("method", r.Method).Str("url", r.URL.String()).Msgf("Ignoring %s event %s", p.Name(), evt.Name)
 		_, err := io.WriteString(w, "event ignored\n")
 		if err != nil {
 			log.Error().Err(err).Msg("io.WriteString() failed")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 		return // we're done when it's an event we don't know about
+	case err != nil:
+		http.Error(w, fmt.Sprintf("Could not process %s event data", html.EscapeString(evt.Name)), http.StatusInternalServerError)
+		return
 	}
+	eventInfo := evt.Info
 	if eventInfo.Ignore {
-		log.Info().Msgf("Ignoring %s event. Event Info: %v", event, eventInfo)
-		_, err := io.WriteString(w, fmt.Sprintf("%s event ignored\n%v\n", html.EscapeString(event), eventInfo))
+		log.Info().Msgf("Ignoring %s event. Event Info: %v", evt.Name, eventInfo)
+		_, err := io.WriteString(w, fmt.Sprintf("%s event ignored\n%v\n", html.EscapeString(evt.Name), eventInfo))
 		if err != nil {
 			log.Error().Err(err).Msg("io.WriteString() failed")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -112,13 +113,7 @@ func (wp *WebhookProcessor) handleWebhook(w http.ResponseWriter, r *http.Request
 		return // we're done when it's a PR/PUSH event we don't care about
 	}
 
-	p, err := scm.Lookup("")
-	if err != nil {
-		log.Error().Err(err).Msg("No provider for webhook event")
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	// call processEvent in a new gorouting and send a 200 OK back to Github
+	// call processEvent in a new gorouting and send a 200 OK back to the provider
 	wp.Wg.Add(1)
 	var ignoredError error
 	go process_event.ProcessCodeChange(p, eventInfo, wp.DevMode, &wp.Wg, &ignoredError)
@@ -140,7 +135,8 @@ func (wp *WebhookProcessor) healthZ(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HTTP Handler for development - receive github webhook events and log them out
+// HTTP Handler for development - receive webhook events for the default
+// provider and log them out
 func (wp *WebhookProcessor) printWebHook(w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -149,18 +145,24 @@ func (wp *WebhookProcessor) printWebHook(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	event := r.Header.Get("X-GitHub-Event")
+	p, err := scm.Lookup("")
+	if err != nil {
+		log.Error().Err(err).Msg("No provider for webhook route")
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+	handler := p.WebhookHandler()
+	event := handler.EventName(r.Header)
 	log.Info().Str("method", r.Method).Str("url", r.URL.String()).Str("event", event).Msg(string(payload))
 
-	signature := r.Header.Get(sigHeaderName)
-	if !webhook.VerifySignature(payload, signature, wp.GithubWebhookSecret) {
+	if err := handler.Verify(r.Header, payload); err != nil {
 		log.Warn().Msg("Invalid signature")
 		http.Error(w, "Invalid signature", http.StatusUnauthorized)
 		return
 	}
 }
 
-func StartWebhookProcessor(addr string, webhook_secret string, devMode bool) {
+func StartWebhookProcessor(addr string, devMode bool) {
 	log.Info().Msgf("Setting up listener on %s", addr)
 	if devMode {
 		log.Warn().Msg("Dev Mode is enabled - signature validations are disabled!")
@@ -168,12 +170,11 @@ func StartWebhookProcessor(addr string, webhook_secret string, devMode bool) {
 	}
 
 	wp := WebhookProcessor{
-		GithubWebhookSecret: webhook_secret,
-		DevMode:             devMode,
+		DevMode: devMode,
 	}
 
 	srv := &http.Server{Addr: addr}
-	http.HandleFunc("/webhook", wp.handleWebhook)
+	http.HandleFunc("/webhook", wp.webhookHandler(""))
 	http.HandleFunc("/webhook_log", wp.printWebHook)
 	http.HandleFunc("/healthz", wp.healthZ)
 	if devMode {

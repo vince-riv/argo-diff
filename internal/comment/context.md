@@ -9,6 +9,7 @@ in through a `Dialect`. Nothing here calls an API.
 | `markdown.go` | `CommentMarkdown` / `ArgoAppMarkdown` — renders diffs into comment bodies and splits them across comments |
 | `dialect.go` | `Dialect` (per-provider rules), `GitHub`, `Dialects` |
 | `wrap.go` | `Wrap()`, `Identifier()`, `SetIdentifierRef()`, `boundPreamble()` — what surrounds every posted body |
+| `refresh.go` | `IsRefreshComment()` — whether a comment on a change request asks argo-diff to re-run |
 | `markdown_test.go` | Rendering, splitting and budget tests; no golden fixtures, assertions are on invariants |
 | `dialect_test.go` | Runs `checkBodyWellFormed()` and the budget check under every dialect in `Dialects` |
 
@@ -25,6 +26,14 @@ Every supported dialect uses the GitHub alert syntax and renders alerts only at 
 alerts are always hoisted (see below). A provider that differs gets a new `Dialect` field, not a
 branch on `Name`. Dialects live here rather than in provider packages so tests in this package can
 render through all of them (`Dialects`) without an import cycle. Add a new dialect to `Dialects`.
+
+## Refresh comments
+
+`IsRefreshComment()` matches any keyword in `refreshCommentKeywords` (parsed once in `init()` from
+`ARGO_DIFF_REFRESH_COMMENT_KEYWORDS`, a comma-separated list defaulting to `argo diff,argo-diff`),
+each optionally suffixed with the context string (case-insensitive, trimmed). Every provider's
+webhook parser uses it, so the keywords work the same on every provider. Tests assign
+`refreshCommentKeywords` / `lowerContextStr` directly.
 
 ## Wrapper and marker
 

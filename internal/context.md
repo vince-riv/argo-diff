@@ -9,14 +9,15 @@ cmd/main.go
   ├── internal/server ──── internal/process_event ─┬── internal/argocd ── internal/webhook
   │       ├── internal/scm                         ├── internal/comment ── internal/config
   │       └── internal/webhook                     ├── internal/ignorable ── internal/config
-  │                                                ├── internal/scm ── internal/comment
+  │                                                ├── internal/scm ─┬─ internal/comment
+  │                                                │                 └─ internal/webhook
   │                                                └── internal/webhook
-  ├── internal/github ─┬─ internal/comment, internal/config
+  ├── internal/github ─┬─ internal/comment, internal/config, internal/webhook
   │                    └─ internal/scm   (github.Provider implements scm.Provider)
   ├── internal/scm      (registers the providers)
   └── internal/argocd, internal/github  (connectivity checks)
 
-internal/webhook ── internal/github   (only for IsRefreshComment)
+internal/webhook  (imports nothing internal)
 internal/gendiff  (no importers — see its context.md)
 ```
 
@@ -29,11 +30,11 @@ internal/gendiff  (no importers — see its context.md)
 | `scm/` | The `Provider` interface and registry, neutral types (`RepoRef`, `ChangeRequest`, `Status`), and the comment-reuse algorithm over provider primitives; imports no provider |
 | `process_event/` | Orchestrates one event end to end, including the timeout budget |
 | `server/` | HTTP webhook handlers and the two run-once entry points |
-| `webhook/` | `EventInfo` (the event data structure everything passes around) and HMAC checks |
+| `webhook/` | `EventInfo`, the provider-neutral event everything passes around (parsing lives in each provider) |
 | `gendiff/` | Unified-diff helper, currently unused |
 
 `webhook.EventInfo` is the value that flows through the whole pipeline; if you add a field, check
-every producer: `webhook.ProcessPullRequest`, `webhook.ProcessComment`, `server.eventInfoFromEnv`,
+every producer: `github.ProcessPullRequest`, `github.ProcessComment`, `server.eventInfoFromEnv`,
 `server.eventInfoFromFile`, and the `/dev` handler.
 
 ## Conventions

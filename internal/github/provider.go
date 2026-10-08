@@ -18,7 +18,12 @@ type Provider struct{}
 
 var _ scm.Provider = Provider{}
 
-func (Provider) Name() string { return "github" }
+// providerName is GitHub's name in the scm registry.
+const providerName = "github"
+
+func (Provider) Name() string { return providerName }
+
+func (Provider) WebhookHandler() scm.WebhookHandler { return WebhookHandler{} }
 
 func (Provider) Dialect() comment.Dialect { return comment.GitHub }
 

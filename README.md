@@ -390,6 +390,7 @@ unmarshalled into an `EventInfo` struct (defined in `internal/webhook/process.go
 
 ```json
 {
+    "provider": "github",
     "ignore": false,
     "owner": "GITHUB_ORG_NAME",
     "repo": "REPOSITORY_NAME",
@@ -403,6 +404,7 @@ unmarshalled into an `EventInfo` struct (defined in `internal/webhook/process.go
 
 Description of those fields:
 
+- `provider`: the source control provider; optional, defaults to `github` (the only one today)
 - `ignore`: tells argo-diff to ignore the event
 - `owner`: GitHub organization name
 - `repo`: GitHub repository name

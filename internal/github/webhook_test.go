@@ -1,41 +1,26 @@
-package webhook
+package github
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
+	"net/http"
+	"strings"
 	"testing"
-	// Ensure to get the latest version
+
+	"github.com/vince-riv/argo-diff/internal/scm"
+	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
-const testDataDir = "webhook_testdata"
-
-const payloadPrClose = "payload-pr-close.json"
-const payloadPrOpen = "payload-pr-open.json"
-const payloadPrSync = "payload-pr-sync.json"
-const payloadPrEditedBase = "payload-pr-edited-base.json"
-const payloadPrEditedTitle = "payload-pr-edited-title.json"
-const payloadCommentCreated = "payload-comment-created.json"
-const payloadCommentCreatedArgoDiff = "payload-comment-argodiff-created.json"
-
-func readFileToByteArray(fileName string) ([]byte, string, error) {
-	workingDir, err := os.Getwd()
-	if err != nil {
-		return nil, "", fmt.Errorf("Error getting current working directory: %w", err)
-	}
-
-	filePath := filepath.Join(workingDir, testDataDir, fileName)
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, filePath, fmt.Errorf("error reading file '%s': %w", filePath, err)
-	}
-
-	return data, filePath, nil
-}
+// Webhook payload fixtures, under github_testdata/webhook/ (readFileToByteArray
+// is in comment_test.go).
+const payloadPrClose = "webhook/payload-pr-close.json"
+const payloadPrOpen = "webhook/payload-pr-open.json"
+const payloadPrSync = "webhook/payload-pr-sync.json"
+const payloadPrEditedBase = "webhook/payload-pr-edited-base.json"
+const payloadPrEditedTitle = "webhook/payload-pr-edited-title.json"
+const payloadCommentCreated = "webhook/payload-comment-created.json"
+const payloadCommentCreatedArgoDiff = "webhook/payload-comment-argodiff-created.json"
 
 func TestLoadPullRequestEvents(t *testing.T) {
-	var result EventInfo
+	var result webhook.EventInfo
 	payloadFiles := []string{payloadPrClose, payloadPrOpen, payloadPrSync, payloadPrEditedBase, payloadPrEditedTitle}
 	for _, payloadFile := range payloadFiles {
 		payload, filePath, err := readFileToByteArray(payloadFile)
@@ -87,7 +72,7 @@ func TestPullRequestBaseRetarget(t *testing.T) {
 }
 
 func TestLoadCommentEvent(t *testing.T) {
-	var result EventInfo
+	var result webhook.EventInfo
 	// const payloadCommentCreated = "payload-comment-created.json"
 	// const payloadCommentCreatedArgoDiff = "payload-comment-argodiff-created.json"
 	payloadFiles := []string{payloadCommentCreated, payloadCommentCreatedArgoDiff}
@@ -122,5 +107,51 @@ func TestLoadCommentEvent(t *testing.T) {
 				t.Errorf("ProcessComment() Expected to set refresh flag. Payload %s", filePath)
 			}
 		}
+	}
+}
+
+func TestWebhookHandler(t *testing.T) {
+	origSecret := webhookSecret
+	t.Cleanup(func() { webhookSecret = origSecret })
+	webhookSecret = testSecret
+	h := WebhookHandler{}
+
+	headers := http.Header{}
+	headers.Set(eventHeader, "ping")
+	headers.Set(signatureHeader, "sha256="+pingSig)
+	if err := h.Verify(headers, []byte(pingPayload)); err != nil {
+		t.Errorf("Verify() rejected a correctly signed ping: %v", err)
+	}
+	headers.Set(signatureHeader, "sha256="+strings.Repeat("f", 64))
+	if err := h.Verify(headers, []byte(pingPayload)); err == nil {
+		t.Error("Verify() accepted a bad signature")
+	}
+	if evt, err := h.Parse(headers, []byte(pingPayload)); err != nil || evt.Kind != scm.WebhookPing || evt.Name != "ping" {
+		t.Errorf("Parse(ping) = %+v, %v; want a ping", evt, err)
+	}
+
+	headers.Set(eventHeader, "push")
+	if evt, _ := h.Parse(headers, []byte("{}")); evt.Kind != scm.WebhookIgnored {
+		t.Errorf("Parse(push) kind = %v, want WebhookIgnored", evt.Kind)
+	}
+
+	payload, _, err := readFileToByteArray(payloadPrOpen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers.Set(eventHeader, "pull_request")
+	evt, err := h.Parse(headers, payload)
+	if err != nil || evt.Kind != scm.WebhookChange || evt.Info.Ignore || evt.Info.Provider != "github" {
+		t.Errorf("Parse(pull_request opened) = %+v, %v; want an actionable github change", evt, err)
+	}
+
+	payload, _, err = readFileToByteArray(payloadCommentCreatedArgoDiff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers.Set(eventHeader, "issue_comment")
+	evt, err = h.Parse(headers, payload)
+	if err != nil || evt.Kind != scm.WebhookChange || !evt.Info.Refresh || evt.Info.Provider != "github" {
+		t.Errorf("Parse(issue_comment argo diff) = %+v, %v; want a github refresh", evt, err)
 	}
 }

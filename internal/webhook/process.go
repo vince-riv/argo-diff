@@ -1,18 +1,16 @@
 package webhook
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-
-	"github.com/google/go-github/v92/github"
-	"github.com/rs/zerolog/log"
-
-	argoDiffGh "github.com/vince-riv/argo-diff/internal/github"
 )
 
-// Data structure for information passed by github webhook events
+// EventInfo describes one change request event, whichever provider it came
+// from. It is also the file format of -f event files and of the /dev endpoint.
 type EventInfo struct {
+	// Provider names the scm provider the event belongs to (eg: "github").
+	// Empty means scm.DefaultProvider, so event files from before
+	// multi-provider support keep working.
+	Provider       string   `json:"provider"`
 	Ignore         bool     `json:"ignore"`
 	RepoOwner      string   `json:"owner"`
 	RepoName       string   `json:"repo"`
@@ -39,7 +37,10 @@ func NewEventInfo() EventInfo {
 	}
 }
 
-func validateEventInfo(e EventInfo) error {
+// Validate checks that a parsed event carries what processing needs. Sha and
+// ChangeRef are only required when Refresh is false, since a refresh re-reads
+// them from the provider.
+func (e EventInfo) Validate() error {
 	if e.RepoOwner == "" {
 		return errors.New("missing repo owner in event info object")
 	}
@@ -56,81 +57,4 @@ func validateEventInfo(e EventInfo) error {
 		return errors.New("missing change ref in event info object")
 	}
 	return nil
-}
-
-// Processes a pull_request event received from github
-func ProcessPullRequest(payload []byte) (EventInfo, error) {
-	prInfo := NewEventInfo()
-	var prEvent github.PullRequestEvent
-	if err := json.Unmarshal(payload, &prEvent); err != nil {
-		log.Error().Err(err).Msg("Error decoding JSON payload")
-		return prInfo, err
-	}
-	if prEvent.Action == nil {
-		err := errors.New("github.PullRequestEvent missing key field")
-		log.Error().Err(err).Msg("github.PushEvent missing key field")
-		return prInfo, err
-	}
-	prInfo.RepoOwner = *prEvent.Repo.Owner.Login
-	prInfo.RepoName = *prEvent.Repo.Name
-	prInfo.PrNum = *prEvent.Number
-	action := *prEvent.Action
-	// GitHub sends the "edited" action for title and body edits too, but it only fills in
-	// changes.base.ref.from when the base itself changed — which is what happens when GitHub
-	// retargets a stacked PR onto main after its parent branch merges. The accessor chain is
-	// nil-safe, so a payload with no base change simply yields "".
-	oldBaseRef := prEvent.GetChanges().GetBase().GetRef().GetFrom()
-	isBaseRetarget := action == "edited" && oldBaseRef != ""
-	if action != "opened" && action != "synchronize" && !isBaseRetarget {
-		log.Info().Msg(fmt.Sprintf("Ignoring %s action for PR %s#%d", action, prEvent.Repo.GetFullName(), *prEvent.Number))
-		return prInfo, nil
-	}
-	if isBaseRetarget {
-		log.Info().Msgf("PR %s#%d retargeted from %s to %s; treating as actionable",
-			prEvent.Repo.GetFullName(), *prEvent.Number, oldBaseRef, *prEvent.PullRequest.Base.Ref)
-	}
-	prInfo.Ignore = false
-	prInfo.Sha = *prEvent.PullRequest.Head.SHA
-	prInfo.RepoDefaultRef = *prEvent.Repo.DefaultBranch
-	prInfo.BaseRef = *prEvent.PullRequest.Base.Ref
-	prInfo.ChangeRef = *prEvent.PullRequest.Head.Ref
-	log.Debug().Msgf("Returning EventInfo: %+v", prInfo)
-	return prInfo, validateEventInfo(prInfo)
-}
-
-// Processes a comment created event received from github
-func ProcessComment(payload []byte) (EventInfo, error) {
-	prInfo := NewEventInfo()
-	var commentEvent github.IssueCommentEvent
-	if err := json.Unmarshal(payload, &commentEvent); err != nil {
-		log.Error().Err(err).Msg("Error decoding JSON payload")
-		return prInfo, err
-	}
-	if action := commentEvent.GetAction(); action != "created" {
-		log.Info().Msgf("Ignoring issue comment event with action %s", action)
-		return prInfo, nil
-	}
-	issue := commentEvent.GetIssue()
-	issueComment := commentEvent.GetComment()
-	repo := commentEvent.GetRepo()
-	if issue == nil || issueComment == nil || repo == nil {
-		log.Warn().Msg("Ignoring issue comment event with missing field(s)")
-		return prInfo, nil
-	}
-	if issue.PullRequestLinks == nil {
-		log.Info().Msg("Ignoring non-pull issue comment")
-		return prInfo, nil
-	}
-	prInfo.PrNum = *issue.Number
-	prInfo.RepoOwner = *repo.Owner.Login
-	prInfo.RepoName = *repo.Name
-	prInfo.RepoDefaultRef = *repo.DefaultBranch
-	if issueComment.Body == nil || !argoDiffGh.IsRefreshComment(*issueComment.Body) {
-		log.Info().Msg("Ignoring pull request comment")
-		return prInfo, nil
-	}
-	prInfo.Ignore = false
-	prInfo.Refresh = true
-	log.Debug().Msgf("Returning EventInfo: %+v", prInfo)
-	return prInfo, validateEventInfo(prInfo)
 }
