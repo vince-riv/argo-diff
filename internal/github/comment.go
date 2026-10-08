@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/vince-riv/argo-diff/internal/config"
+	"github.com/vince-riv/argo-diff/internal/scm"
 )
 
 var (
@@ -230,17 +231,29 @@ func getCommentUser(ctx context.Context) error {
 	return nil
 }
 
-// Gets the specified pull request
-func GetPullRequest(ctx context.Context, owner, repo string, prNum int) (*github.PullRequest, error) {
+// GetPullRequest fetches the specified pull request. A branch the API did not
+// return is left empty in the result; see scm.ChangeRequest.
+func GetPullRequest(ctx context.Context, owner, repo string, prNum int) (scm.ChangeRequest, error) {
 	pr, resp, err := commentClient.PullRequests.Get(ctx, owner, repo, prNum)
 	if resp != nil {
 		log.Info().Msgf("%s received when calling commentClient.PullRequests.Get() via go-github", resp.Status)
 	}
 	if err != nil {
 		log.Error().Err(err).Msgf("Unable to fetch pull request %s/%s#%d", owner, repo, prNum)
-		return nil, err
+		return scm.ChangeRequest{}, err
 	}
-	return pr, nil
+	return changeRequestFromPull(pr, prNum), nil
+}
+
+// changeRequestFromPull converts a go-github pull request. The getters are
+// nil-safe, so a missing head or base yields empty fields.
+func changeRequestFromPull(pr *github.PullRequest, prNum int) scm.ChangeRequest {
+	return scm.ChangeRequest{
+		Number:  prNum,
+		HeadSHA: pr.GetHead().GetSHA(),
+		HeadRef: pr.GetHead().GetRef(),
+		BaseRef: pr.GetBase().GetRef(),
+	}
 }
 
 // Returns list of files in a pull request
@@ -270,15 +283,11 @@ func isPrHead(ctx context.Context, sha, owner, repo string, prNum int) bool {
 		log.Warn().Msgf("GetPullRequest() err'd - assuming %s is HEAD of %s/%s#%d", sha, owner, repo, prNum)
 		return true
 	}
-	if pr.Head == nil {
-		log.Warn().Msgf("%s/%s#%d has no HEAD - assuming %s is not HEAD", owner, repo, prNum, sha)
+	if pr.HeadSHA == "" {
+		log.Warn().Msgf("%s/%s#%d has no HEAD SHA - assuming %s is not HEAD", owner, repo, prNum, sha)
 		return false
 	}
-	if pr.Head.SHA == nil {
-		log.Warn().Msgf("SHA for PullRequestBranch of %s/%s#%d is nil - assuming %s is not HEAD", owner, repo, prNum, sha)
-		return false
-	}
-	return sha == *pr.Head.SHA
+	return sha == pr.HeadSHA
 }
 
 //func saveResponse(v any, filename string) {

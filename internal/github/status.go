@@ -11,6 +11,8 @@ import (
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v92/github"
 	"github.com/rs/zerolog/log"
+
+	"github.com/vince-riv/argo-diff/internal/scm"
 )
 
 var (
@@ -20,11 +22,6 @@ var (
 )
 
 const statusDescriptionMaxLen = 140
-
-const StatusPending = "pending"
-const StatusSuccess = "success"
-const StatusFailure = "failure"
-const StatusError = "error"
 
 func init() {
 	contextStr := strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
@@ -76,12 +73,12 @@ func init() {
 }
 
 // Helper that sets commit status for the request commit sha
-func Status(ctx context.Context, status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
+func Status(ctx context.Context, status scm.Status, description, repoOwner, repoName, commitSha string, dryRun bool) error {
 	if skipCommitStatus {
 		log.Debug().Msg("Skipping commit status")
 		return nil
 	}
-	if status != StatusPending && status != StatusSuccess && status != StatusFailure && status != StatusError {
+	if !status.Valid() {
 		log.Fatal().Msgf("Cannot create github status with status string '%s'", status)
 		return fmt.Errorf("unknown status string '%s'", status)
 	}
@@ -92,7 +89,7 @@ func Status(ctx context.Context, status, description, repoOwner, repoName, commi
 	// TODO add support for AvatarURL ?
 	// TODO add support for TargetURL ?
 	repoStatus := github.RepoStatus{
-		State:       new(status),
+		State:       new(string(status)),
 		Description: new(description),
 		Context:     new(contextStr),
 	}
