@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-github/v92/github"
 	"github.com/rs/zerolog/log"
 
+	"github.com/vince-riv/argo-diff/internal/comment"
 	"github.com/vince-riv/argo-diff/internal/scm"
 )
 
@@ -15,7 +16,20 @@ import (
 // tests swap for httptest-backed ones.
 type Provider struct{}
 
-var _ scm.Commenter = Provider{}
+var _ scm.Provider = Provider{}
+
+func (Provider) Name() string { return "github" }
+
+func (Provider) Dialect() comment.Dialect { return comment.GitHub }
+
+func (Provider) ListChangedFiles(ctx context.Context, repo scm.RepoRef, num int) ([]string, error) {
+	return ListPullRequestFiles(ctx, repo.Owner, repo.Name, num)
+}
+
+// SetStatus is a no-op under GitHub Actions; see Status().
+func (Provider) SetStatus(ctx context.Context, repo scm.RepoRef, sha string, state scm.Status, description string, dryRun bool) error {
+	return Status(ctx, state, description, repo.Owner, repo.Name, sha, dryRun)
+}
 
 func (Provider) GetChangeRequest(ctx context.Context, repo scm.RepoRef, num int) (scm.ChangeRequest, error) {
 	return GetPullRequest(ctx, repo.Owner, repo.Name, num)

@@ -16,6 +16,7 @@ import (
 	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/ignorable"
 	"github.com/vince-riv/argo-diff/internal/process_event"
+	"github.com/vince-riv/argo-diff/internal/scm"
 	"github.com/vince-riv/argo-diff/internal/server"
 )
 
@@ -100,6 +101,8 @@ func main() {
 	if os.Getenv("APP_ENV") == "dev" {
 		serverDevMode = true
 	}
+
+	scm.Register(github.Provider{})
 
 	config.LogBypassConfig()
 	ignorable.LogConfig()

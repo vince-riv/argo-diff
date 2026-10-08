@@ -15,6 +15,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/vince-riv/argo-diff/internal/process_event"
+	"github.com/vince-riv/argo-diff/internal/scm"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
@@ -39,9 +40,14 @@ func (wp *WebhookProcessor) devHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot unmarshal POST'ed json to webhook.EventInfo struct", http.StatusBadRequest)
 		return
 	}
+	p, err := scm.Lookup("")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	wp.Wg.Add(1)
 	var ignoredError error
-	go process_event.ProcessCodeChange(evt, wp.DevMode, &wp.Wg, &ignoredError)
+	go process_event.ProcessCodeChange(p, evt, wp.DevMode, &wp.Wg, &ignoredError)
 	_, _ = io.WriteString(w, "Event dispatched to process_event.ProcessCodeChange()\n")
 }
 
@@ -106,10 +112,16 @@ func (wp *WebhookProcessor) handleWebhook(w http.ResponseWriter, r *http.Request
 		return // we're done when it's a PR/PUSH event we don't care about
 	}
 
+	p, err := scm.Lookup("")
+	if err != nil {
+		log.Error().Err(err).Msg("No provider for webhook event")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 	// call processEvent in a new gorouting and send a 200 OK back to Github
 	wp.Wg.Add(1)
 	var ignoredError error
-	go process_event.ProcessCodeChange(eventInfo, wp.DevMode, &wp.Wg, &ignoredError)
+	go process_event.ProcessCodeChange(p, eventInfo, wp.DevMode, &wp.Wg, &ignoredError)
 	_, err = io.WriteString(w, "event accepted for processing\n")
 	if err != nil {
 		log.Error().Err(err).Msg("io.WriteString() failed")

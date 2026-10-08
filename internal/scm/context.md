@@ -7,6 +7,7 @@ issue #160 adds GitLab.
 | File | Contents |
 | ---- | -------- |
 | `types.go` | `RepoRef`, `ChangeRequest`, `Status` and its four states |
+| `provider.go` | `Provider` interface, `DefaultProvider`, the registry (`Register`, `Lookup`, `Providers`) |
 | `comment.go` | `Comment`, the `Commenter` primitive interface, `ExistingComments()`, `PostComments()` |
 
 ## Types
@@ -19,6 +20,15 @@ issue #160 adds GitLab.
   field means (`process_event` fails a refresh; the comment HEAD check treats it as "not HEAD").
 - `Status` is `pending` / `success` / `failure` / `error`, the GitHub spelling. Providers map these
   onto their own states (GitLab rejects `failure` and wants `failed`). `Valid()` guards the set.
+
+## Provider and registry
+
+`Provider` is everything `process_event.ProcessCodeChange()` needs: the `Commenter` primitives plus
+`Name()`, `Dialect()`, `ListChangedFiles()` and `SetStatus()`. GitHub's is `github.Provider`.
+
+`cmd/main.go` calls `Register()` at startup. `Lookup(name)` returns a provider by name; **an empty
+name means `DefaultProvider` (`github`)**, which keeps event files and webhooks from before
+multi-provider support working. `Providers()` lists them sorted by name.
 
 ## Posting comments
 
