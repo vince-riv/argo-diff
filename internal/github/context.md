@@ -49,7 +49,9 @@ directly breaks comment reuse for any App whose name isn't already slug-shaped.
   Jenkins plugin), which 403s on `GET /user` the same way an Actions token would. It's checked at
   every `isGithubAction` site: `ConnectivityCheck()` and `Provider.CurrentUser()`. Either one makes
   `CurrentUser()` return an empty login without calling `getCommentUser()`, and an empty login is
-  how `scm.ExistingComments()` knows to match comments by the identifier marker alone.
+  how `scm.ExistingComments()` knows to match comments by the identifier marker alone. Outside those two
+  cases an empty login is an **error**, not a marker-only match, so argo-diff can never start
+  editing other users' marker-bearing comments.
 - `IsRefreshComment()` matches any keyword in `refreshCommentKeywords` (parsed once in `init()` from
   `ARGO_DIFF_REFRESH_COMMENT_KEYWORDS`, a comma-separated list defaulting to `argo diff,argo-diff`),
   each optionally suffixed with the context string (case-insensitive, trimmed). This is what makes an
