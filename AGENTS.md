@@ -19,6 +19,7 @@ changes.
 | `internal/config/` | Cross-package operator config, eg: the connectivity-check bypass |
 | `internal/github/` | GitHub API client, PR comments, commit statuses |
 | `internal/ignorable/` | Classifies resource diffs as ignorable (folded in `auto` collapse mode); config and annotations |
+| `internal/scm/` | Source-control-provider abstraction: neutral types shared by every provider |
 | `internal/process_event/` | Orchestrates one event: diff → commit status → PR comment |
 | `internal/server/` | HTTP webhook server plus the run-once entry points |
 | `internal/webhook/` | Webhook payload parsing (`EventInfo`) and signature verification |

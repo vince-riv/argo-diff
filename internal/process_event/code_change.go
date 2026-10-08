@@ -14,6 +14,7 @@ import (
 	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/ignorable"
+	"github.com/vince-riv/argo-diff/internal/scm"
 	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
@@ -133,16 +134,14 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 			*callerErr = err
 			return
 		}
-		base := pull.GetBase()
-		head := pull.GetHead()
-		if base == nil || head == nil {
+		if pull.HeadSHA == "" || pull.HeadRef == "" || pull.BaseRef == "" {
 			log.Error().Msgf("Empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 			*callerErr = fmt.Errorf("empty branch information when refreshing %s/%s#%d", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.PrNum)
 			return
 		}
-		eventInfo.Sha = *head.SHA
-		eventInfo.ChangeRef = *head.Ref
-		eventInfo.BaseRef = *base.Ref
+		eventInfo.Sha = pull.HeadSHA
+		eventInfo.ChangeRef = pull.HeadRef
+		eventInfo.BaseRef = pull.BaseRef
 	}
 
 	// Get list of changed files in the PR
@@ -176,7 +175,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 			log.Error().Err(err).Msg("argocd.HasMatchingApplications() failed")
 			statusCtx, statusCancel := context.WithTimeout(context.Background(), reportReserve(timeout))
 			defer statusCancel()
-			_ = github.Status(statusCtx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+			_ = github.Status(statusCtx, scm.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 			*callerErr = err
 			return
 		}
@@ -187,9 +186,9 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 
 	// set commit status to PENDING
-	err = github.Status(ctx, github.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+	err = github.Status(ctx, scm.StatusPending, "", eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 	if err != nil {
-		log.Warn().Err(err).Msgf("Failed to set commit status %s for %s/%s@%s", github.StatusPending, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
+		log.Warn().Err(err).Msgf("Failed to set commit status %s for %s/%s@%s", scm.StatusPending, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
 	}
 
 	// get a list of ArgoCD applications and their manifests whose git URLs match the webhook event
@@ -209,7 +208,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 
 	if err != nil {
 		log.Error().Err(err).Msg("argocd.GetApplicationChanges() failed")
-		_ = github.Status(reportCtx, github.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
+		_ = github.Status(reportCtx, scm.StatusError, err.Error(), eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha, devMode)
 		*callerErr = err
 		return // we're done due to a processing error
 	}
@@ -275,8 +274,8 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	}
 
 	// commit status is currently pending, newStatus will be the updated status (default to error)
-	newStatus := github.StatusError //nolint:ineffassign
-	statusDescription := "Unknown"  //nolint:ineffassign
+	newStatus := scm.StatusError   //nolint:ineffassign
+	statusDescription := "Unknown" //nolint:ineffassign
 	changeCountStr := fmt.Sprintf("%d of %d apps with changes", changeCount, len(appResList))
 	if len(notDiffed) > 0 {
 		changeCountStr += fmt.Sprintf(" [%d apps not diffed]", len(notDiffed))
@@ -285,21 +284,21 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 
 	if errorCount > 0 {
 		// if we had errors, commit status should be a failure
-		newStatus = github.StatusFailure
+		newStatus = scm.StatusFailure
 		statusDescription = fmt.Sprintf("%s; %d had an error; first error: %s", changeCountStr, errorCount, firstError)
 		*callerErr = fmt.Errorf("%d application(s) failed to generate a diff; first error: %s", errorCount, firstError)
 	} else if firstError != "" {
 		// if we had a recoverable error, commit status can be a success (but let's give them the first error)
-		newStatus = github.StatusSuccess
+		newStatus = scm.StatusSuccess
 		statusDescription = fmt.Sprintf("%s; diff generator failed; first error: %s", changeCountStr, firstError)
 	} else {
 		// else everything is happy - commit status success
-		newStatus = github.StatusSuccess
+		newStatus = scm.StatusSuccess
 		statusDescription = fmt.Sprintf("%s - no errors", changeCountStr)
 	}
 	if len(notDiffed) > 0 {
 		// results are incomplete - fail rather than report success on a partial diff
-		newStatus = github.StatusFailure
+		newStatus = scm.StatusFailure
 		statusDescription = fmt.Sprintf("%d app(s) not diffed (timed out); %s", len(notDiffed), statusDescription)
 		if *callerErr == nil {
 			*callerErr = fmt.Errorf("timed out (ARGO_DIFF_TIMEOUT is %s); %d application(s) were not diffed", timeout, len(notDiffed))

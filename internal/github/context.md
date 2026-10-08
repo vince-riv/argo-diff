@@ -1,7 +1,7 @@
 # internal/github/
 
 Everything that talks to the GitHub API, plus the markdown rendering for PR comments. Built on
-`github.com/google/go-github/v91` (the major version is in the import path — a Renovate bump
+`github.com/google/go-github/v92` (the major version is in the import path — a Renovate bump
 requires a code change).
 
 ## Files
@@ -12,6 +12,9 @@ requires a code change).
 | `markdown.go` | `CommentMarkdown` / `ArgoAppMarkdown` — renders diffs into comment bodies and splits them across comments |
 | `markdown_test.go` | Rendering, splitting and budget tests; no golden fixtures, assertions are on invariants |
 | `status.go` | `Status()` — commit status checks |
+
+go-github types stay inside this package. `GetPullRequest()` returns an `scm.ChangeRequest` and
+`Status()` takes an `scm.Status` (see `internal/scm/context.md`), so callers never import go-github.
 
 ## Clients
 

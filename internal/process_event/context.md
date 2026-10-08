@@ -11,7 +11,8 @@ into an exit code.
 
 1. **PR-only guard.** `eventInfo.PrNum <= 0` is an immediate error — push events are not supported.
 2. **Refresh.** When `eventInfo.Refresh` is set (GitHub Actions mode, or an `argo diff` PR comment),
-   `github.GetPullRequest()` fills in `Sha`, `ChangeRef`, and `BaseRef` from the live PR.
+   `github.GetPullRequest()` fills in `Sha`, `ChangeRef`, and `BaseRef` from the live PR. It returns
+   a neutral `scm.ChangeRequest`; any of the three left empty fails the run.
 3. **Changed files** via `github.ListPullRequestFiles()`, used downstream by the
    `manifest-generate-paths` filter. A failure here is recorded but not fatal.
 4. **Optional match check.** If `RequireAppMatch()` (`ARGO_DIFF_REQUIRE_APP_MATCH=true`) and the
