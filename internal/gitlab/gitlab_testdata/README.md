@@ -69,6 +69,14 @@ Not captured: a merged-results pipeline (needs Premium).
 | `merge-request-open` | Merge Request Hook | `action: open` |
 | `merge-request-update-new-commits` | Merge Request Hook | `action: update`, `oldrev` set, `changes: {}` |
 | `note-merge-request-create` | Note Hook | `noteable_type: MergeRequest`, `action: create`, no refresh keyword |
+| `note-merge-request-update` | Note Hook | `action: update`: argo-diff-style edit to `[Outdated argo-diff content]` + marker |
+
+Observed but not kept:
+- Note Hook `create` for the three ~1 MiB length-test notes. Each payload was ~2 MB, because the
+  note text appears twice (`object_attributes.note` and `object_attributes.description`). The
+  capture endpoint truncated them.
+- Four more `action: update` Note Hooks, same shape as `note-merge-request-update`.
+- No Note Hook was sent for the `added 1 commit` system note.
 
 Not captured yet: `reopen`, `close`, `merge`, `update` with title change only, `update` with
 target-branch change, Note Hook with the refresh keyword, Note Hook on an issue. Anything added
