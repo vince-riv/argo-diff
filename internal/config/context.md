@@ -30,7 +30,7 @@ startup — don't call it from a per-event path, or unknown-token warnings spam 
 
 `CommentCollapseMode()` returns `auto`, `expanded` (the default) or `collapsed`. It is
 case-insensitive and whitespace-trimmed; an unknown value logs a warning and means `expanded`. Read on
-call, so tests can `t.Setenv` it. `internal/github` reads it to decide which blocks render folded.
+call, so tests can `t.Setenv` it. `internal/comment` reads it to decide which blocks render folded.
 
 ## `ARGO_DIFF_COMMENT_NOTICE`
 
@@ -52,7 +52,7 @@ raises a notice on both its false branches (client version undetectable, client 
 parents outside ArgoCD's own namespace are missing rather than leaving the reader to guess.
 
 A notice is **advisory**, and renders differently from a warning or a fatal error. See the severity
-table in `internal/github/context.md`.
+table in `internal/comment/context.md`.
 
 ## Consumers
 

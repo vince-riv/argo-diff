@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-github/v92/github"
 	"github.com/rs/zerolog/log"
 
+	"github.com/vince-riv/argo-diff/internal/comment"
 	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/scm"
 )
@@ -23,11 +24,9 @@ var (
 	commentClient          *github.Client
 	appsClient             *github.Client
 	commentClientIsApp     bool
-	commentPreamble        string
 	contextStr             string
 	lowerContextStr        string
 	refreshCommentKeywords []string
-	commentIdentifier      string
 	commentLogin           string
 	isGithubAction         bool
 	mux                    *sync.RWMutex
@@ -66,15 +65,10 @@ func init() {
 	contextStr = strings.TrimSpace(os.Getenv("ARGO_DIFF_CONTEXT_STR"))
 	lowerContextStr = strings.ToLower(contextStr)
 	refreshCommentKeywords = parseRefreshCommentKeywords(os.Getenv("ARGO_DIFF_REFRESH_COMMENT_KEYWORDS"))
-	commentPreamble = boundPreamble("ARGO_DIFF_COMMENT_PREAMBLE", strings.TrimSpace(os.Getenv("ARGO_DIFF_COMMENT_PREAMBLE")))
-	if commentPreamble == "" {
-		commentPreamble = boundPreamble("ARGO_DIFF_CONTEXT_STR", contextStr)
-	}
 	if isGithubAction {
 		log.Debug().Msg("Running in github actions")
-		commentIdentifier = fmt.Sprintf("<!-- comment produced by argo-diff[%s] - %s -->", contextStr, os.Getenv("GITHUB_REF"))
-	} else {
-		commentIdentifier = fmt.Sprintf("<!-- comment produced by argo-diff[%s] -->", contextStr)
+		// concurrent PRs running the action must not match each other's comments
+		comment.SetIdentifierRef(os.Getenv("GITHUB_REF"))
 	}
 	// Create Github API client
 	if githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN"); githubPAT != "" {
@@ -347,7 +341,7 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		}
 		log.Debug().Msgf("Checking %d comments in %s/%s#%d", len(comments), owner, repo, prNum)
 		for _, c := range comments {
-			if strings.Contains(*c.Body, commentIdentifier) {
+			if strings.Contains(*c.Body, comment.Identifier()) {
 				if isGithubAction || bypass || *c.User.Login == login {
 					res = append(res, c)
 				}
@@ -359,54 +353,6 @@ func getExistingComments(ctx context.Context, owner, repo string, prNum int) ([]
 		}
 	}
 	return res, nil
-}
-
-// maxPreambleLen bounds ARGO_DIFF_COMMENT_PREAMBLE. README documents "150
-// chars or less", so this is generous - it exists to keep the comment budget's
-// inputs all bounded, not to police the guideline.
-const maxPreambleLen = 4000
-
-// boundPreamble caps the operator preamble. Every other input to the size
-// budget is bounded - ErrStr, NoticeStr, each notice, HealthMsg, every resource
-// body - and this was the last one that was not. An unbounded preamble is
-// subtracted from the budget by commentWrapperLen(), so a large enough one
-// leaves no room for content and, past githubCommentHardMax, no room for the
-// preamble itself.
-//
-// name is the environment variable the value actually came from: the preamble
-// falls back to ARGO_DIFF_CONTEXT_STR, and telling that operator to shorten an
-// ARGO_DIFF_COMMENT_PREAMBLE they never set sends them looking in the wrong
-// place.
-func boundPreamble(name, s string) string {
-	if len(s) <= maxPreambleLen {
-		return s
-	}
-	log.Warn().Msgf("%s is %d bytes - truncating the comment preamble to %d", name, len(s), maxPreambleLen)
-	return truncateBytes(s, maxPreambleLen)
-}
-
-// wrapComment builds the body actually posted to GitHub: the operator preamble,
-// the rendered markdown, and the identifier argo-diff finds its own comments by.
-func wrapComment(body string) string {
-	var b strings.Builder
-	if commentPreamble != "" {
-		b.WriteString(commentPreamble)
-		b.WriteString("\n\n")
-	}
-	b.WriteString(body)
-	b.WriteString("\n\n")
-	b.WriteString(commentIdentifier)
-	b.WriteString("\n")
-	return b.String()
-}
-
-// commentWrapperLen is how many bytes wrapComment() adds around a body. None of
-// it is visible to markdown.go's budget, so String() subtracts it - otherwise a
-// long ARGO_DIFF_COMMENT_PREAMBLE plus a full-size body is a 422 from the API
-// and no comment at all. Derived from wrapComment() rather than recomputed, so
-// the two cannot drift apart.
-func commentWrapperLen() int {
-	return len(wrapComment(""))
 }
 
 // Creates or updates comment on the specified pull request
@@ -422,7 +368,7 @@ func Comment(ctx context.Context, owner, repo string, prNum int, sha string, com
 	}
 	nextExistingCommentIdx := 0
 	for i, commentBody := range commentBodies {
-		newCommentBody := wrapComment(commentBody)
+		newCommentBody := comment.Wrap(commentBody)
 		var existingComment *github.IssueComment
 		var issueComment *github.IssueComment
 		var resp *github.Response
@@ -453,7 +399,7 @@ func Comment(ctx context.Context, owner, repo string, prNum int, sha string, com
 	}
 	for nextExistingCommentIdx < len(existingComments) {
 		existingComment := existingComments[nextExistingCommentIdx]
-		truncateCommentBody := "[Outdated argo-diff content]\n\n" + commentIdentifier + "\n"
+		truncateCommentBody := "[Outdated argo-diff content]\n\n" + comment.Identifier() + "\n"
 		issueComment, resp, err := commentClient.Issues.UpdateComment(ctx, owner, repo, *existingComment.ID, github.IssueCommentRequest{Body: truncateCommentBody})
 		if resp != nil {
 			log.Info().Msgf("%s received from %s", resp.Status, resp.Request.URL.String())

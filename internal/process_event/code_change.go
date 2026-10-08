@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/vince-riv/argo-diff/internal/argocd"
+	"github.com/vince-riv/argo-diff/internal/comment"
 	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/github"
 	"github.com/vince-riv/argo-diff/internal/ignorable"
@@ -218,7 +219,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 	errorCount := 0  // keep track of the number of errors
 	changeCount := 0 // how many apps have changes
 	firstError := "" // string of the first error we receive - used in commit status message
-	cMarkdown := github.CommentMarkdown{}
+	cMarkdown := comment.CommentMarkdown{Dialect: comment.GitHub}
 	// parsed once per event, not per application. A broken global setting shows
 	// up as a comment-level notice
 	ignorableCfg := ignorable.LoadGlobal()
@@ -236,7 +237,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 			errorCount++
 			// fatal: ErrStr renders as a red [!CAUTION] alert and this app
 			// contributes no diffs
-			_ = cMarkdown.AppMarkdown(github.AppMarkdownOpts{
+			_ = cMarkdown.AppMarkdown(comment.AppMarkdownOpts{
 				Name: appName, ErrStr: a.WarnStr,
 				SyncStatus: appSyncStatus, HealthStatus: appHealthStatus, HealthMsg: appHealthMsg,
 			})
@@ -252,7 +253,7 @@ func ProcessCodeChange(eventInfo webhook.EventInfo, devMode bool, wg *sync.WaitG
 				// commit status alone - unlike the fatal branch above
 				// an invalid annotation is advisory too: it joins this app's notice
 				policy, annotationWarnings := ignorableCfg.ForApp(a.ArgoApp.GetAnnotations())
-				appMarkdown := cMarkdown.AppMarkdown(github.AppMarkdownOpts{
+				appMarkdown := cMarkdown.AppMarkdown(comment.AppMarkdownOpts{
 					Name: appName, NoticeStr: joinNotice(a.NoticeStr, annotationWarnings),
 					SyncStatus: appSyncStatus, HealthStatus: appHealthStatus, HealthMsg: appHealthMsg,
 				})

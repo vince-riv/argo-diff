@@ -1,4 +1,4 @@
-package github
+package comment
 
 import (
 	"fmt"
@@ -12,12 +12,6 @@ import (
 
 	"github.com/vince-riv/argo-diff/internal/config"
 )
-
-// githubCommentHardMax is GitHub's own cap on an issue comment body, per
-// https://github.com/orgs/community/discussions/27190#discussioncomment-3254953
-// Nothing this package emits may exceed it: a body over the cap is a 422 from
-// the API, which means no comment at all.
-const githubCommentHardMax = 262144
 
 const (
 	// defaultIndexCount renders the summary index once two or more applications
@@ -102,16 +96,17 @@ func lineMaxChars() int {
 }
 
 // commentMaxLen is the cap on one rendered comment, including the preamble and
-// marker Comment() wraps around it. It can be lowered (a GitHub Enterprise
+// marker Wrap() adds around it. It can be lowered (a GitHub Enterprise
 // instance with a smaller cap, or forcing a split in testing) but never raised
-// past what the API accepts.
-func commentMaxLen() int {
-	n := envInt("ARGO_DIFF_COMMENT_MAX_CHARS", githubCommentHardMax)
-	if n <= 0 || n > githubCommentHardMax {
-		if n != githubCommentHardMax {
-			log.Warn().Msgf("ARGO_DIFF_COMMENT_MAX_CHARS %d is out of range - using %d", n, githubCommentHardMax)
+// past what the dialect's API accepts.
+func commentMaxLen(d Dialect) int {
+	d = d.orDefault()
+	n := envInt("ARGO_DIFF_COMMENT_MAX_CHARS", d.HardMax)
+	if n <= 0 || n > d.HardMax {
+		if n != d.HardMax {
+			log.Warn().Msgf("ARGO_DIFF_COMMENT_MAX_CHARS %d is out of range - using %d", n, d.HardMax)
 		}
-		return githubCommentHardMax
+		return d.HardMax
 	}
 	return n
 }
@@ -147,7 +142,7 @@ func collapseResourceCount() int {
 }
 
 // commentBudget is how much rendered markdown one comment body may hold, after
-// subtracting what Comment() adds around it.
+// subtracting what Wrap() adds around it.
 //
 // The floor keeps finalize()'s invariant unconditional: below roughly
 // len(truncatedMarker)+truncTailReserve there is no room to truncate into, so
@@ -156,20 +151,21 @@ func collapseResourceCount() int {
 // ARGO_DIFF_COMMENT_PREAMBLE, so the only cap breached is one they set
 // themselves - but the warning is the part they need, since nothing else says
 // their preamble has eaten the comment.
-func commentBudget() int {
-	n := commentMaxLen() - commentWrapperLen()
+func commentBudget(d Dialect) int {
+	d = d.orDefault()
+	n := commentMaxLen(d) - commentWrapperLen()
 	if n >= minResourceLen {
 		return n
 	}
 	log.Warn().Msgf("ARGO_DIFF_COMMENT_MAX_CHARS %d leaves only %d bytes after the preamble and marker",
-		commentMaxLen(), n)
-	// The floor may never exceed what GitHub itself accepts: raising the budget
+		commentMaxLen(d), n)
+	// The floor may never exceed what the API itself accepts: raising the budget
 	// past the real headroom turns a useless-but-postable body into a 422, and
 	// posting nothing is worse than posting something tiny. boundPreamble()
 	// keeps this out of reach for the preamble, but commentIdentifier carries
 	// ARGO_DIFF_CONTEXT_STR, which stays unbounded because comment matching
 	// depends on it.
-	if room := githubCommentHardMax - commentWrapperLen(); room < minResourceLen {
+	if room := d.HardMax - commentWrapperLen(); room < minResourceLen {
 		return max(room, 0)
 	}
 	return minResourceLen
@@ -339,9 +335,15 @@ type ArgoAppMarkdown struct {
 	HealthStatus string
 	HealthMsg    string
 	Resources    []resourceMarkdown
+	// dialect is copied from the CommentMarkdown that created this app, so
+	// AddResourceDiff() can size a resource against the right budget.
+	dialect Dialect
 }
 
 type CommentMarkdown struct {
+	// Dialect is the target provider's rendering rules. Set it before the
+	// first AppMarkdown() call; the zero value means GitHub.
+	Dialect  Dialect
 	Preamble string
 	// Notices are comment-level advisories - a deprecation, or a capability
 	// disabled by the environment. Rendered as [!NOTE] alerts on the first body.
@@ -362,8 +364,15 @@ type AppMarkdownOpts struct {
 	HealthMsg    string
 }
 
+// dialect is c.Dialect, or GitHub for the zero value - GitHub is the default
+// provider.
+func (c CommentMarkdown) dialect() Dialect {
+	return c.Dialect.orDefault()
+}
+
 func (c *CommentMarkdown) AppMarkdown(o AppMarkdownOpts) *ArgoAppMarkdown {
 	a := &ArgoAppMarkdown{
+		dialect:      c.dialect(),
 		AppName:      o.Name,
 		ErrStr:       truncateNotice(o.ErrStr),
 		NoticeStr:    truncateNotice(o.NoticeStr),
@@ -456,7 +465,7 @@ func (a ArgoAppMarkdown) maxResourceBodyLen(summary string) int {
 	// two. ErrStr/NoticeStr are set by AppMarkdown() before any
 	// AddResourceDiff() call, so alerts() is complete here.
 	head := len(appSeparator) + len(a.alerts()) + len(a.OverviewStr(false, true))
-	n := commentBudget() - splitReserve - head - len(summary) - markup
+	n := commentBudget(a.dialect) - splitReserve - head - len(summary) - markup
 	if n < minResourceLen {
 		return minResourceLen
 	}
@@ -604,10 +613,10 @@ func (c CommentMarkdown) indexTable() string {
 
 // String renders the comment, splitting it across as many bodies as it takes.
 // Every append is checked against a budget that already accounts for what
-// Comment() wraps around each body and for the closing tags and markers added
+// Wrap() adds around each body and for the closing tags and markers added
 // after a check has passed - see splitReserve.
 func (c CommentMarkdown) String() []string {
-	budget := commentBudget()
+	budget := commentBudget(c.dialect())
 	limit := budget - splitReserve
 	if limit < minResourceLen {
 		limit = minResourceLen
@@ -682,7 +691,7 @@ func (c CommentMarkdown) String() []string {
 }
 
 // finalize labels continuation bodies and enforces the hard cap. Nothing above
-// this point may emit a body GitHub would reject: a 422 means no comment at
+// this point may emit a body the API would reject: a 422 means no comment at
 // all, which is worse than a truncated one.
 func finalize(bodies []string, budget int) []string {
 	if len(bodies) > 1 {

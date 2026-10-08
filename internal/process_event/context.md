@@ -55,10 +55,10 @@ into an exit code.
   success on a partial diff is worse than failing.
 - An application with `WarnStr` (its diff failed) is **fatal**: it counts as an error →
   `StatusFailure` + `*callerErr`, and its diffs are suppressed. Passed as
-  `github.AppMarkdownOpts.ErrStr`, which renders as a red `> [!CAUTION]` alert.
+  `comment.AppMarkdownOpts.ErrStr`, which renders as a red `> [!CAUTION]` alert.
 - An application with `NoticeStr` is **advisory**: its diffs render as normal with the notice above
   them, and `errorCount`, `firstError`, the status and `*callerErr` are all untouched. Passed as
-  `github.AppMarkdownOpts.NoticeStr`, which renders as a blue `> [!NOTE]` alert. Used when the diff
+  `comment.AppMarkdownOpts.NoticeStr`, which renders as a blue `> [!NOTE]` alert. Used when the diff
   is good but something alongside it degraded — today, an app-of-apps whose children couldn't be
   enumerated. It needs no term in the "should we comment at all" condition: `NoticeStr` is only ever
   set on an app that already has changed resources, so it implies `changeCount > 0`.

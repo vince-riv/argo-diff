@@ -7,7 +7,7 @@ documentation, and this directory holds what it references.
 
 Screenshots embedded in `README.md`'s "Screenshots" section: a simple comment, a truncated long
 line, an out-of-sync application, and a Helm application run via GitHub Actions. Replace them when
-comment rendering changes visibly (`internal/github/markdown.go`).
+comment rendering changes visibly (`internal/comment/markdown.go`).
 
 ## k8s/
 
