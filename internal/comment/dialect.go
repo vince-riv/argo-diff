@@ -6,6 +6,11 @@ package comment
 // the API, which means no comment at all.
 const githubCommentHardMax = 262144
 
+// gitlabNoteHardMax is GitLab's cap on a note body: 1 MiB, counted in bytes
+// (verified against gitlab.com in issue #160, Phase 0: 1,048,577 bytes is a
+// 400). len() counts bytes, so multi-byte text is sized correctly.
+const gitlabNoteHardMax = 1048576
+
 // Dialect is one provider's comment rendering rules.
 //
 // Every supported provider renders the GitHub alert syntax (> [!NOTE]) and
@@ -33,5 +38,10 @@ func (d Dialect) orDefault() Dialect {
 // GitHub is the github.com dialect.
 var GitHub = Dialect{Name: "github", HardMax: githubCommentHardMax}
 
+// GitLab is the GitLab dialect (gitlab.com and self-managed 17.10+, the first
+// release with alerts). Alerts nested in <details> render on gitlab.com but
+// were not checked on 17.10, so they are hoisted as for GitHub.
+var GitLab = Dialect{Name: "gitlab", HardMax: gitlabNoteHardMax}
+
 // Dialects lists every known dialect. Tests render through each of them.
-var Dialects = []Dialect{GitHub}
+var Dialects = []Dialect{GitHub, GitLab}

@@ -15,11 +15,17 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 
+	"github.com/vince-riv/argo-diff/internal/comment"
 	"github.com/vince-riv/argo-diff/internal/scm"
 )
 
 // testProject is the captured fixtures' project, as the API addresses it.
 const testProject = "vrivellino%2Fargo-diff"
+
+// fixtureMarker is the identifier marker in the captured notes. serveFixture
+// swaps it for comment.Identifier(), which init() derives from the
+// environment, so tests find the captured argo-diff note as their own.
+const fixtureMarker = "<!-- comment produced by argo-diff[test] -->"
 
 // testRepo is the captured fixtures' project.
 var testRepo = scm.RepoRef{Owner: "vrivellino", Name: "argo-diff"}
@@ -103,7 +109,8 @@ func newFixtureServer(t *testing.T, routes ...fixtureRoute) *fixtureServer {
 }
 
 // serveFixture writes gitlab_testdata/api/<name>.json, with the status and
-// headers from <name>.headers (gitlab.com URLs in them point at serverURL).
+// headers from <name>.headers (gitlab.com URLs in them point at serverURL) and
+// fixtureMarker replaced by comment.Identifier().
 // Without a headers file the status is 200, or 400 for fixtures that hold only
 // an error body.
 func serveFixture(t *testing.T, w http.ResponseWriter, name, serverURL string) {
@@ -114,6 +121,7 @@ func serveFixture(t *testing.T, w http.ResponseWriter, name, serverURL string) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	body = bytes.ReplaceAll(body, []byte(fixtureMarker), []byte(comment.Identifier()))
 	status := http.StatusOK
 	headers, err := os.ReadFile(filepath.Join("gitlab_testdata", "api", name+".headers"))
 	switch {

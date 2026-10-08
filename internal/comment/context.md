@@ -7,7 +7,7 @@ in through a `Dialect`. Nothing here calls an API.
 | File | Contents |
 | ---- | -------- |
 | `markdown.go` | `CommentMarkdown` / `ArgoAppMarkdown` — renders diffs into comment bodies and splits them across comments |
-| `dialect.go` | `Dialect` (per-provider rules), `GitHub`, `Dialects` |
+| `dialect.go` | `Dialect` (per-provider rules), `GitHub`, `GitLab`, `Dialects` |
 | `wrap.go` | `Wrap()`, `Identifier()`, `SetIdentifierRef()`, `boundPreamble()` — what surrounds every posted body |
 | `refresh.go` | `IsRefreshComment()` — whether a comment on a change request asks argo-diff to re-run |
 | `markdown_test.go` | Rendering, splitting and budget tests; no golden fixtures, assertions are on invariants |
@@ -16,14 +16,17 @@ in through a `Dialect`. Nothing here calls an API.
 ## Dialects
 
 A `Dialect` carries what differs between providers. Today that is `HardMax`, the largest body the
-API accepts, in bytes. `CommentMarkdown.Dialect` selects one; **the zero value means `GitHub`**, the
+API accepts, in bytes (GitHub: 262144; GitLab: 1048576, ie: 1 MiB, verified in issue #160
+Phase 0). `CommentMarkdown.Dialect` selects one; **the zero value means `GitHub`**, the
 default provider. That fallback lives in `Dialect.orDefault()`, which `commentMaxLen()` and
 `commentBudget()` apply themselves, so even an `ArgoAppMarkdown` built without `AppMarkdown()` is
 never sized against a `HardMax` of 0. `AppMarkdown()` copies the dialect into each `ArgoAppMarkdown`, so set
 `Dialect` before the first `AppMarkdown()` call.
 
 Every supported dialect uses the GitHub alert syntax and renders alerts only at the top level, so
-alerts are always hoisted (see below). A provider that differs gets a new `Dialect` field, not a
+alerts are always hoisted (see below). GitLab (17.10+, the first release with alerts) does render
+alerts inside `<details>` on gitlab.com, but that was not checked on 17.10, so its dialect hoists
+them too. A provider that differs gets a new `Dialect` field, not a
 branch on `Name`. Dialects live here rather than in provider packages so tests in this package can
 render through all of them (`Dialects`) without an import cycle. Add a new dialect to `Dialects`.
 
@@ -124,7 +127,9 @@ limit  := budget - splitReserve
 ```
 
 - `commentMaxLen(d)` is `ARGO_DIFF_COMMENT_MAX_CHARS`, defaulting to — and clamped at — the
-  dialect's `HardMax` (GitHub: `githubCommentHardMax`, 262144).
+  dialect's `HardMax` (GitHub: `githubCommentHardMax`, 262144; GitLab: `gitlabNoteHardMax`,
+  1048576). Every length here is `len()`, in **bytes**. GitLab counts its limit in bytes, so
+  measuring runes would let multi-byte text overshoot it.
 - `commentBudget()` has a `minResourceLen` floor. Below roughly
   `len(truncatedMarker)+truncTailReserve` there is no room for `finalize()` to truncate *into*, so
   it would emit a marker that is itself over budget. The warning is the useful part, since nothing
