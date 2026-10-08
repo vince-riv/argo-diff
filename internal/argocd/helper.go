@@ -487,6 +487,20 @@ func filterApplications(a []Application, eventInfo webhook.EventInfo, multiSourc
 	return appList, nil
 }
 
+// repoHosts are the hosts of the enabled scm providers. gitRepoMatch() tries
+// them before its host-agnostic fallback. cmd/main.go sets them at startup,
+// before any event is processed; the default covers tests and GitHub.
+var repoHosts = []string{"github.com"}
+
+// SetRepoHosts replaces the hosts gitRepoMatch() matches exactly. Call it once
+// at startup, before processing any event.
+func SetRepoHosts(hosts []string) {
+	if len(hosts) == 0 {
+		return
+	}
+	repoHosts = hosts
+}
+
 func gitRepoMatch(appSrc ApplicationSource, repoOwner, repoName string) bool {
 	if appSrc.Chart != "" {
 		// Chart/OCI registry sources aren't git remotes, so RepoURL isn't a git
@@ -497,12 +511,14 @@ func gitRepoMatch(appSrc ApplicationSource, repoOwner, repoName string) bool {
 		return false
 	}
 	repoUrl := appSrc.RepoURL
-	const githubHost = "github.com"
-	candidates := []string{
-		fmt.Sprintf("%s/%s/%s.git", githubHost, repoOwner, repoName),
-		fmt.Sprintf("%s:%s/%s.git", githubHost, repoOwner, repoName),
-		fmt.Sprintf("%s/%s/%s", githubHost, repoOwner, repoName),
-		fmt.Sprintf("%s:%s/%s", githubHost, repoOwner, repoName),
+	var candidates []string
+	for _, host := range repoHosts {
+		candidates = append(candidates,
+			fmt.Sprintf("%s/%s/%s.git", host, repoOwner, repoName),
+			fmt.Sprintf("%s:%s/%s.git", host, repoOwner, repoName),
+			fmt.Sprintf("%s/%s/%s", host, repoOwner, repoName),
+			fmt.Sprintf("%s:%s/%s", host, repoOwner, repoName),
+		)
 	}
 	log.Debug().Msgf("gitRepoMatch() - matching candidates: %v", candidates)
 	for _, candidate := range candidates {
@@ -511,11 +527,12 @@ func gitRepoMatch(appSrc ApplicationSource, repoOwner, repoName string) bool {
 		}
 	}
 	if strings.ToLower(os.Getenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH")) == "true" {
-		log.Debug().Msg("gitRepoMatch() - non-github host fallback disabled via ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH")
+		log.Debug().Msg("gitRepoMatch() - host-agnostic fallback disabled via ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH")
 		return false
 	}
-	// Fallback for non-github.com hosts (GitHub Enterprise, AWS CodeConnections,
-	// mirrors, etc.): match the owner/repo path suffix regardless of host. The
+	// Fallback for hosts no enabled provider names (GitHub Enterprise, AWS
+	// CodeConnections, mirrors, etc.): match the owner/repo path suffix
+	// regardless of host. The
 	// leading separator ('/' for HTTP(S) paths, ':' for scp-style SSH) anchors
 	// the owner boundary so a URL ending in "…/otherowner/repo" is not matched
 	// for owner "owner". Comparison is case-insensitive since git hosting

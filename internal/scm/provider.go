@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/vince-riv/argo-diff/internal/comment"
+	"github.com/vince-riv/argo-diff/internal/webhook"
 )
 
 // DefaultProvider serves events that don't name a provider, so event files
@@ -29,6 +30,29 @@ type Provider interface {
 	SetStatus(ctx context.Context, repo RepoRef, sha string, state Status, description string, dryRun bool) error
 	// WebhookHandler verifies and parses this provider's webhook requests.
 	WebhookHandler() WebhookHandler
+
+	// Enabled reports whether the provider's credentials are present. Only
+	// enabled providers are registered.
+	Enabled() bool
+	// ValidateConfig reports a configuration problem in an enabled provider
+	// (eg: an incomplete set of credentials). Startup fails on it.
+	ValidateConfig() error
+	// CredentialsHint names the variables that enable the provider, for the
+	// error when no provider is enabled.
+	CredentialsHint() string
+	// ConnectivityCheck calls the provider's API to confirm the credentials
+	// work. Providers honor ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS themselves.
+	ConnectivityCheck() error
+	// RepoHosts are the hostnames this provider's repositories live on (eg:
+	// "github.com"), used to match ArgoCD application sources to a change.
+	RepoHosts() []string
+
+	// DetectCI reports whether argo-diff runs inside this provider's CI (eg:
+	// GITHUB_ACTIONS=true). The first enabled provider that detects its CI
+	// gets a single run with EventFromCIEnv().
+	DetectCI() bool
+	// EventFromCIEnv builds the event from the CI job's environment.
+	EventFromCIEnv() (webhook.EventInfo, error)
 }
 
 var (

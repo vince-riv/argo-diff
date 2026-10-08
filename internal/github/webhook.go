@@ -33,6 +33,14 @@ func (WebhookHandler) EventName(h http.Header) string {
 	return h.Get(eventHeader)
 }
 
+// CheckConfig requires GITHUB_WEBHOOK_SECRET, which Verify() needs.
+func (WebhookHandler) CheckConfig() error {
+	if webhookSecret == "" {
+		return errors.New("GITHUB_WEBHOOK_SECRET environment variable not set")
+	}
+	return nil
+}
+
 // Verify checks the X-Hub-Signature-256 HMAC against GITHUB_WEBHOOK_SECRET.
 func (WebhookHandler) Verify(h http.Header, body []byte) error {
 	if !VerifySignature(body, h.Get(signatureHeader), webhookSecret) {

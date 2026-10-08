@@ -34,7 +34,7 @@ internal/gendiff  (no importers — see its context.md)
 | `gendiff/` | Unified-diff helper, currently unused |
 
 `webhook.EventInfo` is the value that flows through the whole pipeline; if you add a field, check
-every producer: `github.ProcessPullRequest`, `github.ProcessComment`, `server.eventInfoFromEnv`,
+every producer: `github.ProcessPullRequest`, `github.ProcessComment`, `github.Provider.EventFromCIEnv`,
 `server.eventInfoFromFile`, and the `/dev` handler.
 
 ## Conventions

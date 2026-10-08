@@ -76,11 +76,36 @@ func startServer(listenHost string, listenPort int, devMode bool) {
 	server.StartWebhookProcessor(addr, devMode)
 }
 
+// knownProviders lists every scm provider argo-diff supports. main()
+// registers the ones whose credentials are present.
+var knownProviders = []scm.Provider{github.Provider{}}
+
+// registerProviders registers every enabled provider and fatals when none is,
+// or when an enabled one is misconfigured.
+func registerProviders() []scm.Provider {
+	var hints []string
+	for _, p := range knownProviders {
+		if !p.Enabled() {
+			log.Debug().Msgf("%s credentials not set - %s support is disabled", p.Name(), p.Name())
+			hints = append(hints, p.CredentialsHint())
+			continue
+		}
+		if err := p.ValidateConfig(); err != nil {
+			log.Fatal().Err(err).Msgf("Invalid %s configuration", p.Name())
+		}
+		log.Info().Msgf("%s support is enabled", p.Name())
+		scm.Register(p)
+	}
+	providers := scm.Providers()
+	if len(providers) == 0 {
+		log.Fatal().Msgf("No source control provider credentials are set; set one of: %s", strings.Join(hints, "; "))
+	}
+	return providers
+}
+
 func main() {
 	var err error
 	flag.Parse()
-
-	githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 
 	// make sure critical secrets are set in the environment
 	if os.Getenv("ARGOCD_AUTH_TOKEN") == "" {
@@ -89,20 +114,11 @@ func main() {
 	if os.Getenv("ARGOCD_SERVER_ADDR") == "" {
 		log.Fatal().Msg("ARGOCD_SERVER_ADDR environment variable not set")
 	}
-	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") == "" && os.Getenv("GITHUB_TOKEN") == "" {
-		log.Info().Msg("GITHUB_PERSONAL_ACCESS_TOKEN or GITHUB_TOKEN environment variable not set - assuming Github App installation")
-		for _, e := range []string{"GITHUB_APP_ID", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY"} {
-			if os.Getenv(e) == "" {
-				log.Fatal().Msgf("%s environment variable is not set for Github App installations", e)
-			}
-		}
-	}
+	providers := registerProviders()
 
 	if os.Getenv("APP_ENV") == "dev" {
 		serverDevMode = true
 	}
-
-	scm.Register(github.Provider{})
 
 	config.LogBypassConfig()
 	ignorable.LogConfig()
@@ -113,13 +129,24 @@ func main() {
 		log.Fatal().Err(err).Msg("Connectivity check to ArgoCD failed")
 	}
 
-	// if running under Github Actions, skip github connectivity check
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
-		log.Info().Msg("GITHUB_ACTIONS set in the environemtn - running once with event data from environment")
-		if process_event.RequireAppMatch() {
-			log.Warn().Msg("ARGO_DIFF_REQUIRE_APP_MATCH is set but has no effect under GitHub Actions, which skips commit statuses already")
+	// application sources on these hosts match a change by owner/repo exactly
+	var repoHosts []string
+	for _, p := range providers {
+		repoHosts = append(repoHosts, p.RepoHosts()...)
+	}
+	argocd.SetRepoHosts(repoHosts)
+
+	// in a provider's CI (eg: GitHub Actions), run once with event data from
+	// the environment and skip the provider connectivity checks
+	for _, p := range providers {
+		if !p.DetectCI() {
+			continue
 		}
-		err = server.ProcessGithubAction()
+		log.Info().Msgf("Running in %s CI - running once with event data from the environment", p.Name())
+		if process_event.RequireAppMatch() {
+			log.Warn().Msg("ARGO_DIFF_REQUIRE_APP_MATCH is set but has no effect in CI, which skips commit statuses already")
+		}
+		err = server.ProcessCI(p)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -127,9 +154,11 @@ func main() {
 		return
 	}
 
-	// check github connectivity for run-once and server modes
-	if err = github.ConnectivityCheck(); err != nil {
-		log.Fatal().Err(err).Msg("Connectivity check to Github API failed")
+	// check provider connectivity for run-once and server modes
+	for _, p := range providers {
+		if err = p.ConnectivityCheck(); err != nil {
+			log.Fatal().Err(err).Msgf("Connectivity check to %s API failed", p.Name())
+		}
 	}
 
 	// if event file is defined, process it and exit
@@ -143,8 +172,10 @@ func main() {
 	}
 
 	// other assume we're running as a web server
-	if githubWebhookSecret == "" {
-		log.Fatal().Msg("GITHUB_WEBHOOK_SECRET environment variable not set")
+	for _, p := range providers {
+		if err = p.WebhookHandler().CheckConfig(); err != nil {
+			log.Fatal().Err(err).Msgf("%s webhooks are not configured", p.Name())
+		}
 	}
 	startServer(serverListenHost, serverListenPort, serverDevMode)
 }

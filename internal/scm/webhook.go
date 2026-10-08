@@ -32,6 +32,9 @@ type WebhookEvent struct {
 // WebhookHandler authenticates and parses one provider's webhook requests. The
 // server reads the body once and passes it to both methods.
 type WebhookHandler interface {
+	// CheckConfig reports missing webhook configuration (eg: the secret). The
+	// server refuses to start for an enabled provider that fails it.
+	CheckConfig() error
 	// EventName is the event type named by the request headers, for logs.
 	EventName(h http.Header) string
 	// Verify authenticates the request; an error means reject it.

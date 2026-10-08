@@ -24,10 +24,18 @@ issue #160 adds GitLab.
 
 ## Provider and registry
 
-`Provider` is everything `process_event.ProcessCodeChange()` needs: the `Commenter` primitives plus
-`Name()`, `Dialect()`, `ListChangedFiles()` and `SetStatus()`. GitHub's is `github.Provider`.
+`Provider` is what argo-diff needs from one source control provider. GitHub's is `github.Provider`.
 
-`cmd/main.go` calls `Register()` at startup. `Lookup(name)` returns a provider by name; **an empty
+- **Processing** (`process_event.ProcessCodeChange()`): the `Commenter` primitives plus `Name()`,
+  `Dialect()`, `ListChangedFiles()` and `SetStatus()`.
+- **Webhooks**: `WebhookHandler()` (below).
+- **Startup** (`cmd/main.go`): `Enabled()` (credentials present), `ValidateConfig()`,
+  `CredentialsHint()`, `ConnectivityCheck()` (honors `ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS` itself),
+  `RepoHosts()` (fed to `argocd.SetRepoHosts()`), and CI detection: `DetectCI()` /
+  `EventFromCIEnv()`.
+
+The registry holds **enabled providers only**: `cmd/main.go` calls `Register()` at startup for each
+provider whose `Enabled()` is true. `Lookup(name)` returns a provider by name; **an empty
 name means `DefaultProvider` (`github`)**, which keeps event files and webhooks from before
 multi-provider support working. `Providers()` lists them sorted by name.
 
@@ -62,7 +70,9 @@ primitives. In order:
 notes). Never compare comment bodies for equality — GitLab trims a trailing newline on save; match
 with `strings.Contains` on the marker, as `ExistingComments()` does.
 
-`comment_test.go` drives the algorithm with an in-memory fake `Commenter`.
+`comment_test.go` drives the algorithm with an in-memory fake `Commenter`. Test doubles of the
+whole `Provider` embed a nil `scm.Provider` and override only what the test reaches, so an
+unexpected call panics instead of silently passing.
 
 ## Rules
 

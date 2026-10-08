@@ -27,7 +27,7 @@ into an exit code.
    The `!eventInfo.Refresh` bypass covers **two** cases, because `Refresh` carries two meanings.
    One is an explicit `argo diff` PR comment, so a human who asks for a diff always gets an answer.
    The other is **GitHub Actions mode, which sets `Refresh` unconditionally**
-   (`server.eventInfoFromEnv()`), making the flag inert there. That is intended, not an oversight:
+   (`github.Provider.EventFromCIEnv()`), making the flag inert there. That is intended, not an oversight:
    the flag suppresses commit-status chatter on org-wide webhook installs, and Actions mode skips
    commit statuses anyway and only runs where the action was deliberately added. `cmd/main.go` logs
    a warning if the flag is set under Actions. Keep `README.md`'s env var table in step with this.

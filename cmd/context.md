@@ -18,27 +18,34 @@ Application entry point. A single file, `main.go` — there is no other command 
 `main()` validates the environment and then dispatches, in this order:
 
 1. Fatals unless `ARGOCD_AUTH_TOKEN` and `ARGOCD_SERVER_ADDR` are set.
-2. Fatals unless GitHub credentials exist: `GITHUB_PERSONAL_ACCESS_TOKEN` or `GITHUB_TOKEN`, else
-   all three of `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY`.
-3. Registers the providers in the `scm` registry (`scm.Register(github.Provider{})`); the server
-   entry points look them up from there.
-4. `APP_ENV=dev` turns on dev mode.
-5. `argocd.ConnectivityCheck()` — always runs, in every mode. It executes `argocd version`, so the
+2. `registerProviders()` walks `knownProviders` (today just `github.Provider{}`). A provider whose
+   `Enabled()` is true — its credentials are present — must pass `ValidateConfig()` (fatal
+   otherwise) and is registered in the `scm` registry; the rest are skipped. **No enabled provider
+   is fatal**, naming each provider's `CredentialsHint()`. For GitHub, any of
+   `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN` or the `GITHUB_APP_*` trio enables it, and with no
+   token all three App variables are required.
+3. `APP_ENV=dev` turns on dev mode.
+4. `argocd.ConnectivityCheck()` — always runs, in every mode. It executes `argocd version`, so the
    `argocd` CLI must be on `PATH` (or named by `ARGOCD_CLI_CMD_NAME`) even for a run that would
    otherwise do nothing, and both client and server must be >= 2.12.0.
-6. `GITHUB_ACTIONS=true` → `server.ProcessGithubAction()`, then return. The GitHub connectivity
-   check is deliberately skipped here. This branch also warns when
-   `process_event.RequireAppMatch()` is true: `ARGO_DIFF_REQUIRE_APP_MATCH` is inert under Actions,
-   because `server.eventInfoFromEnv()` always sets `EventInfo.Refresh` and the match check is gated
-   behind `!Refresh`. That is the only reason `cmd` imports `internal/process_event` — the helper is
-   exported so the parsing rules live in one place. See `internal/process_event/context.md` step 4.
-7. Otherwise `github.ConnectivityCheck()`, then:
+5. `argocd.SetRepoHosts()` with every enabled provider's `RepoHosts()` (see
+   `internal/argocd/context.md`).
+6. **CI detection.** The first enabled provider whose `DetectCI()` is true (GitHub:
+   `GITHUB_ACTIONS=true`) gets `server.ProcessCI(p)`, then return. Provider connectivity checks are
+   deliberately skipped here. This branch also warns when `process_event.RequireAppMatch()` is true:
+   `ARGO_DIFF_REQUIRE_APP_MATCH` is inert in CI, because `EventFromCIEnv()` always sets
+   `EventInfo.Refresh` and the match check is gated behind `!Refresh`. That is the only reason `cmd`
+   imports `internal/process_event` — the helper is exported so the parsing rules live in one
+   place. See `internal/process_event/context.md` step 4.
+7. Otherwise `ConnectivityCheck()` for every enabled provider, then:
    - `-f <file>` → `server.ProcessFileEvent()` and return.
-   - else fatal unless `GITHUB_WEBHOOK_SECRET` is set, and start the webhook server.
+   - else fatal unless every enabled provider's `WebhookHandler().CheckConfig()` passes (GitHub:
+     `GITHUB_WEBHOOK_SECRET` is set), and start the webhook server.
 
-Run-once modes (`ProcessGithubAction`, `ProcessFileEvent`) print the error to stderr and
-`os.Exit(1)`; that non-zero exit is how a GitHub Actions step fails, since commit statuses are
-skipped under Actions.
+Run-once modes (`ProcessCI`, `ProcessFileEvent`) print the error to stderr and `os.Exit(1)`; that
+non-zero exit is how a CI step fails, since commit statuses are skipped in CI.
+
+Adding a provider means adding it to `knownProviders`.
 
 ## Gotchas
 

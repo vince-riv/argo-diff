@@ -1,14 +1,14 @@
 # internal/server/
 
-Entry points that turn an incoming event into a `process_event.ProcessCodeChange()` call. Each one
-picks the provider with `scm.Lookup()`: `ProcessGithubAction()` asks for `github` by name, every
-other entry point for the default provider (`""`, which is GitHub). `cmd/main.go` registers the
-providers before any of these run.
+Entry points that turn an incoming event into a `process_event.ProcessCodeChange()` call. `ProcessCI(p)`
+is handed its provider by `cmd/main.go`; the others pick one with `scm.Lookup()` — the `/webhook`
+route asks for the default provider (`""`, which is GitHub), and `-f` files and `/dev` posts ask for
+`EventInfo.Provider`. `cmd/main.go` registers the enabled providers before any of these run.
 
 | File | Contents |
 | ---- | -------- |
 | `http_server.go` | The webhook HTTP server and its handlers |
-| `run_once.go` | GitHub Actions and event-file modes, plus env logging |
+| `run_once.go` | CI and event-file modes, plus env logging |
 
 ## http_server.go
 
@@ -44,15 +44,12 @@ left to report it to.
 
 ## run_once.go
 
-- `eventInfoFromEnv()` builds the event from GitHub Actions' variables: requires
-  `GITHUB_EVENT_NAME=pull_request`, parses the PR number out of `GITHUB_REF`
-  (`refs/pull/<n>/merge`), splits `GITHUB_REPOSITORY`, and reads `REPO_DEFAULT_REF`,
-  `GITHUB_HEAD_REF`, `GITHUB_BASE_REF`. It sets `Refresh: true` so the sha and refs are re-read
-  from the API rather than trusted from the environment.
+- `ProcessCI(p)` builds the event with `p.EventFromCIEnv()` (GitHub's is in
+  `internal/github/ci.go`) and runs it once.
 - `eventInfoFromFile()` decodes an `EventInfo` JSON document; `-` reads stdin.
-- **`ProcessGithubAction()` passes `devMode=true`.** That is not a bug: dev mode's only remaining
-  effect at that point is dry-running commit statuses, which `github.Status()` (via `Provider.SetStatus()`) already skips under
-  Actions. Comments are still posted.
+- **`ProcessCI()` passes `devMode=true`.** That is not a bug: dev mode's only remaining effect at
+  that point is dry-running commit statuses, which `github.Status()` (via `Provider.SetStatus()`)
+  already skips under Actions. Comments are still posted.
 - `logEnvironmentVariables()` dumps configuration at debug level, redacting the sensitive vars to
   their first three characters. **Add new env vars to one of its two lists** when you introduce
   them.

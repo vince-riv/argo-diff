@@ -12,7 +12,8 @@ requires a code change).
 | `status.go` | `Status()` — commit status checks |
 | `webhook.go` | `WebhookHandler` (the `scm.WebhookHandler` for GitHub), `ProcessPullRequest()`, `ProcessComment()` |
 | `signature.go` | `VerifySignature()` — HMAC-SHA256 over the raw body |
-| `provider.go` | `Provider` — the `scm.Commenter` primitives (comment list/create/update, current user, PR lookup) |
+| `ci.go` | `Provider.DetectCI()` (`GITHUB_ACTIONS=true`) and `Provider.EventFromCIEnv()` |
+| `provider.go` | `Provider` — implements `scm.Provider`: the comment primitives, status, changed files, and the startup checks (`Enabled`, `ValidateConfig`, `ConnectivityCheck`, `RepoHosts`) |
 
 go-github types stay inside this package. `GetPullRequest()` returns an `scm.ChangeRequest` and
 `Status()` takes an `scm.Status` (see `internal/scm/context.md`), so callers never import go-github.
@@ -29,6 +30,15 @@ construction failures only log — the nil client surfaces later as an error.
 from `App.GetSlug()` (falling back to `App.GetName()` if the slug is empty) and appends `[bot]` —
 GitHub builds the bot's real login from the App's slug, not its display name, so using `Name`
 directly breaks comment reuse for any App whose name isn't already slug-shaped.
+
+## GitHub Actions
+
+`EventFromCIEnv()` builds the event from the Actions variables: requires
+`GITHUB_EVENT_NAME=pull_request`, parses the PR number out of `GITHUB_REF` (`refs/pull/<n>/merge`),
+splits `GITHUB_REPOSITORY`, and reads `REPO_DEFAULT_REF`, `GITHUB_HEAD_REF`, `GITHUB_BASE_REF`. A
+malformed `GITHUB_REF` or `GITHUB_REPOSITORY` is an error rather than a panic. It sets
+`Refresh: true` so the sha and refs are re-read from the API rather than trusted from the
+environment.
 
 ## Comment behavior
 

@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/google/go-github/v92/github"
 	"github.com/rs/zerolog/log"
@@ -24,6 +25,50 @@ const providerName = "github"
 func (Provider) Name() string { return providerName }
 
 func (Provider) WebhookHandler() scm.WebhookHandler { return WebhookHandler{} }
+
+// appEnvVars are the three variables a GitHub App installation needs.
+var appEnvVars = []string{"GITHUB_APP_ID", "GITHUB_APP_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY"}
+
+// Enabled reports whether any GitHub credential is set: a token, or any of
+// the GitHub App variables. ValidateConfig() catches an incomplete App setup.
+func (Provider) Enabled() bool {
+	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") != "" || os.Getenv("GITHUB_TOKEN") != "" {
+		return true
+	}
+	for _, e := range appEnvVars {
+		if os.Getenv(e) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateConfig requires all three GitHub App variables when no token is
+// set.
+func (Provider) ValidateConfig() error {
+	if os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN") != "" || os.Getenv("GITHUB_TOKEN") != "" {
+		return nil
+	}
+	log.Info().Msg("GITHUB_PERSONAL_ACCESS_TOKEN or GITHUB_TOKEN environment variable not set - assuming Github App installation")
+	for _, e := range appEnvVars {
+		if os.Getenv(e) == "" {
+			return fmt.Errorf("%s environment variable is not set for Github App installations", e)
+		}
+	}
+	return nil
+}
+
+// CredentialsHint names the variables that enable this provider.
+func (Provider) CredentialsHint() string {
+	return "GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_TOKEN, or GITHUB_APP_ID + GITHUB_APP_INSTALLATION_ID + GITHUB_APP_PRIVATE_KEY"
+}
+
+func (Provider) ConnectivityCheck() error { return ConnectivityCheck() }
+
+// RepoHosts is where GitHub repositories live, for matching ArgoCD
+// application sources. GitHub Enterprise hosts match through argocd's
+// host-agnostic owner/repo fallback.
+func (Provider) RepoHosts() []string { return []string{"github.com"} }
 
 func (Provider) Dialect() comment.Dialect { return comment.GitHub }
 
