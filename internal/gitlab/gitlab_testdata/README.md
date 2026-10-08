@@ -64,12 +64,26 @@ Not captured: a merged-results pipeline (needs Premium).
 
 ## `webhook/` - webhook requests (`<name>.json` body + `<name>.headers`)
 
-| Fixture | `X-Gitlab-Event` | Case |
-| --- | --- | --- |
-| `merge-request-open` | Merge Request Hook | `action: open` |
-| `merge-request-update-new-commits` | Merge Request Hook | `action: update`, `oldrev` set, `changes: {}` |
-| `note-merge-request-create` | Note Hook | `noteable_type: MergeRequest`, `action: create`, no refresh keyword |
-| `note-merge-request-update` | Note Hook | `action: update`: argo-diff-style edit to `[Outdated argo-diff content]` + marker |
+All captured from MR !1 and issue #1 on the test project (2026-10-08). None are derived.
+
+| Fixture | `X-Gitlab-Event` | Case | argo-diff should |
+| --- | --- | --- | --- |
+| `merge-request-open` | Merge Request Hook | `action: open` | run |
+| `merge-request-update-new-commits` | Merge Request Hook | `action: update`, `oldrev` set, `changes: {}` | run |
+| `merge-request-update-target-branch` | Merge Request Hook | `action: update`, `changes`: `target_branch`, `merge_status`, `updated_at` | run |
+| `merge-request-reopen` | Merge Request Hook | `action: reopen`, `changes.state_id` 2 -> 1 | run |
+| `merge-request-update-title` | Merge Request Hook | `action: update`, `changes`: `title`, `updated_at`, `updated_by_id`; no `oldrev` | ignore |
+| `merge-request-update-draft-ready` | Merge Request Hook | `action: update`, `changes`: `draft`, `title`, `updated_at` (Draft -> ready) | ignore |
+| `merge-request-close` | Merge Request Hook | `action: close`, `state: closed`, `changes.state_id` | ignore |
+| `merge-request-update-after-close` | Merge Request Hook | `action: update`, `state: closed`, `changes.state_id`: GitLab sends this right after `close` | ignore |
+| `merge-request-update-after-reopen` | Merge Request Hook | `action: update`, `changes`: `merge_status`, `state_id`: GitLab sends this right after `reopen` | ignore |
+| `merge-request-merge` | Merge Request Hook | `action: merge`, `state: merged`, `changes`: `merge_commit_sha`, `state_id` (merged into scratch branch `phase0-target`) | ignore |
+| `note-merge-request-create` | Note Hook | `noteable_type: MergeRequest`, `action: create`, argo-diff-style body (no refresh keyword) | ignore |
+| `note-merge-request-refresh` | Note Hook | `noteable_type: MergeRequest`, `action: create`, body `argo-diff` (a default refresh keyword) | refresh |
+| `note-merge-request-update` | Note Hook | `action: update`: edit to `[Outdated argo-diff content]` + marker | ignore |
+| `note-issue` | Note Hook | `noteable_type: Issue`, `issue` object instead of `merge_request`, body `argo-diff` | ignore |
+
+The "argo-diff should" column is the intended PR 4.1 behavior, not a capture fact.
 
 Observed but not kept:
 - Note Hook `create` for the three ~1 MiB length-test notes. Each payload was ~2 MB, because the
@@ -77,25 +91,4 @@ Observed but not kept:
   capture endpoint truncated them.
 - Four more `action: update` Note Hooks, same shape as `note-merge-request-update`.
 - No Note Hook was sent for the `added 1 commit` system note.
-
-### Derived (hand-written) webhook fixtures
-
-Files named `*.derived.json` / `*.derived.headers` are **not captures**. They were built from the
-captured `merge-request-open` (MR cases) and `note-merge-request-create` (note cases) payloads by
-changing only the fields listed below, following the GitLab webhook docs. Each has a fresh
-`webhook-id` / `idempotency-key` / `x-gitlab-event-uuid`, a later `webhook-timestamp`, and a
-signature from the same test key. Capturing the real payloads is a planned follow-up; when a real
-capture replaces a derived file, drop the `.derived` suffix and update this table.
-
-| Fixture | `X-Gitlab-Event` | Fields changed from the base payload |
-| --- | --- | --- |
-| `merge-request-close.derived` | Merge Request Hook | `action: close`, `state: closed`, `state_id: 2`; `changes.state_id` 1 -> 2 |
-| `merge-request-reopen.derived` | Merge Request Hook | `action: reopen`, `state: opened`, `state_id: 1`; `changes.state_id` 2 -> 1 |
-| `merge-request-update-title.derived` | Merge Request Hook | `action: update`, new `title`, `last_edited_at` / `last_edited_by_id`; `changes.title`; no `oldrev` |
-| `merge-request-update-target-branch.derived` | Merge Request Hook | `action: update`, `target_branch: release-3.1`; `changes.target_branch` main -> release-3.1; no `oldrev` |
-| `merge-request-merge.derived` | Merge Request Hook | `action: merge`, `state: merged`, `state_id: 3`, `merged_at`, `merge_user_id`, placeholder `merge_commit_sha`, `draft: false`; `changes.state_id` 1 -> 3 |
-| `note-merge-request-refresh.derived` | Note Hook | `note` / `description` = `argo-diff` (a default refresh keyword), new note `id`, `discussion_id`, `url` |
-| `note-issue.derived` | Note Hook | `noteable_type: Issue`, `noteable_id`, `issue` object replaces `merge_request`, note `argo-diff`, issue `url`. Must be ignored |
-
-Known gaps in the derived files: real GitLab may add more `changes` keys (eg: `merge_status`,
-`last_edited_at`) or other fields per action; the `issue` object is a minimal subset of the real one.
+- No Issue Hook: issue events were not enabled on the capture webhook.
