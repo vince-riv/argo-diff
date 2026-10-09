@@ -31,11 +31,13 @@ type Provider interface {
 	// WebhookHandler verifies and parses this provider's webhook requests.
 	WebhookHandler() WebhookHandler
 
-	// Enabled reports whether the provider's credentials are present. Only
-	// enabled providers are registered.
+	// Enabled reports whether the provider's credentials are present.
+	// cmd/main.go registers the providers ARGO_DIFF_SCM_PROVIDERS lists, and
+	// fails startup for a listed one that is not enabled.
 	Enabled() bool
-	// ValidateConfig reports a configuration problem in an enabled provider
-	// (eg: an incomplete set of credentials). Startup fails on it.
+	// ValidateConfig reports a configuration problem in a listed, enabled
+	// provider (eg: an incomplete set of credentials). Startup fails on it. It
+	// runs once at startup, so a provider may build its client here.
 	ValidateConfig() error
 	// CredentialsHint names the variables that enable the provider, for the
 	// error when no provider is enabled.

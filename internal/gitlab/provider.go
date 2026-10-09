@@ -30,9 +30,17 @@ func (Provider) Enabled() bool {
 	return os.Getenv("GITLAB_TOKEN") != ""
 }
 
-// ValidateConfig reports why the client could not be built (eg: a malformed
-// GITLAB_BASE_URL or an unreadable CA file).
-func (Provider) ValidateConfig() error { return clientErr }
+// ValidateConfig builds the API client, reporting why it cannot be built
+// (eg: a malformed GITLAB_BASE_URL or an unreadable CA file). cmd/main.go
+// calls it once at startup, only when gitlab is enabled.
+func (Provider) ValidateConfig() error {
+	c, err := newClient(os.Getenv("GITLAB_TOKEN"), webBaseURL, caFile())
+	if err != nil {
+		return err
+	}
+	client = c
+	return nil
+}
 
 // CredentialsHint names the variable that enables this provider.
 func (Provider) CredentialsHint() string { return "GITLAB_TOKEN" }

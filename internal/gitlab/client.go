@@ -26,11 +26,11 @@ import (
 const defaultBaseURL = "https://gitlab.com"
 
 var (
-	// client is built in init() when GITLAB_TOKEN is set. Tests swap it for
-	// one pointed at an httptest server.
+	// client is built by Provider.ValidateConfig(), which cmd/main.go calls
+	// only when ARGO_DIFF_SCM_PROVIDERS lists gitlab, so an unlisted GitLab
+	// never builds a client or logs a config error. Tests swap it for one
+	// pointed at an httptest server.
 	client *gitlab.Client
-	// clientErr is why client could not be built; ValidateConfig() reports it.
-	clientErr error
 	// webBaseURL is the instance's web URL without a trailing slash (eg:
 	// "https://gitlab.com"), for RepoHosts() and log links.
 	webBaseURL string
@@ -41,14 +41,6 @@ var (
 
 func init() {
 	webBaseURL = baseURL()
-	token := os.Getenv("GITLAB_TOKEN")
-	if token == "" {
-		return
-	}
-	client, clientErr = newClient(token, webBaseURL, caFile())
-	if clientErr != nil {
-		log.Error().Err(clientErr).Msg("Failed to create gitlab client")
-	}
 }
 
 // baseURL is GITLAB_BASE_URL, else CI_SERVER_URL (set in GitLab CI jobs), else

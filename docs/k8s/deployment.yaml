@@ -45,6 +45,10 @@ spec:
               value: ""
             - name: ARGO_DIFF_CONTEXT_STR
               value: ""
+            # Source control providers to run for (default: github). GitLab also needs
+            # GITLAB_TOKEN; webhooks are GitHub-only for now
+            #- name: ARGO_DIFF_SCM_PROVIDERS
+            #  value: "github,gitlab"
             # Optional PR comment tuning - see the environment variable table in README.md
             #- name: ARGO_DIFF_COMMENT_NOTICE
             #  value: "argo-diff is being migrated to the new cluster on 1 Oct"

@@ -1,7 +1,8 @@
 # internal/gitlab/
 
 The GitLab provider: `Provider` implements `scm.Provider` on top of the GitLab REST API, the way
-`internal/github` does for GitHub, and `cmd/main.go` registers it when `GITLAB_TOKEN` is set.
+`internal/github` does for GitHub, and `cmd/main.go` registers it when `ARGO_DIFF_SCM_PROVIDERS`
+lists `gitlab` (the default is `github` only). `GITLAB_TOKEN` must then be set.
 Built on `gitlab.com/gitlab-org/api/client-go`.
 
 **Today it runs from `-f` event files (and `/dev`) only.** GitLab CI detection is Phase 3 of
@@ -40,7 +41,8 @@ with `/` in it.
 Read in `init()`, like every other package (see `internal/context.md`):
 
 - `GITLAB_TOKEN` — a personal, project or group access token with `api` scope, or a fine-grained
-  token with the MR, note and commit-status permissions. It enables the provider. `CI_JOB_TOKEN`
+  token with the MR, note and commit-status permissions. Required when `ARGO_DIFF_SCM_PROVIDERS`
+  lists `gitlab`. `CI_JOB_TOKEN`
   **cannot** be used: it cannot create notes, post statuses or call `GET /user` (Phase 0).
 - `GITLAB_BASE_URL` — the instance, eg: `https://gitlab.example.com`; falls back to
   `CI_SERVER_URL` (set in GitLab CI jobs), then `https://gitlab.com`. client-go appends `/api/v4`.
@@ -48,8 +50,11 @@ Read in `init()`, like every other package (see `internal/context.md`):
 - `GITLAB_CA_FILE` — a PEM bundle of extra CAs to trust for a self-managed instance, on top of the
   system pool; falls back to `CI_SERVER_TLS_CA_FILE` (set in GitLab CI jobs).
 
-A bad base URL or CA file leaves `client` nil and stores the reason in `clientErr`;
-`ValidateConfig()` returns it, so startup fails with the real cause rather than a nil-client error.
+**The client is built by `Provider.ValidateConfig()`, not in `init()`.** `cmd/main.go` calls it
+only when `gitlab` is listed, so a stray `GITLAB_TOKEN` with a bad CA file or base URL in a
+GitHub-only deployment builds nothing and logs nothing. A bad base URL or CA file makes
+`ValidateConfig()` fail, which fails startup with the real cause. `init()` only resolves
+`webBaseURL`.
 `RepoHosts()` is the base URL's hostname plus its relative URL root, if any.
 
 ## API calls

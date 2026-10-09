@@ -30,13 +30,15 @@ webhook support to come).
 - **Processing** (`process_event.ProcessCodeChange()`): the `Commenter` primitives plus `Name()`,
   `Dialect()`, `ListChangedFiles()` and `SetStatus()`.
 - **Webhooks**: `WebhookHandler()` (below).
-- **Startup** (`cmd/main.go`): `Enabled()` (credentials present), `ValidateConfig()`,
+- **Startup** (`cmd/main.go`): `Enabled()` (credentials present), `ValidateConfig()` (may also
+  build the provider's client: GitLab's is built there, so an unlisted GitLab builds nothing),
   `CredentialsHint()`, `ConnectivityCheck()` (honors `ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS` itself),
   `RepoHosts()` (fed to `argocd.SetRepoHosts()`), and CI detection: `DetectCI()` /
   `EventFromCIEnv()`.
 
 The registry holds **enabled providers only**: `cmd/main.go` calls `Register()` at startup for each
-provider whose `Enabled()` is true. `Lookup(name)` returns a provider by name; **an empty
+provider that `ARGO_DIFF_SCM_PROVIDERS` lists (default `github`), after checking its credentials
+(`Enabled()`) and `ValidateConfig()`. `Lookup(name)` returns a provider by name; **an empty
 name means `DefaultProvider` (`github`)**, which keeps event files and webhooks from before
 multi-provider support working. `Providers()` lists them sorted by name.
 

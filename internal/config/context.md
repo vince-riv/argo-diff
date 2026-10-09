@@ -10,6 +10,7 @@ env var (most packages still read their own directly in `init()`, see each packa
 | ---- | -------- |
 | `connectivity.go` | `ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS` parsing: `BypassConnectivityCheck()`, `LogBypassConfig()` |
 | `collapse.go` | `ARGO_DIFF_COMMENT_COLLAPSE` parsing: `CommentCollapseMode()` and the `CollapseAuto`/`CollapseExpanded`/`CollapseCollapsed` constants |
+| `providers.go` | `ARGO_DIFF_SCM_PROVIDERS` parsing: `ScmProviders()` |
 | `notice.go` | `ARGO_DIFF_COMMENT_NOTICE` plus the in-process notice channel: `Notices()`, `AddNotice()` |
 
 ## `ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS`
@@ -25,6 +26,16 @@ calls it every event, not just at startup).
 
 `LogBypassConfig()` logs the resolved bypass state once. `cmd/main.go` calls it exactly once at
 startup — don't call it from a per-event path, or unknown-token warnings spam the log.
+
+## `ARGO_DIFF_SCM_PROVIDERS`
+
+Which source control providers argo-diff runs for: a comma-separated, case-insensitive,
+whitespace-trimmed list of provider names; **unset or empty means `github`**
+(`DefaultScmProviders`). `ScmProviders(known)` takes the known names from `cmd/main.go`, so this
+package does not list providers itself. Empty entries and duplicates are dropped. Unlike the bypass
+list, an **unknown name is an error** and `true`/`all` are not accepted: this list decides what
+runs, so a typo must fail startup rather than quietly turn a provider off. It also returns whether
+the value was the default, so `cmd/main.go` can tell an operator who never set it what to set.
 
 ## `ARGO_DIFF_COMMENT_COLLAPSE`
 

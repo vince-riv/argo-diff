@@ -18,13 +18,22 @@ Application entry point. A single file, `main.go` — there is no other command 
 `main()` validates the environment and then dispatches, in this order:
 
 1. Fatals unless `ARGOCD_AUTH_TOKEN` and `ARGOCD_SERVER_ADDR` are set.
-2. `registerProviders()` walks `knownProviders` (`github.Provider{}`, `gitlab.Provider{}`). A provider whose
-   `Enabled()` is true — its credentials are present — must pass `ValidateConfig()` (fatal
-   otherwise) and is registered in the `scm` registry; the rest are skipped. **No enabled provider
-   is fatal**, naming each provider's `CredentialsHint()`. For GitHub, any of
-   `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN` or the `GITHUB_APP_*` trio enables it, and with no
-   token all three App variables are required. For GitLab, `GITLAB_TOKEN` enables it, and
-   `ValidateConfig()` fails on a malformed `GITLAB_BASE_URL` or an unreadable `GITLAB_CA_FILE`.
+2. `registerProviders()` registers what `selectProviders(knownProviders)` returns
+   (`github.Provider{}`, `gitlab.Provider{}`), and fatals on its error. **`ARGO_DIFF_SCM_PROVIDERS`
+   decides which providers run** (`config.ScmProviders()`; unset or empty means `github`):
+   - a provider **not in the list is skipped**, even with its credentials set, and its
+     `ValidateConfig()` never runs;
+   - a listed provider whose `Enabled()` is false (no credentials) is an error naming its
+     `CredentialsHint()`. When the list is the default, the error also says to set
+     `ARGO_DIFF_SCM_PROVIDERS` (eg: `gitlab`), since a GitLab-only operator hits this first;
+   - an **unknown name in the list is an error**, unlike the warn-only bypass list: this list
+     decides what runs, so a typo must not turn a provider off without a word;
+   - a listed provider must pass `ValidateConfig()`.
+   For GitHub, any of `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN` or the `GITHUB_APP_*` trio
+   counts as credentials, and with no token all three App variables are required. For GitLab,
+   `GITLAB_TOKEN` does, and `ValidateConfig()` builds the client, failing on a malformed
+   `GITLAB_BASE_URL` or an unreadable `GITLAB_CA_FILE`. `main_test.go` covers `selectProviders()`
+   with stub providers.
 3. `APP_ENV=dev` turns on dev mode.
 4. `argocd.ConnectivityCheck()` — always runs, in every mode. It executes `argocd version`, so the
    `argocd` CLI must be on `PATH` (or named by `ARGOCD_CLI_CMD_NAME`) even for a run that would

@@ -229,9 +229,10 @@ When deployed as a web service, argo-diff accepts all configuration options via 
 When used via GitHub Actions, the relevant options are accepted via inputs. The following table describes
 the accepted environment variables and their respective GitHub Actions inputs.
 
-> **Important:** Valid source control credentials are required to run. For GitHub, either the
-> `GITHUB_APP_*` variables must be set, or `GITHUB_TOKEN` / `GITHUB_PERSONAL_ACCESS_TOKEN` must be set.
-> For GitLab, `GITLAB_TOKEN` must be set. Both can be set at once.
+> **Important:** `ARGO_DIFF_SCM_PROVIDERS` selects the source control providers (default: `github`),
+> and each one listed needs valid credentials. For GitHub, either the `GITHUB_APP_*` variables must
+> be set, or `GITHUB_TOKEN` / `GITHUB_PERSONAL_ACCESS_TOKEN` must be set. For GitLab, `GITLAB_TOKEN`
+> must be set. To use GitLab, set `ARGO_DIFF_SCM_PROVIDERS` to `gitlab`, or `github,gitlab` for both.
 
 Many of these variables have a typed Helm values key (`config.*`, `logLevel`, `secret.*`) — see
 `charts/argo-diff/README.md`. Any variable without a typed key — including ones not listed here —
@@ -266,6 +267,7 @@ can still be set through the chart's `deployment.env` / `deployment.envFrom` pas
 | ARGO_DIFF_MAX_WORKERS            | max_workers                 | no               | `4`      | Max number of ArgoCD applications diffed concurrently (capped at 32). Raising this speeds up runs that match many applications, at the cost of more concurrent load on the ArgoCD repo-server; pair a higher value with a longer `argocd` CLI `--timeout` via `ARGOCD_OPTS` if the repo-server is slow under that load. |
 | ARGO_DIFF_REFRESH_COMMENT_KEYWORDS | N/A                       | no               | `argo diff,argo-diff` | Comma-separated list of PR comments (case-insensitive, trimmed) that re-trigger argo-diff, replacing the default keywords. Each keyword also matches with a trailing `ARGO_DIFF_CONTEXT_STR` suffix (eg: `argo diff prod`). Only takes effect when deployed as a webhook service — GitHub Actions mode doesn't process `issue_comment` events. |
 | ARGO_DIFF_REQUIRE_APP_MATCH  | N/A                         | no               | `false`  | Set to `true` to check for a matching ArgoCD application *before* posting anything to GitHub, and stay completely silent (no commit status, no comment) when nothing matches, instead of posting a `pending` status up front followed by an unconditional `success`. Mainly useful when deployed as a webhook server installed org-wide: without it, every PR in every repo the GitHub App can see gets an argo-diff commit status, even repos ArgoCD doesn't track, which tends to confuse people. The match check itself is cheap (one `argocd app list` call plus local filtering, no `argocd app diff` calls), but it does mean one extra `argocd app list` call on PRs that do match, and it skips clearing a stale prior comment if a later push makes a previously-matching PR stop matching. Has no effect in GitHub Actions mode — it skips commit statuses already and only runs in repos the action was added to, so there is no chatter to suppress; argo-diff logs a warning if the flag is set there. |
+| ARGO_DIFF_SCM_PROVIDERS          | N/A                         | no               | `github` | Comma-separated list of the source control providers argo-diff runs for: `github`, `gitlab` (eg: `gitlab`, or `github,gitlab` for both). Case-insensitive. Each provider listed needs its credentials; a provider not listed is ignored even when its credentials are set. An unknown name stops argo-diff at startup. |
 | ARGO_DIFF_TIMEOUT                | timeout                     | no               | `3m`     | How long argo-diff may spend generating diffs for a single event, as a Go duration (eg: `5m`, `90s`); a bare integer is treated as seconds. Raise this when a change matches many ArgoCD applications, since each one costs a round trip to the argocd server. Reporting results to GitHub gets up to 30 seconds on top of this, so a run can take that much longer than the value set here. Any applications left undiffed when the time runs out are named in a warning in the PR comment, and the run is failed — a failed step under GitHub Actions (commit statuses are skipped there), or a `failure` commit status when deployed as a service. |
 | COMMENT_LINE_MAX_CHARS           | comment_line_max_chars      | no               | `175`    | Individual lines in argo-diff PR comments longer than this are truncated. |
 | GITHUB_APP_ID                    | N/A                         | no               |          | GitHub Application Id (see deployment instructions). |
@@ -276,7 +278,7 @@ can still be set through the chart's `deployment.env` / `deployment.envFrom` pas
 | GITHUB_WEBHOOK_SECRET            | N/A                         | yes for deployed |          | Shared secret for GitHub webhook validation. Required when deployed. |
 | GITLAB_BASE_URL                  | N/A                         | no               | `https://gitlab.com` | URL of the GitLab instance, eg: `https://gitlab.example.com`. Falls back to `CI_SERVER_URL`, then gitlab.com. |
 | GITLAB_CA_FILE                   | N/A                         | no               |          | Path to a PEM bundle of extra CA certificates to trust for a self-managed GitLab instance. Falls back to `CI_SERVER_TLS_CA_FILE`. |
-| GITLAB_TOKEN                     | N/A                         | yes for GitLab   |          | GitLab access token (personal, project or group access token with `api` scope). Enables GitLab support. `CI_JOB_TOKEN` cannot be used: it cannot write merge request notes. GitLab support is in progress: today it works with `-f` event files only (see [Running locally](#running-locally)). |
+| GITLAB_TOKEN                     | N/A                         | yes for GitLab   |          | GitLab access token (personal, project or group access token with `api` scope). Required when `ARGO_DIFF_SCM_PROVIDERS` lists `gitlab`. `CI_JOB_TOKEN` cannot be used: it cannot write merge request notes. GitLab support is in progress: today it works with `-f` event files only (see [Running locally](#running-locally)). |
 | LOG_LEVEL                        | log_level                   | no               | `info`   | Log level of argo-diff. |
 | REPO_DEFAULT_REF                 | repo_default_ref            | no               |          | Default branch of the repository (eg: `main`). Only needed in GitHub Actions when `HEAD` is specified as the target revision in the ArgoCD application source. |
 
@@ -421,8 +423,8 @@ Description of those fields:
 
 This JSON file can be passed to argo-diff via the `-f` argument or posted to the `/dev` HTTP endpoint.
 
-For a GitLab merge request, set `GITLAB_TOKEN` (and `GITLAB_BASE_URL` for a self-managed instance)
-and name the provider. For the project `https://gitlab.com/group/subgroup/project`:
+For a GitLab merge request, set `ARGO_DIFF_SCM_PROVIDERS=gitlab` (or `github,gitlab`), set
+`GITLAB_TOKEN` (and `GITLAB_BASE_URL` for a self-managed instance), and name the provider. For the project `https://gitlab.com/group/subgroup/project`:
 
 ```json
 {
