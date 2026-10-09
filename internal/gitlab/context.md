@@ -3,7 +3,7 @@
 The GitLab provider: `Provider` implements `scm.Provider` on top of the GitLab REST API, the way
 `internal/github` does for GitHub, and `cmd/main.go` registers it when `ARGO_DIFF_SCM_PROVIDERS`
 lists `gitlab` (the default is `github` only). `GITLAB_TOKEN` must then be set.
-Built on `gitlab.com/gitlab-org/api/client-go`.
+Built on `gitlab.com/gitlab-org/api/client-go/v3`.
 
 **Today it runs from `-f` event files (and `/dev`) only.** GitLab CI detection is Phase 3 of
 issue #160 and webhooks are Phase 4; until then `DetectCI()` is false, `EventFromCIEnv()` errors,
