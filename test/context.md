@@ -162,7 +162,7 @@ hosts the MR, and the GitHub check is the verdict.
 - **Mirror:** the PR head sha is force-pushed to `gh-pr/<number>` on the fork, an MR to `main` is
   opened (or reused), and the step waits until the MR's `sha` equals the pushed sha, because GitLab
   prepares the MR asynchronously. The MR description holds the GitHub PR URL.
-- **Run:** `.github/actions/k3s-argocd` with `repo_url` set to the fork, so every test Application
+- **Run:** `.github/actions/k3s-argocd` with `repo_url` set to the fork (no app-of-apps layer, see above), so every test Application
   syncs from GitLab; then `run-argo-diff-pod.sh` with `PROVIDER=gitlab` for both scenarios. Context
   strings match `k3s.yml`, so each scenario keeps one note on the MR.
 - **Report:** one PR comment (marker `<!-- gitlab-k3s-test -->`, edited in place) with the MR link
