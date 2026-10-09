@@ -3,9 +3,13 @@ package gitlab
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/vince-riv/argo-diff/internal/scm"
 )
@@ -100,5 +104,32 @@ func TestSetStatusUnknownState(t *testing.T) {
 	}
 	if n := len(fs.Requests()); n != 0 {
 		t.Errorf("%d requests, want 0", n)
+	}
+}
+
+// GitLab answers 400 when a pending status is set on a SHA whose status of the
+// same name is still pending (review on #359). Setting pending again is then
+// a no-op, not an error; any other state keeps the error. The body is derived
+// from the message GitLab's CommitStatus state machine raises, not captured.
+func TestSetStatusAlreadyPending(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"Cannot transition status via :enqueue from :pending (Reason(s): Status cannot transition via \"enqueue\")"}`))
+	}))
+	defer srv.Close()
+	c, err := gitlab.NewClient("tok", gitlab.WithBaseURL(srv.URL), gitlab.WithoutRetries())
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := client
+	client = c
+	t.Cleanup(func() { client = orig })
+
+	if err := (Provider{}).SetStatus(context.Background(), testRepo, statusSHA, scm.StatusPending, "", false); err != nil {
+		t.Errorf("SetStatus(pending) on an already-pending status = %v, want nil", err)
+	}
+	if err := (Provider{}).SetStatus(context.Background(), testRepo, statusSHA, scm.StatusSuccess, "", false); err == nil {
+		t.Error("SetStatus(success) on the same 400 = nil, want the error")
 	}
 }
