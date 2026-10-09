@@ -51,6 +51,9 @@ runs:
       with:
         version: ${{ inputs.k8s }}
         k3d-args: -p 8080:443@loadbalancer
+        # Without a token the action's release lookups hit the unauthenticated
+        # API rate limit and fail with a 403.
+        github-token: ${{ github.token }}
 
     - name: K3s Cluster verification
       shell: bash
