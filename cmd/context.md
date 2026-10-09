@@ -34,6 +34,14 @@ Application entry point. A single file, `main.go` — there is no other command 
    `GITLAB_TOKEN` does, and `ValidateConfig()` builds the client, failing on a malformed
    `GITLAB_BASE_URL` or an unreadable `GITLAB_CA_FILE`. `main_test.go` covers `selectProviders()`
    with stub providers.
+   - **CI detection (step 6) only consults listed providers.** With the default list, a GitLab
+     CI job never reaches GitLab's `DetectCI()` and fails with the "github is the default ... has
+     no credentials" error unless it sets `ARGO_DIFF_SCM_PROVIDERS=gitlab`. The Phase 3 GitLab CI
+     template (issue #160, PR 3.2) must set it itself, so its users need not know about it.
+     GitHub Actions needs nothing: the default is `github`.
+   - **The gate covers GitLab fully, GitHub only partly.** GitLab builds its client in
+     `ValidateConfig()`, so an unlisted GitLab does nothing. `internal/github`'s `init()`
+     functions still run whatever the list says (see `internal/github/context.md`).
 3. `APP_ENV=dev` turns on dev mode.
 4. `argocd.ConnectivityCheck()` — always runs, in every mode. It executes `argocd version`, so the
    `argocd` CLI must be on `PATH` (or named by `ARGOCD_CLI_CMD_NAME`) even for a run that would
