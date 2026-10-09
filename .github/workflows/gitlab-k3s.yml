@@ -1,0 +1,249 @@
+---
+name: K3s Argo-Diff Test (GitLab)
+
+# End-to-end test of the GitLab provider (#364). The test runs here, on GitHub
+# Actions: it mirrors the PR to the GitLab fork, opens a merge request, runs the
+# same k3s/ArgoCD scenarios as k3s.yml with argo-diff pointed at that MR, and
+# reports the result on the PR. GitLab only hosts the MR.
+#
+# Opt in by adding the `gitlab-k3s-test` label to a same-repo PR. Fork PRs use
+# workflow_dispatch. gitlab-k3s-cleanup.yml closes the MR afterwards.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number to test (fork-PR path). Review the fork diff first: the run executes PR code and holds the GitLab token.'
+        required: true
+        type: string
+  pull_request:
+    branches: ["main"]
+    types: [labeled, synchronize, reopened]
+
+# SECURITY: on workflow_dispatch this job checks out and runs PR-authored code
+# (go build, docker build, test/run-argo-diff-pod.sh). The GitLab token is
+# exposed only to the mirror, test and report steps, but
+# test/run-argo-diff-pod.sh is PR-authored, so a malicious fork PR could read it.
+# A maintainer must review the fork's diff before dispatching. GitHub's token
+# stays at pull-requests:write (comment post/edit), no contents or packages write.
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  GITLAB_HOST: gitlab.com
+  GITLAB_OWNER: vrivellino
+  GITLAB_REPO: argo-diff
+  GITLAB_LABEL: gitlab-k3s-test
+  # Built in-workflow and side-loaded into k3d, as in k3s.yml.
+  ARGO_DIFF_IMAGE: argo-diff:e2e
+
+jobs:
+  gitlab-k3s:
+    # workflow_dispatch: always (the fork-PR path). pull_request: only same-repo
+    # PRs, since a fork PR has no secrets, and only when the PR has the label.
+    # `labeled` fires for every label, so for that action the added label must be
+    # ours; otherwise adding an unrelated label to a PR that already has ours
+    # would restart the test and cancel the run in progress.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'gitlab-k3s-test') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'gitlab-k3s-test')) }}
+    name: GitLab K8s v1.34
+    # One run per PR; a new push cancels the previous run. This is on the job,
+    # not the workflow, so a skipped run does not cancel a run in progress.
+    concurrency:
+      group: gitlab-k3s-${{ github.event.pull_request.number || github.event.inputs.pr }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Resolve PR context
+        id: pr_info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_PR: ${{ github.event.inputs.pr }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            PR_NUMBER=$(gh pr view "$DISPATCH_PR" --json number -q .number)
+          else
+            PR_NUMBER="$EVENT_PR_NUMBER"
+          fi
+          pr_json=$(gh pr view "$PR_NUMBER" --json number,title,url,headRefOid)
+          {
+            echo "PR_NUMBER=${PR_NUMBER}"
+            echo "PR_URL=$(jq -r .url <<<"$pr_json")"
+            echo "HEAD_SHA=$(jq -r .headRefOid <<<"$pr_json")"
+          } >> "$GITHUB_OUTPUT"
+          # The title is PR-authored text: pass it on as a file, never inline in a script.
+          jq -r .title <<<"$pr_json" > "$RUNNER_TEMP/pr-title.txt"
+
+      - name: Git Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The head commit, not refs/pull/<n>/merge (see k3s.yml). Full history,
+          # because GitLab needs the parent commits when we push the sha.
+          ref: ${{ steps.pr_info.outputs.HEAD_SHA }}
+          fetch-depth: '0'
+          fetch-tags: 'true'
+
+      - name: Mirror the PR to GitLab and open the merge request
+        id: mirror
+        timeout-minutes: 5
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_FORK_TOKEN }}
+          PR_NUMBER: ${{ steps.pr_info.outputs.PR_NUMBER }}
+          PR_URL: ${{ steps.pr_info.outputs.PR_URL }}
+          HEAD_SHA: ${{ steps.pr_info.outputs.HEAD_SHA }}
+        run: |
+          set -euo pipefail
+          : "${GITLAB_TOKEN:?secret GITLAB_FORK_TOKEN is not set}"
+          project="${GITLAB_OWNER}/${GITLAB_REPO}"
+          project_enc="${GITLAB_OWNER}%2F${GITLAB_REPO}"
+          api="https://${GITLAB_HOST}/api/v4/projects/${project_enc}"
+          branch="gh-pr/${PR_NUMBER}"
+          glcurl() { curl -fsS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "$@"; }
+
+          # Force-push on every run. Keep the token out of the logs and out of .git/config.
+          git -c "http.https://${GITLAB_HOST}/.extraheader=Authorization: Basic $(printf 'oauth2:%s' "$GITLAB_TOKEN" | base64 -w0)" \
+            push --force "https://${GITLAB_HOST}/${project}.git" "${HEAD_SHA}:refs/heads/${branch}"
+
+          # The GitHub PR URL in the description is how gitlab-k3s-cleanup.yml finds the PR.
+          title="[argo-diff test] GitHub PR #${PR_NUMBER}: $(cat "$RUNNER_TEMP/pr-title.txt")"
+          description="Test mirror of ${PR_URL}. Opened by the GitHub Actions workflow \`gitlab-k3s.yml\`. Do not merge. The workflow closes this merge request when the PR closes."
+
+          mr_iid=$(glcurl --get "${api}/merge_requests" \
+            --data-urlencode "source_branch=${branch}" --data-urlencode "state=opened" | jq -r '.[0].iid // empty')
+          if [[ -z "$mr_iid" ]]; then
+            body=$(jq -n --arg b "$branch" --arg t "$title" --arg d "$description" \
+              '{source_branch:$b, target_branch:"main", title:$t, description:$d, remove_source_branch:true}')
+            mr_iid=$(glcurl -X POST --header 'Content-Type: application/json' --data "$body" "${api}/merge_requests" | jq -r .iid)
+            echo "Opened MR !${mr_iid}"
+          else
+            echo "Reusing MR !${mr_iid}"
+          fi
+
+          # GitLab prepares the MR diff asynchronously after a push. Wait until
+          # the MR head is the pushed sha, or argo-diff would read a stale head.
+          for _ in $(seq 1 60); do
+            sha=$(glcurl "${api}/merge_requests/${mr_iid}" | jq -r .sha)
+            [[ "$sha" == "$HEAD_SHA" ]] && break
+            sleep 2
+          done
+          if [[ "$sha" != "$HEAD_SHA" ]]; then
+            echo "::error::MR !${mr_iid} head is ${sha}, expected ${HEAD_SHA}"
+            exit 1
+          fi
+
+          {
+            echo "MR_IID=${mr_iid}"
+            echo "MR_URL=https://${GITLAB_HOST}/${project}/-/merge_requests/${mr_iid}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up the k3s test cluster
+        id: k3s_cluster
+        timeout-minutes: 20
+        uses: ./.github/actions/k3s-argocd
+        with:
+          k8s: v1.34
+          image: ${{ env.ARGO_DIFF_IMAGE }}
+          repo_url: https://${{ env.GITLAB_HOST }}/${{ env.GITLAB_OWNER }}/${{ env.GITLAB_REPO }}.git
+
+      - name: Run argo-diff (healthy)
+        id: argo_diff_healthy
+        timeout-minutes: 2
+        env:
+          PROVIDER: gitlab
+          POD_NAME_PREFIX: argo-diff-healthy
+          IMAGE: ${{ env.ARGO_DIFF_IMAGE }}
+          ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test
+          GITLAB_TOKEN: ${{ secrets.GITLAB_FORK_TOKEN }}
+          GITLAB_OWNER: ${{ env.GITLAB_OWNER }}
+          GITLAB_REPO: ${{ env.GITLAB_REPO }}
+          MR_IID: ${{ steps.mirror.outputs.MR_IID }}
+          EXPECT_EXIT: "0"
+        run: test/run-argo-diff-pod.sh
+
+      - name: Swap in failing ArgoCD application
+        id: argo_diff_swap
+        timeout-minutes: 1
+        env:
+          ARGOCD_OPTS: '--port-forward --port-forward-namespace argocd --insecure --plaintext'
+        run: |
+          # No `meta` app here: the k3s-argocd action does not create the app-of-apps layer.
+          kubectl -n argocd delete application basic-deployment helm-deployment --ignore-not-found
+          kubectl -n argocd apply -f test/argocd-broken-app.yaml --server-side=true
+          argocd app list
+
+      - name: Run argo-diff (manifest failure)
+        id: argo_diff_failure
+        timeout-minutes: 2
+        env:
+          PROVIDER: gitlab
+          POD_NAME_PREFIX: argo-diff-failure
+          IMAGE: ${{ env.ARGO_DIFF_IMAGE }}
+          ARGO_DIFF_CONTEXT_STR: ephemeral-environment-test-failure
+          GITLAB_TOKEN: ${{ secrets.GITLAB_FORK_TOKEN }}
+          GITLAB_OWNER: ${{ env.GITLAB_OWNER }}
+          GITLAB_REPO: ${{ env.GITLAB_REPO }}
+          MR_IID: ${{ steps.mirror.outputs.MR_IID }}
+          EXPECT_EXIT: nonzero
+          REQUIRE_LOG: "Failed to diff application broken-deployment"
+        run: test/run-argo-diff-pod.sh
+
+      - name: Report the result on the PR
+        # Report after the results are known, success or not. Skip it when the
+        # run was cancelled (a newer run reports) or never resolved the PR.
+        if: ${{ !cancelled() && steps.pr_info.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr_info.outputs.PR_NUMBER }}
+          HEAD_SHA: ${{ steps.pr_info.outputs.HEAD_SHA }}
+          MR_URL: ${{ steps.mirror.outputs.MR_URL }}
+          MIRROR: ${{ steps.mirror.outcome }}
+          CLUSTER: ${{ steps.k3s_cluster.outcome }}
+          HEALTHY: ${{ steps.argo_diff_healthy.outcome }}
+          FAILURE: ${{ steps.argo_diff_failure.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          marker='<!-- gitlab-k3s-test -->'
+          icon() { case "$1" in success) echo "✅ passed";; skipped) echo "⏭️ not run";; cancelled) echo "🚫 cancelled";; *) echo "❌ failed";; esac; }
+
+          if [[ "$HEALTHY" == "success" && "$FAILURE" == "success" ]]; then
+            verdict="✅ **GitLab k3s end-to-end test passed**"
+          else
+            verdict="❌ **GitLab k3s end-to-end test failed**"
+          fi
+          if [[ -n "$MR_URL" ]]; then
+            mr_line="argo-diff posted its notes on the GitLab merge request: ${MR_URL}"
+          else
+            mr_line="The merge request was not opened."
+          fi
+          body="${marker}
+          ${verdict} for \`${HEAD_SHA:0:7}\`
+
+          ${mr_line}
+
+          | Step | Result |
+          | ---- | ------ |
+          | Mirror PR and open merge request | $(icon "$MIRROR") |
+          | k3s cluster and ArgoCD | $(icon "$CLUSTER") |
+          | Healthy apps | $(icon "$HEALTHY") |
+          | Broken app (expects a failed diff) | $(icon "$FAILURE") |
+
+          [Workflow run](${RUN_URL})"
+
+          existing=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            -q "[.[] | select(.body | startswith(\"${marker}\"))][0].id // empty")
+          if [[ -n "$existing" ]]; then
+            gh api -X PATCH "repos/${GH_REPO}/issues/comments/${existing}" -f body="$body" >/dev/null
+          else
+            gh api -X POST "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" -f body="$body" >/dev/null
+          fi

@@ -148,3 +148,28 @@ broken app — the failure case (`EXPECT_EXIT=nonzero`,
 running through the failure scenario too, since only `meta`'s children are swapped out.
 
 Both runs comment on the PR, so their output is visible on the PR under test.
+
+## GitLab flavor (`gitlab-k3s.yml`)
+
+Issue #364. The same two scenarios, run for the GitLab provider against a merge request (MR) on the
+GitLab fork `vrivellino/argo-diff`. **The test runs on GitHub Actions**, not GitLab CI: GitLab only
+hosts the MR, and the GitHub check is the verdict.
+
+- **Trigger:** `pull_request` (`labeled`, `synchronize`, `reopened`) on a same-repo PR that has the
+  `gitlab-k3s-test` label, or `workflow_dispatch` with a `pr` number for fork PRs (review the diff
+  first: the run holds the GitLab token). The concurrency group is per PR and sits on the job, so
+  an unrelated label does not cancel a run (the job `if:` also requires that a `labeled` event
+  adds our label, so a second label on an already-labeled PR does not restart the test).
+- **Mirror:** the PR head sha is force-pushed to `gh-pr/<number>` on the fork, an MR to `main` is
+  opened (or reused), and the step waits until the MR's `sha` equals the pushed sha, because GitLab
+  prepares the MR asynchronously. The MR description holds the GitHub PR URL.
+- **Run:** `.github/actions/k3s-argocd` with `repo_url` set to the fork (no app-of-apps layer, see above), so every test Application
+  syncs from GitLab; then `run-argo-diff-pod.sh` with `PROVIDER=gitlab` for both scenarios. Context
+  strings match `k3s.yml`, so each scenario keeps one note on the MR.
+- **Report:** one PR comment (marker `<!-- gitlab-k3s-test -->`, edited in place) with the MR link
+  and each step's result. A cancelled run does not report; the newer run does.
+- **Secret:** `GITLAB_FORK_TOKEN`, a project access token on the fork with `api` and
+  `write_repository`. It pushes branches, opens MRs and is argo-diff's `GITLAB_TOKEN`.
+- **`k3s-test` on the fork** must be current: the test apps sync from it and argo-diff diffs against
+  it. The fork's `sync-from-github` job (root `.gitlab-ci.yml`) takes `SYNC_BRANCH` per schedule, so
+  a second GitLab schedule with `SYNC_BRANCH=k3s-test` does it with no code.
