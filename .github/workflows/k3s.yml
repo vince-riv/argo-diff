@@ -17,6 +17,7 @@ on:
     branches: ["main"]
     paths:
       - '.github/workflows/k3s.yml'
+      - '.github/actions/k3s-argocd/**'
       - 'test/**'
       - 'charts/test-basic-deployment/**'
       - '**/**.go'
@@ -114,161 +115,14 @@ jobs:
           fetch-depth: '50'
           fetch-tags: 'true'
 
-      - name: Set up Go
-        id: setup_go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - name: Set up the k3s test cluster
+        id: k3s_cluster
+        timeout-minutes: 20
+        uses: ./.github/actions/k3s-argocd
         with:
-          go-version-file: go.mod
-
-      - name: Build argo-diff binary
-        id: go_build
-        timeout-minutes: 3
-        run: |
-          mkdir -p temp
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-            -ldflags "-s -w -X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo e2e)" \
-            -o temp/argo-diff-linux-amd64 ./cmd
-
-      - name: Build argo-diff image
-        id: docker_build
-        if: ${{ github.event.inputs.argocd_version == '' }}
-        timeout-minutes: 3
-        run: docker build --build-arg TARGETARCH=amd64 -t "$ARGO_DIFF_IMAGE" -f Dockerfile .
-
-      - name: Build argo-diff image with specified argocd version
-        id: docker_build_pinned_argocd
-        if: ${{ github.event.inputs.argocd_version != '' }}
-        timeout-minutes: 3
-        run: |
-          docker build --build-arg TARGETARCH=amd64 \
-            --build-arg "ARGOCD_IMAGE=quay.io/argoproj/argocd:${{ github.event.inputs.argocd_version }}" \
-            -t "$ARGO_DIFF_IMAGE" -f Dockerfile .
-
-      - name: K3d/K3s Setup
-        id: k3s_setup
-        timeout-minutes: 2
-        uses: nolar/setup-k3d-k3s@v1
-        with:
-          version: ${{ matrix.k8s }}
-          k3d-args: -p 8080:443@loadbalancer
-
-      - name: K3s Cluster verification
-        id: k3s_verify
-        timeout-minutes: 1
-        run: kubectl version
-
-      - name: Import argo-diff image into k3d
-        id: k3d_import
-        timeout-minutes: 2
-        run: |
-          set -euo pipefail
-          cluster=$(k3d cluster list -o json | jq -r '.[0].name')
-          echo "Importing $ARGO_DIFF_IMAGE into k3d cluster: $cluster"
-          k3d image import "$ARGO_DIFF_IMAGE" --cluster "$cluster"
-
-      - name: Install ArgoCD via HelmChart CRD
-        id: argocd_install
-        timeout-minutes: 1
-        run: |
-          kubectl create namespace argocd
-          kubectl create namespace argocd-apps
-          kubectl create namespace apps
-          kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=true
-
-      - name: Wait for HelmChart to deploy
-        id: argocd_helm_wait
-        timeout-minutes: 2
-        run: |
-          echo "Waiting for HelmChart to be processed..."
-          sleep 2
-          job_name=$(kubectl -n kube-system get helmchart argocd -o jsonpath='{.status.jobName}')
-          test -n "$job_name" || exit 1
-          while sleep 1 ; do
-            kubectl -n kube-system wait --for=condition=complete job/$job_name --timeout=1s && exit 0 || true
-            kubectl -n kube-system wait --for=condition=failed job/$job_name --timeout=1s && exit 1 || true
-          done
-
-      - name: Wait for ArgoCD pods to be ready
-        id: argocd_server_wait
-        timeout-minutes: 3
-        run: |
-          echo "Waiting for ArgoCD pods to launch..."
-          while [[ -z "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]]; do
-            sleep 1
-          done
-          echo "Waiting for argocd-server pods to be ready ..."
-          kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=180s
-
-      - name: Debug pods if installation fails
-        id: argocd_pod_debug
-        timeout-minutes: 1
-        if: failure()
-        run: |
-          kubectl -n argocd get pods -o yaml
-
-      - name: Create ArgoCD test applications
-        timeout-minutes: 1
-        id: argocd_app_install
-        run: |
-          kubectl -n argocd apply -k test/argocd-applications/ --server-side=true
-          kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
-          # Not "-n argocd": any-ns-meta declares its own metadata.namespace
-          # (argocd-apps), which conflicts with a "-n" override to a different
-          # namespace. The AppProject declares its own namespace: argocd instead.
-          kubectl apply -f test/argocd-meta-any-ns.yaml --server-side=true
-
-      - name: Install ArgoCD CLI
-        id: argocd_cli_install
-        timeout-minutes: 2
-        run: |
-          curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x /tmp/argocd
-          sudo mv /tmp/argocd /usr/local/bin/argocd
-          argocd version --client
-
-      - name: Sync Application and wait for ready
-        id: argocd_app_sync
-        timeout-minutes: 4
-        run: |
-          echo "--- App List ---"
-          argocd app list
-          echo "--- Wait - meta ---"
-          argocd app wait meta
-          echo "--- Wait - basic-deployment ---"
-          argocd app wait basic-deployment
-          echo "--- Wait - helm-deployment ---"
-          argocd app wait helm-deployment
-          echo "--- Wait - any-ns-meta ---"
-          argocd app wait any-ns-meta --app-namespace argocd-apps
-          echo "--- Wait - any-ns-deployment ---"
-          argocd app wait any-ns-deployment --app-namespace apps
-          #echo "--- Meta ---"
-          #argocd app get meta -o tree
-          #echo "--- Basic-Deployment ---"
-          #argocd app get basic-deployment -o tree
-          #echo "--- Helm-Deployment ---"
-          #argocd app get helm-deployment -o tree
-          echo
-          echo "--- App List ---"
-          argocd app list
-
-      - name: Debug any-ns applications if sync wait fails
-        id: any_ns_debug
-        timeout-minutes: 1
-        if: failure() && steps.argocd_app_sync.outcome == 'failure'
-        run: |
-          echo "--- any-ns-meta (argocd-apps ns) ---"
-          kubectl -n argocd-apps get applications.argoproj.io -o yaml
-          echo "--- any-ns-deployment (apps ns) ---"
-          kubectl -n apps get applications.argoproj.io -o yaml
-          echo "--- any-ns AppProject ---"
-          kubectl -n argocd get appprojects.argoproj.io any-ns -o yaml
-          echo "--- argocd-cmd-params-cm ---"
-          kubectl -n argocd get configmap argocd-cmd-params-cm -o yaml
-          echo "--- argocd-application-controller logs ---"
-          kubectl -n argocd logs sts/argocd-application-controller --all-containers --tail=500 || kubectl -n argocd logs deploy/argocd-application-controller --all-containers --tail=500 || true
-          echo "--- argocd-server logs ---"
-          kubectl -n argocd logs deploy/argocd-server --all-containers --tail=500 || true
+          k8s: ${{ matrix.k8s }}
+          image: ${{ env.ARGO_DIFF_IMAGE }}
+          argocd_version: ${{ github.event.inputs.argocd_version }}
 
       - name: Run argo-diff (healthy)
         id: argo_diff_healthy

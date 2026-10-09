@@ -121,8 +121,14 @@ to the integer). Checkout uses the resolved **head sha**, not `refs/pull/<n>/mer
 absent on a conflicted PR and can move mid-run, and the real diff is computed against the live PR via
 the API anyway.
 
-The image is built in-workflow: `go build` a linux/amd64 binary into `temp/`, `docker build` the
-`Dockerfile`, then `k3d image import` into the cluster. Nothing is pushed to a registry, so the test
+The cluster setup lives in the composite action `.github/actions/k3s-argocd/` (so the GitLab flavor can
+share it): it runs `go build` for a linux/amd64 binary into `temp/`, `docker build`s the `Dockerfile`,
+starts k3d, imports the image, installs ArgoCD, applies the test applications and waits for them to
+sync. It needs `actions/checkout` first. Its optional `repo_url` input rewrites every `repoURL` under
+`test/` (in the runner's checkout only) to another git host. With `repo_url` set it does not create `meta` and `any-ns-meta` (it applies only the `any-ns` AppProject) and applies
+the child Applications straight from the rewritten files: the app-of-apps layer reads its children from
+the `k3s-test` branch, which still names GitHub, and `selfHeal` would put those URLs back. Composite steps cannot set
+`timeout-minutes`, so the calling step sets one for the whole action. Nothing is pushed to a registry, so the test
 no longer depends on the `Docker build` workflow.
 
 It runs two scenarios: the healthy apps (`EXPECT_EXIT=0`, which includes waiting on `any-ns-meta`
