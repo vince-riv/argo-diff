@@ -170,3 +170,9 @@ hosts the MR, and the GitHub check is the verdict.
 - **`k3s-test` on the fork** must be current: the test apps sync from it and argo-diff diffs against
   it. The fork's `sync-from-github` job (root `.gitlab-ci.yml`) takes `SYNC_BRANCH` per schedule, so
   a second GitLab schedule with `SYNC_BRANCH=k3s-test` does it with no code.
+
+**Cleanup (`gitlab-k3s-cleanup.yml`).** On `pull_request: closed` (same-repo only: a fork PR has no
+secrets) it closes the PR's MR and deletes `gh-pr/<number>`. A daily job (`05:17 UTC`, also
+`workflow_dispatch`) closes every open `gh-pr/*` MR whose PR is closed or has lost the
+`gitlab-k3s-test` label, so a missed event, a fork PR or a removed label needs no `unlabeled`
+trigger. An MR whose PR cannot be found is left alone.

@@ -1,0 +1,108 @@
+---
+name: K3s Argo-Diff Test (GitLab) Cleanup
+
+# Closes the GitLab merge requests (MRs) that gitlab-k3s.yml opens, and deletes
+# their gh-pr/<number> branches on the fork.
+#
+# - When a PR closes or merges, close its MR right away. A fork PR runs this with
+#   no secrets, so the daily job covers it.
+# - Daily, close every open gh-pr/* MR whose GitHub PR is closed or no longer has
+#   the gitlab-k3s-test label. This also covers missed events and removed labels,
+#   so there is no `unlabeled` trigger.
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [closed]
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  GITLAB_HOST: gitlab.com
+  GITLAB_OWNER: vrivellino
+  GITLAB_REPO: argo-diff
+  GITLAB_LABEL: gitlab-k3s-test
+
+jobs:
+  close-for-pr:
+    # Only same-repo PRs have the secret on a closed event. The daily job covers forks.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_FORK_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Close the merge request and delete its branch
+        run: |
+          set -euo pipefail
+          : "${GITLAB_TOKEN:?secret GITLAB_FORK_TOKEN is not set}"
+          api="https://${GITLAB_HOST}/api/v4/projects/${GITLAB_OWNER}%2F${GITLAB_REPO}"
+          branch="gh-pr/${PR_NUMBER}"
+          glcurl() { curl -fsS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "$@"; }
+
+          mr_iid=$(glcurl --get "${api}/merge_requests" \
+            --data-urlencode "source_branch=${branch}" --data-urlencode "state=opened" | jq -r '.[0].iid // empty')
+          if [[ -n "$mr_iid" ]]; then
+            glcurl -X PUT --data "state_event=close" "${api}/merge_requests/${mr_iid}" >/dev/null
+            echo "Closed MR !${mr_iid}"
+          else
+            echo "No open MR for ${branch}"
+          fi
+          # 404 means the branch is already gone.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+            "${api}/repository/branches/gh-pr%2F${PR_NUMBER}")
+          echo "Delete branch ${branch}: HTTP ${code}"
+          [[ "$code" == "204" || "$code" == "404" ]]
+
+  close-orphans:
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_FORK_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Close orphaned merge requests
+        run: |
+          set -euo pipefail
+          : "${GITLAB_TOKEN:?secret GITLAB_FORK_TOKEN is not set}"
+          api="https://${GITLAB_HOST}/api/v4/projects/${GITLAB_OWNER}%2F${GITLAB_REPO}"
+          glcurl() { curl -fsS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "$@"; }
+
+          # Every open MR from a gh-pr/* branch. Read all pages (100 per page).
+          branches=$(
+            page=1
+            while [[ -n "$page" ]]; do
+              resp=$(curl -fsS -D "$RUNNER_TEMP/headers" --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --get "${api}/merge_requests" \
+                --data-urlencode "state=opened" --data-urlencode "per_page=100" --data-urlencode "page=${page}")
+              jq -r '.[] | select(.source_branch | startswith("gh-pr/")) | "\(.iid) \(.source_branch)"' <<<"$resp"
+              page=$(awk 'tolower($1)=="x-next-page:" {gsub("\r",""); print $2}' "$RUNNER_TEMP/headers")
+            done
+          )
+
+          while read -r mr_iid branch; do
+            [[ -n "${mr_iid:-}" ]] || continue
+            pr="${branch#gh-pr/}"
+            if ! pr_json=$(gh pr view "$pr" --json state,labels 2>/dev/null); then
+              echo "MR !${mr_iid} (${branch}): no such PR, leaving it alone"
+              continue
+            fi
+            state=$(jq -r .state <<<"$pr_json")
+            labeled=$(jq -r --arg l "$GITLAB_LABEL" '[.labels[].name] | index($l) != null' <<<"$pr_json")
+            if [[ "$state" == "OPEN" && "$labeled" == "true" ]]; then
+              echo "MR !${mr_iid} (${branch}): PR #${pr} is open and labeled, keeping"
+              continue
+            fi
+            echo "MR !${mr_iid} (${branch}): PR #${pr} is ${state}, labeled=${labeled}; closing"
+            glcurl -X PUT --data "state_event=close" "${api}/merge_requests/${mr_iid}" >/dev/null
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+              "${api}/repository/branches/gh-pr%2F${pr}")
+            echo "  delete branch ${branch}: HTTP ${code}"
+          done <<<"$branches"
