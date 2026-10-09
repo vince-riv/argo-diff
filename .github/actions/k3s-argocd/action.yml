@@ -140,15 +140,15 @@ runs:
         echo "--- App List ---"
         argocd app list
         echo "--- Wait - meta ---"
-        argocd app wait meta
+        argocd app wait meta --timeout 300
         echo "--- Wait - basic-deployment ---"
-        argocd app wait basic-deployment
+        argocd app wait basic-deployment --timeout 300
         echo "--- Wait - helm-deployment ---"
-        argocd app wait helm-deployment
+        argocd app wait helm-deployment --timeout 300
         echo "--- Wait - any-ns-meta ---"
-        argocd app wait any-ns-meta --app-namespace argocd-apps
+        argocd app wait any-ns-meta --app-namespace argocd-apps --timeout 300
         echo "--- Wait - any-ns-deployment ---"
-        argocd app wait any-ns-deployment --app-namespace apps
+        argocd app wait any-ns-deployment --app-namespace apps --timeout 300
         echo
         echo "--- App List ---"
         argocd app list
@@ -157,6 +157,8 @@ runs:
       if: failure() && steps.argocd_app_sync.outcome == 'failure'
       shell: bash
       run: |
+        echo "--- all applications ---"
+        kubectl get applications.argoproj.io -A
         echo "--- any-ns-meta (argocd-apps ns) ---"
         kubectl -n argocd-apps get applications.argoproj.io -o yaml
         echo "--- any-ns-deployment (apps ns) ---"
@@ -167,5 +169,7 @@ runs:
         kubectl -n argocd get configmap argocd-cmd-params-cm -o yaml
         echo "--- argocd-application-controller logs ---"
         kubectl -n argocd logs sts/argocd-application-controller --all-containers --tail=500 || kubectl -n argocd logs deploy/argocd-application-controller --all-containers --tail=500 || true
+        echo "--- argocd-repo-server logs ---"
+        kubectl -n argocd logs deploy/argocd-repo-server --all-containers --tail=300 || true
         echo "--- argocd-server logs ---"
         kubectl -n argocd logs deploy/argocd-server --all-containers --tail=500 || true
