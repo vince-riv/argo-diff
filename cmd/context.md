@@ -29,8 +29,8 @@ Application entry point. A single file, `main.go` — there is no other command 
 4. `argocd.ConnectivityCheck()` — always runs, in every mode. It executes `argocd version`, so the
    `argocd` CLI must be on `PATH` (or named by `ARGOCD_CLI_CMD_NAME`) even for a run that would
    otherwise do nothing, and both client and server must be >= 2.12.0.
-5. `argocd.SetRepoHosts()` with every enabled provider's `RepoHosts()` (see
-   `internal/argocd/context.md`).
+5. `argocd.SetRepoHosts(p.Name(), p.RepoHosts())` for every enabled provider, so each event
+   matches application sources on its own provider's hosts (see `internal/argocd/context.md`).
 6. **CI detection.** The first enabled provider whose `DetectCI()` is true (GitHub:
    `GITHUB_ACTIONS=true`) gets `server.ProcessCI(p)`, then return. Provider connectivity checks are
    deliberately skipped here. This branch also warns when `process_event.RequireAppMatch()` is true:

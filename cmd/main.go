@@ -130,12 +130,11 @@ func main() {
 		log.Fatal().Err(err).Msg("Connectivity check to ArgoCD failed")
 	}
 
-	// application sources on these hosts match a change by owner/repo exactly
-	var repoHosts []string
+	// application sources on a provider's hosts match that provider's
+	// changes by owner/repo exactly
 	for _, p := range providers {
-		repoHosts = append(repoHosts, p.RepoHosts()...)
+		argocd.SetRepoHosts(p.Name(), p.RepoHosts())
 	}
-	argocd.SetRepoHosts(repoHosts)
 
 	// in a provider's CI (eg: GitHub Actions), run once with event data from
 	// the environment and skip the provider connectivity checks

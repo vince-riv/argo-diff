@@ -134,6 +134,9 @@ func ProcessCodeChange(p scm.Provider, eventInfo webhook.EventInfo, devMode bool
 		return
 	}
 
+	// argocd matches application sources against this provider's hosts only;
+	// an event that named no provider was looked up as the default one
+	eventInfo.Provider = p.Name()
 	repo := scm.RepoRef{Owner: eventInfo.RepoOwner, Name: eventInfo.RepoName}
 
 	// Get PR details if this is a refresh event
