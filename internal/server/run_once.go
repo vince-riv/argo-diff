@@ -42,6 +42,7 @@ func logEnvironmentVariables() {
 		"GITHUB_PERSONAL_ACCESS_TOKEN",
 		"GITHUB_TOKEN",
 		"GITHUB_APP_PRIVATE_KEY",
+		"GITLAB_TOKEN",
 	}
 	for _, key := range sensitiveVars {
 		log.Debug().Str(key, redactEnvValue(key, true)).Msg("")
@@ -67,6 +68,10 @@ func logEnvironmentVariables() {
 		"REPO_DEFAULT_REF",
 		"GITHUB_HEAD_REF",
 		"GITHUB_BASE_REF",
+		"GITLAB_BASE_URL",
+		"GITLAB_CA_FILE",
+		"CI_SERVER_URL",
+		"CI_SERVER_TLS_CA_FILE",
 		"ARGO_DIFF_CONTEXT_STR",
 		"ARGO_DIFF_CI",
 		"ARGO_DIFF_COMMENT_PREAMBLE",

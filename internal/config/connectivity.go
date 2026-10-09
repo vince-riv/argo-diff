@@ -11,17 +11,18 @@ import (
 
 // BypassEnvVar is the environment variable operators set to skip startup/runtime
 // connectivity checks. Value is a comma-separated list of component names
-// ("github", "argocd"), or "true"/"all" to skip every check.
+// ("github", "gitlab", "argocd"), or "true"/"all" to skip every check.
 const BypassEnvVar = "ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS"
 
 // Component names accepted in ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS.
 const (
 	ComponentGithub = "github"
+	ComponentGitlab = "gitlab"
 	ComponentArgoCD = "argocd"
 )
 
 // allComponents is what "true"/"all" expands to.
-var allComponents = []string{ComponentGithub, ComponentArgoCD}
+var allComponents = []string{ComponentGithub, ComponentGitlab, ComponentArgoCD}
 
 // parseBypassList parses raw (the env var value) into the set of bypassed
 // components and any tokens it didn't recognize. It is pure and does no
@@ -42,7 +43,7 @@ func parseBypassList(raw string) (map[string]bool, []string) {
 			}
 		case "false", "none":
 			// recognized no-op
-		case ComponentGithub, ComponentArgoCD:
+		case ComponentGithub, ComponentGitlab, ComponentArgoCD:
 			bypassed[tok] = true
 		default:
 			unknown = append(unknown, tok)
@@ -70,7 +71,7 @@ func LogBypassConfig() {
 	}
 	bypassed, unknown := parseBypassList(raw)
 	for _, tok := range unknown {
-		log.Warn().Msgf("%s: unrecognized value %q ignored; allowed values are \"github\", \"argocd\", \"true\", \"all\"", BypassEnvVar, tok)
+		log.Warn().Msgf("%s: unrecognized value %q ignored; allowed values are \"github\", \"gitlab\", \"argocd\", \"true\", \"all\"", BypassEnvVar, tok)
 	}
 	if len(bypassed) == 0 {
 		return
