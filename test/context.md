@@ -158,7 +158,8 @@ hosts the MR, and the GitHub check is the verdict.
 - **Trigger:** `pull_request` (`labeled`, `synchronize`, `reopened`) on a same-repo PR that has the
   `gitlab-k3s-test` label, or `workflow_dispatch` with a `pr` number for fork PRs (review the diff
   first: the run holds the GitLab token). The concurrency group is per PR and sits on the job, so
-  an unrelated label does not cancel a run.
+  an unrelated label does not cancel a run (the job `if:` also requires that a `labeled` event
+  adds our label, so a second label on an already-labeled PR does not restart the test).
 - **Mirror:** the PR head sha is force-pushed to `gh-pr/<number>` on the fork, an MR to `main` is
   opened (or reused), and the step waits until the MR's `sha` equals the pushed sha, because GitLab
   prepares the MR asynchronously. The MR description holds the GitHub PR URL.

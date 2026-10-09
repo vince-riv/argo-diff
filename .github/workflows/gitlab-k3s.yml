@@ -42,14 +42,17 @@ jobs:
   gitlab-k3s:
     # workflow_dispatch: always (the fork-PR path). pull_request: only same-repo
     # PRs, since a fork PR has no secrets, and only when the PR has the label.
+    # `labeled` fires for every label, so for that action the added label must be
+    # ours; otherwise adding an unrelated label to a PR that already has ours
+    # would restart the test and cancel the run in progress.
     if: >-
       ${{ github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-      contains(github.event.pull_request.labels.*.name, 'gitlab-k3s-test')) }}
+      contains(github.event.pull_request.labels.*.name, 'gitlab-k3s-test') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'gitlab-k3s-test')) }}
     name: GitLab K8s v1.34
     # One run per PR; a new push cancels the previous run. This is on the job,
-    # not the workflow, so a skipped run (eg: an unrelated label was added) does
-    # not cancel a run in progress.
+    # not the workflow, so a skipped run does not cancel a run in progress.
     concurrency:
       group: gitlab-k3s-${{ github.event.pull_request.number || github.event.inputs.pr }}
       cancel-in-progress: true
@@ -172,7 +175,7 @@ jobs:
         env:
           ARGOCD_OPTS: '--port-forward --port-forward-namespace argocd --insecure --plaintext'
         run: |
-          # No `meta` app here: the k3s-argocd action removes the app-of-apps layer.
+          # No `meta` app here: the k3s-argocd action does not create the app-of-apps layer.
           kubectl -n argocd delete application basic-deployment helm-deployment --ignore-not-found
           kubectl -n argocd apply -f test/argocd-broken-app.yaml --server-side=true
           argocd app list
