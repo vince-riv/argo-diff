@@ -98,7 +98,9 @@ runs:
         test -n "$job_name" || exit 1
         # Bounded here, not just by the caller's timeout: when the caller's limit
         # expires GitHub kills the whole action step, and the debug step never runs.
-        for _ in $(seq 1 120); do
+        # A pass takes about 3 s (two 1 s waits and a sleep), so count seconds, not passes.
+        deadline=$((SECONDS + 120))
+        while (( SECONDS < deadline )); do
           kubectl -n kube-system wait --for=condition=complete job/$job_name --timeout=1s && exit 0 || true
           kubectl -n kube-system wait --for=condition=failed job/$job_name --timeout=1s && exit 1 || true
           sleep 1
@@ -110,7 +112,8 @@ runs:
       shell: bash
       run: |
         echo "Waiting for ArgoCD pods to launch..."
-        for _ in $(seq 1 180); do
+        deadline=$((SECONDS + 180))
+        while (( SECONDS < deadline )); do
           [[ -n "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]] && break
           sleep 1
         done
@@ -142,9 +145,9 @@ runs:
         else
           # meta and any-ns-meta read their child Applications from the k3s-test
           # branch, which names GitHub, and selfHeal would put those URLs back
-          # over the rewritten ones. So do not create them: apply only their
-          # AppProjects, and the children straight from the rewritten files.
-          yq 'select(.kind == "AppProject")' test/argocd-meta.yaml | kubectl apply -f - --server-side=true
+          # over the rewritten ones. So do not create them: apply only the any-ns
+          # AppProject (it sets namespace: argocd itself; the meta project is not
+          # needed), and the children straight from the rewritten files.
           yq 'select(.kind == "AppProject")' test/argocd-meta-any-ns.yaml | kubectl apply -f - --server-side=true
           kubectl apply -k test/argocd-applications-any-ns/ --server-side=true
         fi
