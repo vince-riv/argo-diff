@@ -173,12 +173,12 @@ func logResponse(resp *gitlab.Response, call string) {
 // GitLab answers 403 insufficient_granular_scope and names the missing
 // permission in error_description; that text is logged as-is, since it tells
 // the operator exactly what to grant.
-func logAPIError(err error, msg string) {
+func logAPIError(err error, format string, args ...any) {
 	ev := log.Error().Err(err)
 	if desc := errorDescription(err); desc != "" {
 		ev = ev.Str("error_description", desc)
 	}
-	ev.Msg(msg)
+	ev.Msgf(format, args...)
 }
 
 // errorDescription returns the error_description of a GitLab API error body,

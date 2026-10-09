@@ -10,6 +10,7 @@ way `internal/github` does for GitHub. It is being built in issue #160, Phase 2;
 | File | Contents |
 | ---- | -------- |
 | `client.go` | Client construction and config, `ConnectivityCheck()`, `getCurrentUser()`, API error logging |
+| `merge_request.go` | `Provider.GetChangeRequest()`, `Provider.ListChangedFiles()` |
 | `provider.go` | `Provider` — the startup methods so far: `Enabled`, `ValidateConfig`, `CredentialsHint`, `ConnectivityCheck`, `RepoHosts` |
 
 client-go types stay inside this package, as go-github types do in `internal/github`.
@@ -42,6 +43,16 @@ A bad base URL or CA file leaves `client` nil and stores the reason in `clientEr
 - A fine-grained token that lacks a permission gets 403 `insufficient_granular_scope`, and the
   body's `error_description` names the missing permission. `logAPIError()` logs that text as-is
   in an `error_description` field.
+
+## Merge requests
+
+- A change request number is the MR's **IID** (`!1`), not its global `id`.
+- `GetChangeRequest()` maps the MR's `sha`, `source_branch` and `target_branch` onto
+  `scm.ChangeRequest`.
+- `ListChangedFiles()` reads **every page** of `/merge_requests/:iid/diffs` (100 per page,
+  following `X-Next-Page`). A renamed file contributes its old **and** new path, deduplicated,
+  so the `manifest-generate-paths` filter sees either. (GitHub's `ListPullRequestFiles()` reads
+  one page only; see issue #160.)
 
 ## Connectivity check and user
 
