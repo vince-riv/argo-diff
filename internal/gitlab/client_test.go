@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 )
 
 func TestBaseURL(t *testing.T) {
