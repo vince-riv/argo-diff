@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	gitlab "gitlab.com/gitlab-org/api/client-go"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/vince-riv/argo-diff/internal/config"
 )

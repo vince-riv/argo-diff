@@ -9,7 +9,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/vince-riv/argo-diff/internal/scm"
 )

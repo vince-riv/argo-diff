@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	gitlab "gitlab.com/gitlab-org/api/client-go"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/vince-riv/argo-diff/internal/comment"
 	"github.com/vince-riv/argo-diff/internal/scm"
