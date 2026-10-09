@@ -64,9 +64,17 @@ should show up in the e2e diff has to be reflected there too.
 
 ## run-argo-diff-pod.sh
 
-Required env: `POD_NAME_PREFIX`, `IMAGE`, `ARGO_DIFF_CONTEXT_STR`, `ARGO_DIFF_SHA`,
-`ARGO_DIFF_HEAD_REF`, `ARGO_DIFF_REPOSITORY`, `GITHUB_TOKEN`, `PR_REF`, `EXPECT_EXIT`
-(`0` or `nonzero`). Optional `REQUIRE_LOG` asserts a substring appears in the pod logs.
+Required env: `POD_NAME_PREFIX`, `IMAGE`, `ARGO_DIFF_CONTEXT_STR`, `EXPECT_EXIT` (`0` or
+`nonzero`), plus the provider's own vars. Optional `REQUIRE_LOG` asserts a substring appears in the
+pod logs. `PROVIDER` picks the flavor:
+
+- **`github`** (default): `ARGO_DIFF_SHA`, `ARGO_DIFF_HEAD_REF`, `ARGO_DIFF_REPOSITORY`,
+  `GITHUB_TOKEN`, `PR_REF`. The pod fakes the GitHub Actions environment.
+- **`gitlab`**: `GITLAB_TOKEN`, `GITLAB_OWNER`, `GITLAB_REPO`, `MR_IID`. GitLab CI detection does not
+  exist yet (Phase 3 of #160), so the script writes an event file
+  (`{"provider":"gitlab",...,"default_ref":"k3s-test","pr":<MR IID>,"refresh":true}`) into a ConfigMap,
+  mounts it at `/event`, and runs `argo-diff -f /event/event.json` with `ARGO_DIFF_SCM_PROVIDERS=gitlab`.
+  After Phase 3, fake the GitLab CI env in the pod instead, as the GitHub flavor does.
 
 The script reads the pod's logs **once** into a variable and both prints and matches that copy. Do
 not turn the `REQUIRE_LOG` check back into `kubectl logs | grep -q`: the script runs under `set -o
@@ -84,7 +92,8 @@ GitHub Actions' reserved defaults — a step's own `env:` block cannot override 
 takes them under different names and passes them into the pod under the real names.
 
 The pod sets `ARGO_DIFF_SKIP_REF_CHECK=true` (the target revisions don't match a real PR base),
-`GITHUB_ACTIONS=true` (one-shot mode, commit statuses skipped, exit code is the verdict), and a
+`GITHUB_ACTIONS=true` on the GitHub flavor (one-shot mode, commit statuses skipped, exit code is the
+verdict; the GitLab flavor's `-f` run is one-shot too and posts real commit statuses), and a
 dummy `ARGOCD_AUTH_TOKEN` since the test ArgoCD has auth disabled. It waits for a terminal pod
 phase, prints the logs, and compares the container's exit code against `EXPECT_EXIT`.
 
