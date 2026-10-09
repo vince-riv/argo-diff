@@ -11,6 +11,7 @@ way `internal/github` does for GitHub. It is being built in issue #160, Phase 2;
 | ---- | -------- |
 | `client.go` | Client construction and config, `ConnectivityCheck()`, `getCurrentUser()`, API error logging |
 | `merge_request.go` | `Provider.GetChangeRequest()`, `Provider.ListChangedFiles()` |
+| `notes.go` | The comment primitives (`ListComments`, `CreateComment`, `UpdateComment`, `CurrentUser`) on MR notes, and `Dialect()` |
 | `provider.go` | `Provider` — the startup methods so far: `Enabled`, `ValidateConfig`, `CredentialsHint`, `ConnectivityCheck`, `RepoHosts` |
 
 client-go types stay inside this package, as go-github types do in `internal/github`.
@@ -54,6 +55,24 @@ A bad base URL or CA file leaves `client` nil and stores the reason in `clientEr
   so the `manifest-generate-paths` filter sees either. (GitHub's `ListPullRequestFiles()` reads
   one page only; see issue #160.)
 
+## Notes (comments)
+
+argo-diff's comments on a merge request are **notes**. `scm.PostComments()` runs the shared
+reuse algorithm over the primitives in `notes.go` (see `internal/scm/context.md`).
+
+- `ListComments()` reads every page (100 per page, `order_by=created_at&sort=asc`, so oldest
+  first) and **leaves out system notes** (`system: true`, eg: "added 1 commit").
+- `UpdateComment()` addresses a note through its MR: `PUT .../merge_requests/:iid/notes/:id`.
+- GitLab **trims a trailing newline** from a note body on save. Never compare bodies for
+  equality; the marker match in `scm.ExistingComments()` uses `strings.Contains`.
+- The API gives notes no URL; `toComment()` builds `<base>/<path>/-/merge_requests/<iid>#note_<id>`
+  for log lines.
+- `CurrentUser()` is the token's username (`getCurrentUser()`). With the `gitlab` connectivity
+  check bypassed it returns `""`, so notes are matched by marker alone, as GitHub does with its
+  bypass.
+- `Dialect()` is `comment.GitLab`: a 1,048,576-**byte** hard max (GitLab answers 400 above it),
+  alerts hoisted out of `<details>` like GitHub. See `internal/comment/context.md`.
+
 ## Connectivity check and user
 
 `ConnectivityCheck()` resolves the token's user with `GET /user`; `ARGO_DIFF_BYPASS_CONNECTIVITY_CHECKS=gitlab`
@@ -67,7 +86,10 @@ tokens act as bot users, which have a username like any other.
 `gitlab_testdata/api/<name>.json` (status line and headers from `<name>.headers`, with gitlab.com
 URLs rewritten to the server), records every request, and fails the test on an unlisted one. It
 points the package `client` at the server and resets the cached user for the test. Routes match
-on the **escaped** path, eg: `/api/v4/projects/vrivellino%2Fargo-diff/merge_requests/1`.
+on the **escaped** path, eg: `apiPath("merge_requests/1")` is
+`/api/v4/projects/vrivellino%2Fargo-diff/merge_requests/1`. The captured notes carry the marker
+`argo-diff[test]`; the server swaps it for `comment.Identifier()` so `TestPostComments` finds
+the captured argo-diff note as its own and edits it.
 
 ## Fixtures
 

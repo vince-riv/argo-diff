@@ -14,7 +14,8 @@ cmd/main.go
   │                                                └── internal/webhook
   ├── internal/github ─┬─ internal/comment, internal/config, internal/webhook
   │                    └─ internal/scm   (github.Provider implements scm.Provider)
-  ├── internal/gitlab ── internal/config   (GitLab provider, in progress)
+  ├── internal/gitlab ─┬─ internal/comment, internal/config
+  │                    └─ internal/scm   (GitLab provider; not imported until it is complete)
   ├── internal/scm      (registers the providers)
   └── internal/argocd, internal/github  (connectivity checks)
 
@@ -27,7 +28,7 @@ internal/gendiff  (no importers — see its context.md)
 | `argocd/` | Runs the `argocd` CLI; matches applications to a change and diffs them |
 | `comment/` | Renders diffs into comment bodies (per-provider `Dialect`), plus the preamble/marker wrapper |
 | `github/` | The GitHub provider (`github.Provider`): API client, PR comments, commit statuses, PR/file lookups, webhook parsing and signatures, GitHub Actions detection |
-| `gitlab/` | The GitLab provider (`gitlab.Provider`), being built in issue #160 Phase 2: API client and config and MR lookups so far, plus captured fixtures |
+| `gitlab/` | The GitLab provider (`gitlab.Provider`), being built in issue #160 Phase 2: API client and config, MR lookups and MR notes so far, plus captured fixtures |
 | `ignorable/` | Decides which resource diffs are "ignorable" (every changed line matches a regex), so `comment/` can fold them |
 | `process_event/` | Orchestrates one event end to end, including the timeout budget |
 | `scm/` | The `Provider` interface and registry, neutral types (`RepoRef`, `ChangeRequest`, `Status`), and the comment-reuse algorithm over provider primitives; imports no provider |
