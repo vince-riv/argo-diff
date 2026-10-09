@@ -109,6 +109,7 @@ Workflows in `.github/workflows/`:
 - **dockerbuild.yml** — GoReleaser build + multi-arch image publish to `ghcr.io` on `push` to `main` / `release-*` (no tag trigger; PRs build only, no push).
 - **k3s.yml** — end-to-end test on a k3s cluster with ArgoCD, using `test/` (see `test/context.md`).
 - **gitlab-k3s.yml** — the same end-to-end test for the GitLab provider, run on GitHub Actions against a merge request on the `vrivellino/argo-diff` GitLab fork; opt in with the `gitlab-k3s-test` PR label (see `test/context.md`).
+- **gitlab-k3s-cleanup.yml** — closes the GitLab merge requests that `gitlab-k3s.yml` opens: on PR close/merge, plus a daily job for orphans (closed PR, or a same-repo PR that lost the label).
 - **release.yml** — cuts a release on an `X.Y.Z[-suffix]` tag and moves the floating `vX`
 - **helm.yml** / **chart-releaser.yml** — chart lint/unittest, and publish on a `chart-X.Y.Z` tag.
 
