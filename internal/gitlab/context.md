@@ -100,8 +100,26 @@ reuse algorithm over the primitives in `notes.go` (see `internal/scm/context.md`
   `failed`. GitLab rejects `failure` with a 400 (its states are `pending`, `running`, `success`,
   `failed`, `canceled`, `skipped`).
 - The status `name` is `argo-diff`, or `argo-diff/<ARGO_DIFF_CONTEXT_STR>` (read in `init()`),
-  the same string GitHub uses as its context. GitLab keeps **one status per name and SHA** and
-  updates it in place.
+  the same string GitHub uses as its context.
+- **State machine.** GitLab updates a status of that name on the SHA in place only while it is
+  still `pending` or `running`; a finished one gets a new record. So pending → success updates in
+  place, and a re-run after success starts a new record. But **pending → pending is a 400**
+  (`Cannot transition status via :enqueue from :pending`), which happens when a run died before its
+  final status (the timeout path in `process_event`) or two runs overlap on one SHA (webhook plus a
+  refresh note, from Phase 4). `alreadyPending()` treats that one 400 as success when the requested
+  state is `pending`, so the logs don't report a failure for a status that is already right. The
+  test body for it is derived from GitLab's source, not captured.
+- **No `ref` or `pipeline_id` is sent**, so GitLab attaches the status to the first branch of the
+  project that contains the SHA, and answers `404 References for commit Not Found` when none does.
+  Known limits (review on #359), to address with Phase 4:
+  - **Fork MRs:** the head SHA lives only in the fork, so every status call on a fork MR is
+    expected to 404. `process_event` only logs status errors, so this fails quietly. Untested: the
+    Phase 0 captures are all same-project; Phase 4 fixtures should capture a fork MR.
+  - **Same-project MRs:** when the SHA is on several branches, the status lands on whichever comes
+    first, and it never joins the MR's pipeline (`refs/merge-requests/<iid>/head`), so under
+    "Pipelines must succeed" it may not gate the MR.
+  - Likely fix: send `pipeline_id` = the MR's `head_pipeline_id`, or at least `ref` = its
+    `source_branch`. Both need the MR to reach `SetStatus()`, so it is an `scm.Provider` change.
 - The description is cut to **255 characters** (runes, not bytes), ending in `...`; GitLab
   answers 400 above that.
 - `dryRun` (dev mode) logs instead of calling the API. Skipping statuses under GitLab CI is
