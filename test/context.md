@@ -134,7 +134,9 @@ The cluster setup lives in the composite action `.github/actions/k3s-argocd/` (s
 share it): it runs `go build` for a linux/amd64 binary into `temp/`, `docker build`s the `Dockerfile`,
 starts k3d, imports the image, installs ArgoCD, applies the test applications and waits for them to
 sync. It needs `actions/checkout` first. Its optional `repo_url` input rewrites every `repoURL` under
-`test/` (in the runner's checkout only) to another git host. Composite steps cannot set
+`test/` (in the runner's checkout only) to another git host. With `repo_url` set it also deletes `meta` and `any-ns-meta` and applies the
+child Applications straight from the rewritten files: the app-of-apps layer reads its children from
+the `k3s-test` branch, which still names GitHub, and `selfHeal` would put those URLs back. Composite steps cannot set
 `timeout-minutes`, so the calling step sets one for the whole action. Nothing is pushed to a registry, so the test
 no longer depends on the `Docker build` workflow.
 
@@ -160,7 +162,7 @@ hosts the MR, and the GitHub check is the verdict.
 - **Mirror:** the PR head sha is force-pushed to `gh-pr/<number>` on the fork, an MR to `main` is
   opened (or reused), and the step waits until the MR's `sha` equals the pushed sha, because GitLab
   prepares the MR asynchronously. The MR description holds the GitHub PR URL.
-- **Run:** `.github/actions/k3s-argocd` with `repo_url` set to the fork, so every test Application
+- **Run:** `.github/actions/k3s-argocd` with `repo_url` set to the fork (no app-of-apps layer, see above), so every test Application
   syncs from GitLab; then `run-argo-diff-pod.sh` with `PROVIDER=gitlab` for both scenarios. Context
   strings match `k3s.yml`, so each scenario keeps one note on the MR.
 - **Report:** one PR comment (marker `<!-- gitlab-k3s-test -->`, edited in place) with the MR link
