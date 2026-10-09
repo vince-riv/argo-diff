@@ -49,6 +49,9 @@ func init() {
 		}
 		return
 	}
+	if os.Getenv("GITHUB_APP_ID") == "" {
+		return // no GitHub credentials: the provider stays disabled
+	}
 	tr := http.DefaultTransport
 	appId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)
 	if err != nil {
