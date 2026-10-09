@@ -6,9 +6,11 @@ name: K3s Argo-Diff Test (GitLab) Cleanup
 #
 # - When a PR closes or merges, close its MR right away. A fork PR runs this with
 #   no secrets, so the daily job covers it.
-# - Daily, close every open gh-pr/* MR whose GitHub PR is closed or no longer has
-#   the gitlab-k3s-test label. This also covers missed events and removed labels,
-#   so there is no `unlabeled` trigger.
+# - Daily, close every open gh-pr/* MR whose GitHub PR is closed, or is a same-repo
+#   PR that no longer has the gitlab-k3s-test label. A fork PR is tested through
+#   workflow_dispatch, which needs no label, so the MR of an open fork PR stays.
+#   This also covers missed events and removed labels, so there is no `unlabeled`
+#   trigger.
 
 on:
   pull_request:
@@ -87,22 +89,31 @@ jobs:
             done
           )
 
+          failed=0
           while read -r mr_iid branch; do
             [[ -n "${mr_iid:-}" ]] || continue
             pr="${branch#gh-pr/}"
-            if ! pr_json=$(gh pr view "$pr" --json state,labels 2>/dev/null); then
+            if ! pr_json=$(gh pr view "$pr" --json state,labels,isCrossRepository 2>/dev/null); then
               echo "MR !${mr_iid} (${branch}): no such PR, leaving it alone"
               continue
             fi
             state=$(jq -r .state <<<"$pr_json")
+            fork=$(jq -r .isCrossRepository <<<"$pr_json")
             labeled=$(jq -r --arg l "$GITLAB_LABEL" '[.labels[].name] | index($l) != null' <<<"$pr_json")
-            if [[ "$state" == "OPEN" && "$labeled" == "true" ]]; then
-              echo "MR !${mr_iid} (${branch}): PR #${pr} is open and labeled, keeping"
+            if [[ "$state" == "OPEN" && ( "$labeled" == "true" || "$fork" == "true" ) ]]; then
+              echo "MR !${mr_iid} (${branch}): PR #${pr} is open (labeled=${labeled}, fork=${fork}), keeping"
               continue
             fi
-            echo "MR !${mr_iid} (${branch}): PR #${pr} is ${state}, labeled=${labeled}; closing"
-            glcurl -X PUT --data "state_event=close" "${api}/merge_requests/${mr_iid}" >/dev/null
+            echo "MR !${mr_iid} (${branch}): PR #${pr} is ${state}, labeled=${labeled}, fork=${fork}; closing"
+            # One failed call (a 5xx, or an MR someone just closed by hand) must
+            # not stop the rest of the loop; remember it and fail at the end.
+            if ! glcurl -X PUT --data "state_event=close" "${api}/merge_requests/${mr_iid}" >/dev/null; then
+              echo "::warning::Could not close MR !${mr_iid} (${branch})"
+              failed=1
+              continue
+            fi
             code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-              "${api}/repository/branches/gh-pr%2F${pr}")
+              "${api}/repository/branches/gh-pr%2F${pr}" || true)
             echo "  delete branch ${branch}: HTTP ${code}"
           done <<<"$branches"
+          exit "${failed:-0}"

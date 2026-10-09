@@ -176,6 +176,6 @@ hosts the MR, and the GitHub check is the verdict.
 
 **Cleanup (`gitlab-k3s-cleanup.yml`).** On `pull_request: closed` (same-repo only: a fork PR has no
 secrets) it closes the PR's MR and deletes `gh-pr/<number>`. A daily job (`05:17 UTC`, also
-`workflow_dispatch`) closes every open `gh-pr/*` MR whose PR is closed or has lost the
-`gitlab-k3s-test` label, so a missed event, a fork PR or a removed label needs no `unlabeled`
+`workflow_dispatch`) closes every open `gh-pr/*` MR whose PR is closed, or is a same-repo PR that has lost
+the `gitlab-k3s-test` label (an open fork PR keeps its MR, since the dispatch path needs no label), so a missed event, a fork PR or a removed label needs no `unlabeled`
 trigger. An MR whose PR cannot be found is left alone.
