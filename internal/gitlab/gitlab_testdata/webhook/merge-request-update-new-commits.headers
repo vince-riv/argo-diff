@@ -1,0 +1,12 @@
+POST /webhook/gitlab HTTP/1.1
+content-type: application/json
+user-agent: GitLab/19.5.0-pre
+idempotency-key: 1bb8ff71-0ec4-4a42-9f25-8e6b4a736a65
+webhook-id: 1bb8ff71-0ec4-4a42-9f25-8e6b4a736a65
+webhook-timestamp: 1791423545
+x-gitlab-event: Merge Request Hook
+x-gitlab-event-uuid: cbba86bd-aa3b-4804-9e9c-1700e161478f
+x-gitlab-instance: https://gitlab.com
+x-gitlab-webhook-uuid: cf06593c-464d-4271-9d34-f4a9caf8b713
+webhook-signature: v1,BxbR7Hm+EVBzohdS5Zpu0+j6fX7UuQvpidoWTavko6E=
+content-length: 4191
