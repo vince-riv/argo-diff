@@ -134,8 +134,8 @@ The cluster setup lives in the composite action `.github/actions/k3s-argocd/` (s
 share it): it runs `go build` for a linux/amd64 binary into `temp/`, `docker build`s the `Dockerfile`,
 starts k3d, imports the image, installs ArgoCD, applies the test applications and waits for them to
 sync. It needs `actions/checkout` first. Its optional `repo_url` input rewrites every `repoURL` under
-`test/` (in the runner's checkout only) to another git host. With `repo_url` set it also deletes `meta` and `any-ns-meta` and applies the
-child Applications straight from the rewritten files: the app-of-apps layer reads its children from
+`test/` (in the runner's checkout only) to another git host. With `repo_url` set it does not create `meta` and `any-ns-meta` (only their AppProjects) and applies
+the child Applications straight from the rewritten files: the app-of-apps layer reads its children from
 the `k3s-test` branch, which still names GitHub, and `selfHeal` would put those URLs back. Composite steps cannot set
 `timeout-minutes`, so the calling step sets one for the whole action. Nothing is pushed to a registry, so the test
 no longer depends on the `Docker build` workflow.
@@ -158,7 +158,8 @@ hosts the MR, and the GitHub check is the verdict.
 - **Trigger:** `pull_request` (`labeled`, `synchronize`, `reopened`) on a same-repo PR that has the
   `gitlab-k3s-test` label, or `workflow_dispatch` with a `pr` number for fork PRs (review the diff
   first: the run holds the GitLab token). The concurrency group is per PR and sits on the job, so
-  an unrelated label does not cancel a run.
+  an unrelated label does not cancel a run (the job `if:` also requires that a `labeled` event
+  adds our label, so a second label on an already-labeled PR does not restart the test).
 - **Mirror:** the PR head sha is force-pushed to `gh-pr/<number>` on the fork, an MR to `main` is
   opened (or reused), and the step waits until the MR's `sha` equals the pushed sha, because GitLab
   prepares the MR asynchronously. The MR description holds the GitHub PR URL.

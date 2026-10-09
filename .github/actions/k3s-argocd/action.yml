@@ -93,18 +93,28 @@ runs:
         sleep 2
         job_name=$(kubectl -n kube-system get helmchart argocd -o jsonpath='{.status.jobName}')
         test -n "$job_name" || exit 1
-        while sleep 1 ; do
+        # Bounded here, not just by the caller's timeout: when the caller's limit
+        # expires GitHub kills the whole action step, and the debug step never runs.
+        for _ in $(seq 1 120); do
           kubectl -n kube-system wait --for=condition=complete job/$job_name --timeout=1s && exit 0 || true
           kubectl -n kube-system wait --for=condition=failed job/$job_name --timeout=1s && exit 1 || true
+          sleep 1
         done
+        echo "::error::HelmChart job $job_name did not finish within the time limit"
+        exit 1
 
     - name: Wait for ArgoCD pods to be ready
       shell: bash
       run: |
         echo "Waiting for ArgoCD pods to launch..."
-        while [[ -z "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]]; do
+        for _ in $(seq 1 180); do
+          [[ -n "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]] && break
           sleep 1
         done
+        if [[ -z "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]]; then
+          echo "::error::No argocd-server pod appeared within the time limit"
+          exit 1
+        fi
         echo "Waiting for argocd-server pods to be ready ..."
         kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=180s
 
@@ -115,32 +125,26 @@ runs:
 
     - name: Create ArgoCD test applications
       shell: bash
-      run: |
-        kubectl -n argocd apply -k test/argocd-applications/ --server-side=true
-        kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
-        # Not "-n argocd": any-ns-meta declares its own metadata.namespace
-        # (argocd-apps), which conflicts with a "-n" override to a different
-        # namespace. The AppProject declares its own namespace: argocd instead.
-        kubectl apply -f test/argocd-meta-any-ns.yaml --server-side=true
-
-    - name: Replace the app-of-apps layer with the rewritten child applications
-      if: ${{ inputs.repo_url != '' }}
-      shell: bash
       env:
         REPO_URL: ${{ inputs.repo_url }}
       run: |
         set -euo pipefail
-        # meta and any-ns-meta read their child Applications from the git branch
-        # k3s-test, which still names GitHub, and selfHeal would put those URLs
-        # back. Remove them (their children carry no finalizers, so nothing
-        # cascades) and apply the children from the rewritten local files, so
-        # every Application syncs from ${REPO_URL}.
-        kubectl -n argocd patch application meta --type=merge -p '{"metadata":{"finalizers":null}}'
-        kubectl -n argocd delete application meta
-        kubectl -n argocd-apps patch application any-ns-meta --type=merge -p '{"metadata":{"finalizers":null}}'
-        kubectl -n argocd-apps delete application any-ns-meta
-        kubectl apply -k test/argocd-applications/ --server-side=true --force-conflicts
-        kubectl apply -k test/argocd-applications-any-ns/ --server-side=true --force-conflicts
+        kubectl -n argocd apply -k test/argocd-applications/ --server-side=true
+        if [[ -z "$REPO_URL" ]]; then
+          kubectl -n argocd apply -f test/argocd-meta.yaml --server-side=true
+          # Not "-n argocd": any-ns-meta declares its own metadata.namespace
+          # (argocd-apps), which conflicts with a "-n" override to a different
+          # namespace. The AppProject declares its own namespace: argocd instead.
+          kubectl apply -f test/argocd-meta-any-ns.yaml --server-side=true
+        else
+          # meta and any-ns-meta read their child Applications from the k3s-test
+          # branch, which names GitHub, and selfHeal would put those URLs back
+          # over the rewritten ones. So do not create them: apply only their
+          # AppProjects, and the children straight from the rewritten files.
+          yq 'select(.kind == "AppProject")' test/argocd-meta.yaml | kubectl apply -f - --server-side=true
+          yq 'select(.kind == "AppProject")' test/argocd-meta-any-ns.yaml | kubectl apply -f - --server-side=true
+          kubectl apply -k test/argocd-applications-any-ns/ --server-side=true
+        fi
 
     - name: Install ArgoCD CLI
       shell: bash
