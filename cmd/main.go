@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	flag "github.com/spf13/pflag"
@@ -14,6 +15,7 @@ import (
 	"github.com/vince-riv/argo-diff/internal/argocd"
 	"github.com/vince-riv/argo-diff/internal/config"
 	"github.com/vince-riv/argo-diff/internal/github"
+	"github.com/vince-riv/argo-diff/internal/gitlab"
 	"github.com/vince-riv/argo-diff/internal/ignorable"
 	"github.com/vince-riv/argo-diff/internal/process_event"
 	"github.com/vince-riv/argo-diff/internal/scm"
@@ -77,30 +79,56 @@ func startServer(listenHost string, listenPort int, devMode bool) {
 }
 
 // knownProviders lists every scm provider argo-diff supports. main()
-// registers the ones whose credentials are present.
-var knownProviders = []scm.Provider{github.Provider{}}
+// registers the ones ARGO_DIFF_SCM_PROVIDERS lists.
+var knownProviders = []scm.Provider{github.Provider{}, gitlab.Provider{}}
 
-// registerProviders registers every enabled provider and fatals when none is,
-// or when an enabled one is misconfigured.
-func registerProviders() []scm.Provider {
-	var hints []string
-	for _, p := range knownProviders {
-		if !p.Enabled() {
-			log.Debug().Msgf("%s credentials not set - %s support is disabled", p.Name(), p.Name())
-			hints = append(hints, p.CredentialsHint())
+// selectProviders returns the providers of known that ARGO_DIFF_SCM_PROVIDERS
+// lists (default: github), after checking each one has credentials and a
+// valid configuration. A provider that is not listed is skipped even when its
+// credentials are set. A listed provider without credentials, an invalid
+// configuration, or an unknown name in the list is an error.
+func selectProviders(known []scm.Provider) ([]scm.Provider, error) {
+	var knownNames []string
+	for _, p := range known {
+		knownNames = append(knownNames, p.Name())
+	}
+	names, isDefault, err := config.ScmProviders(knownNames)
+	if err != nil {
+		return nil, err
+	}
+	var selected []scm.Provider
+	for _, p := range known {
+		if !slices.Contains(names, p.Name()) {
+			log.Debug().Msgf("%s is not in %s - %s support is disabled", p.Name(), config.ScmProvidersEnvVar, p.Name())
 			continue
 		}
+		if !p.Enabled() {
+			if isDefault {
+				return nil, fmt.Errorf("%s is the default source control provider (%s is not set) but has no credentials; set one of: %s; or set %s to the providers you use, eg: gitlab",
+					p.Name(), config.ScmProvidersEnvVar, p.CredentialsHint(), config.ScmProvidersEnvVar)
+			}
+			return nil, fmt.Errorf("%s is listed in %s but has no credentials; set one of: %s", p.Name(), config.ScmProvidersEnvVar, p.CredentialsHint())
+		}
 		if err := p.ValidateConfig(); err != nil {
-			log.Fatal().Err(err).Msgf("Invalid %s configuration", p.Name())
+			return nil, fmt.Errorf("invalid %s configuration: %w", p.Name(), err)
 		}
 		log.Info().Msgf("%s support is enabled", p.Name())
+		selected = append(selected, p)
+	}
+	return selected, nil
+}
+
+// registerProviders registers the selected providers and fatals when the
+// selection fails.
+func registerProviders() []scm.Provider {
+	selected, err := selectProviders(knownProviders)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot enable source control providers")
+	}
+	for _, p := range selected {
 		scm.Register(p)
 	}
-	providers := scm.Providers()
-	if len(providers) == 0 {
-		log.Fatal().Msgf("No source control provider credentials are set; set one of: %s", strings.Join(hints, "; "))
-	}
-	return providers
+	return scm.Providers()
 }
 
 func main() {
@@ -129,12 +157,11 @@ func main() {
 		log.Fatal().Err(err).Msg("Connectivity check to ArgoCD failed")
 	}
 
-	// application sources on these hosts match a change by owner/repo exactly
-	var repoHosts []string
+	// application sources on a provider's hosts match that provider's
+	// changes by owner/repo exactly
 	for _, p := range providers {
-		repoHosts = append(repoHosts, p.RepoHosts()...)
+		argocd.SetRepoHosts(p.Name(), p.RepoHosts())
 	}
-	argocd.SetRepoHosts(repoHosts)
 
 	// in a provider's CI (eg: GitHub Actions), run once with event data from
 	// the environment and skip the provider connectivity checks

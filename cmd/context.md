@@ -18,18 +18,36 @@ Application entry point. A single file, `main.go` — there is no other command 
 `main()` validates the environment and then dispatches, in this order:
 
 1. Fatals unless `ARGOCD_AUTH_TOKEN` and `ARGOCD_SERVER_ADDR` are set.
-2. `registerProviders()` walks `knownProviders` (today just `github.Provider{}`). A provider whose
-   `Enabled()` is true — its credentials are present — must pass `ValidateConfig()` (fatal
-   otherwise) and is registered in the `scm` registry; the rest are skipped. **No enabled provider
-   is fatal**, naming each provider's `CredentialsHint()`. For GitHub, any of
-   `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN` or the `GITHUB_APP_*` trio enables it, and with no
-   token all three App variables are required.
+2. `registerProviders()` registers what `selectProviders(knownProviders)` returns
+   (`github.Provider{}`, `gitlab.Provider{}`), and fatals on its error. **`ARGO_DIFF_SCM_PROVIDERS`
+   decides which providers run** (`config.ScmProviders()`; unset or empty means `github`):
+   - a provider **not in the list is skipped**, even with its credentials set, and its
+     `ValidateConfig()` never runs;
+   - a listed provider whose `Enabled()` is false (no credentials) is an error naming its
+     `CredentialsHint()`. When the list is the default, the error also says to set
+     `ARGO_DIFF_SCM_PROVIDERS` (eg: `gitlab`), since a GitLab-only operator hits this first;
+   - an **unknown name in the list is an error**, unlike the warn-only bypass list: this list
+     decides what runs, so a typo must not turn a provider off without a word;
+   - a listed provider must pass `ValidateConfig()`.
+   For GitHub, any of `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN` or the `GITHUB_APP_*` trio
+   counts as credentials, and with no token all three App variables are required. For GitLab,
+   `GITLAB_TOKEN` does, and `ValidateConfig()` builds the client, failing on a malformed
+   `GITLAB_BASE_URL` or an unreadable `GITLAB_CA_FILE`. `main_test.go` covers `selectProviders()`
+   with stub providers.
+   - **CI detection (step 6) only consults listed providers.** With the default list, a GitLab
+     CI job never reaches GitLab's `DetectCI()` and fails with the "github is the default ... has
+     no credentials" error unless it sets `ARGO_DIFF_SCM_PROVIDERS=gitlab`. The Phase 3 GitLab CI
+     template (issue #160, PR 3.2) must set it itself, so its users need not know about it.
+     GitHub Actions needs nothing: the default is `github`.
+   - **The gate covers GitLab fully, GitHub only partly.** GitLab builds its client in
+     `ValidateConfig()`, so an unlisted GitLab does nothing. `internal/github`'s `init()`
+     functions still run whatever the list says (see `internal/github/context.md`).
 3. `APP_ENV=dev` turns on dev mode.
 4. `argocd.ConnectivityCheck()` — always runs, in every mode. It executes `argocd version`, so the
    `argocd` CLI must be on `PATH` (or named by `ARGOCD_CLI_CMD_NAME`) even for a run that would
    otherwise do nothing, and both client and server must be >= 2.12.0.
-5. `argocd.SetRepoHosts()` with every enabled provider's `RepoHosts()` (see
-   `internal/argocd/context.md`).
+5. `argocd.SetRepoHosts(p.Name(), p.RepoHosts())` for every enabled provider, so each event
+   matches application sources on its own provider's hosts (see `internal/argocd/context.md`).
 6. **CI detection.** The first enabled provider whose `DetectCI()` is true (GitHub:
    `GITHUB_ACTIONS=true`) gets `server.ProcessCI(p)`, then return. Provider connectivity checks are
    deliberately skipped here. This branch also warns when `process_event.RequireAppMatch()` is true:

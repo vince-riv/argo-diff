@@ -95,7 +95,7 @@ func getApplicationChanges(ctx context.Context, app *Application, revision strin
 	return appResChanges, err
 }
 
-func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *Application, repoOwner, repoName, revision string) (ApplicationResourcesWithChanges, error) {
+func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *Application, provider, repoOwner, repoName, revision string) (ApplicationResourcesWithChanges, error) {
 	var appResChanges ApplicationResourcesWithChanges
 	appName := appCur.Name
 	curSources := appCur.Spec.GetSources()
@@ -113,7 +113,7 @@ func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *App
 		if curSrc.RepoURL != newSources[i].RepoURL {
 			return appResChanges, fmt.Errorf("source URL is changing in %s", appName)
 		}
-		if gitRepoMatch(curSrc, repoOwner, repoName) {
+		if gitRepoMatch(curSrc, provider, repoOwner, repoName) {
 			newRevision = revision
 		}
 		revisions = append(revisions, newRevision)
@@ -236,7 +236,7 @@ func processNestedJob(ctx context.Context, job nestedJob, eventInfo webhook.Even
 		res.notDiffed = append(res.notDiffed, job.appNew.Name)
 		return res
 	}
-	subAppResChanges, err := getMultiSrcAppChanges(ctx, job.appCur, job.appNew, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
+	subAppResChanges, err := getMultiSrcAppChanges(ctx, job.appCur, job.appNew, eventInfo.Provider, eventInfo.RepoOwner, eventInfo.RepoName, eventInfo.Sha)
 	if err != nil {
 		if ctx.Err() != nil {
 			res.notDiffed = append(res.notDiffed, job.appNew.Name)
@@ -260,7 +260,7 @@ func processMultiSrcApp(ctx context.Context, app Application, eventInfo webhook.
 	revList := []string{}
 	srcPos := []int{}
 	for i, appSrc := range app.Spec.GetSources() {
-		if gitRepoMatch(appSrc, eventInfo.RepoOwner, eventInfo.RepoName) {
+		if gitRepoMatch(appSrc, eventInfo.Provider, eventInfo.RepoOwner, eventInfo.RepoName) {
 			revList = append(revList, eventInfo.Sha)
 			srcPos = append(srcPos, i+1)
 		}
@@ -487,21 +487,36 @@ func filterApplications(a []Application, eventInfo webhook.EventInfo, multiSourc
 	return appList, nil
 }
 
-// repoHosts are the hosts of the enabled scm providers. gitRepoMatch() tries
-// them before its host-agnostic fallback. cmd/main.go sets them at startup,
-// before any event is processed; the default covers tests and GitHub.
-var repoHosts = []string{"github.com"}
+// defaultRepoProvider mirrors scm.DefaultProvider: an event that names no
+// provider is GitHub's.
+const defaultRepoProvider = "github"
 
-// SetRepoHosts replaces the hosts gitRepoMatch() matches exactly. Call it once
-// at startup, before processing any event.
-func SetRepoHosts(hosts []string) {
+// repoHosts are the hosts of each enabled scm provider, by provider name.
+// gitRepoMatch() tries only the event's provider's hosts before its
+// host-agnostic fallback, so a GitHub PR never matches a gitlab.com source
+// exactly (and vice versa). cmd/main.go sets them at startup, before any event
+// is processed; the default covers tests and GitHub.
+var repoHosts = map[string][]string{defaultRepoProvider: {"github.com"}}
+
+// SetRepoHosts replaces the hosts gitRepoMatch() matches exactly for events of
+// provider. Call it at startup, before processing any event; it is not safe
+// for concurrent use.
+func SetRepoHosts(provider string, hosts []string) {
 	if len(hosts) == 0 {
 		return
 	}
-	repoHosts = hosts
+	repoHosts[provider] = hosts
 }
 
-func gitRepoMatch(appSrc ApplicationSource, repoOwner, repoName string) bool {
+// hostsFor returns the hosts of provider; "" means defaultRepoProvider.
+func hostsFor(provider string) []string {
+	if provider == "" {
+		provider = defaultRepoProvider
+	}
+	return repoHosts[provider]
+}
+
+func gitRepoMatch(appSrc ApplicationSource, provider, repoOwner, repoName string) bool {
 	if appSrc.Chart != "" {
 		// Chart/OCI registry sources aren't git remotes, so RepoURL isn't a git
 		// remote URL here (e.g. "oci://registry.example.com/acme/widgets" for a
@@ -512,7 +527,7 @@ func gitRepoMatch(appSrc ApplicationSource, repoOwner, repoName string) bool {
 	}
 	repoUrl := appSrc.RepoURL
 	var candidates []string
-	for _, host := range repoHosts {
+	for _, host := range hostsFor(provider) {
 		candidates = append(candidates,
 			fmt.Sprintf("%s/%s/%s.git", host, repoOwner, repoName),
 			fmt.Sprintf("%s:%s/%s.git", host, repoOwner, repoName),
@@ -571,7 +586,7 @@ func checkSource(appSpecSource ApplicationSource, appName string, eventInfo webh
 	log.Trace().Msgf("checkSource() - appname: %s (autosync %t)", appName, automatedSync)
 	log.Trace().Msgf("checkSource() - appSpecSource: %+v", appSpecSource)
 	log.Trace().Msgf("checkSource() - eventInfo: %+v", eventInfo)
-	if !gitRepoMatch(appSpecSource, eventInfo.RepoOwner, eventInfo.RepoName) {
+	if !gitRepoMatch(appSpecSource, eventInfo.Provider, eventInfo.RepoOwner, eventInfo.RepoName) {
 		log.Debug().Msgf("Filtering application %s: RepoURL %s doesn't mach owner/repo %s/%s", appName, appSpecSource.RepoURL, eventInfo.RepoOwner, eventInfo.RepoName)
 		return false
 	}

@@ -52,6 +52,10 @@ func init() {
 			log.Error().Err(err).Msg("Failed to create github client")
 			return
 		}
+	} else if os.Getenv("GITHUB_APP_ID") == "" {
+		// no GitHub credentials at all: the provider stays disabled (eg: a
+		// GitLab-only setup), so there is no client to build or error to log
+		return
 	} else {
 		tr := http.DefaultTransport
 		appId, err := strconv.ParseInt(os.Getenv("GITHUB_APP_ID"), 10, 64)

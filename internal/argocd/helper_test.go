@@ -1035,7 +1035,7 @@ func TestGitRepoMatch(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			src := ApplicationSource{RepoURL: tc.repoURL, Chart: tc.chart}
-			if got := gitRepoMatch(src, owner, repo); got != tc.want {
+			if got := gitRepoMatch(src, "", owner, repo); got != tc.want {
 				t.Errorf("gitRepoMatch(%+v, %q, %q) = %v; want %v", src, owner, repo, got, tc.want)
 			}
 		})
@@ -1063,7 +1063,7 @@ func TestGitRepoMatch_DisableNonGithubFallback(t *testing.T) {
 			// check only looks for the literal value "true".
 			t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", tc.disabled)
 			src := ApplicationSource{RepoURL: tc.repoURL}
-			if got := gitRepoMatch(src, owner, repo); got != tc.want {
+			if got := gitRepoMatch(src, "", owner, repo); got != tc.want {
 				t.Errorf("gitRepoMatch(%+v, %q, %q) with ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH=%q = %v; want %v", src, owner, repo, tc.disabled, got, tc.want)
 			}
 		})
@@ -1073,23 +1073,86 @@ func TestGitRepoMatch_DisableNonGithubFallback(t *testing.T) {
 // gitRepoMatch matches the hosts of every enabled provider exactly, even with
 // the host-agnostic fallback disabled.
 func TestGitRepoMatch_RepoHosts(t *testing.T) {
-	orig := repoHosts
-	t.Cleanup(func() { repoHosts = orig })
+	t.Cleanup(resetRepoHosts())
 	t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", "true")
 
 	src := ApplicationSource{RepoURL: "https://gitlab.example.com/acme/widgets.git"}
-	if gitRepoMatch(src, "acme", "widgets") {
+	if gitRepoMatch(src, "gitlab", "acme", "widgets") {
 		t.Error("gitRepoMatch() matched a host no provider names, with the fallback disabled")
 	}
-	SetRepoHosts([]string{"github.com", "gitlab.example.com"})
-	if !gitRepoMatch(src, "acme", "widgets") {
-		t.Error("gitRepoMatch() missed a source on an enabled provider's host")
+	SetRepoHosts("gitlab", []string{"gitlab.example.com"})
+	if !gitRepoMatch(src, "gitlab", "acme", "widgets") {
+		t.Error("gitRepoMatch() missed a source on the event's provider's host")
 	}
-	if !gitRepoMatch(ApplicationSource{RepoURL: "git@github.com:acme/widgets.git"}, "acme", "widgets") {
-		t.Error("gitRepoMatch() missed github.com after SetRepoHosts()")
+	if !gitRepoMatch(ApplicationSource{RepoURL: "git@github.com:acme/widgets.git"}, "", "acme", "widgets") {
+		t.Error("gitRepoMatch() missed github.com for an event with no provider (the default, github)")
 	}
-	SetRepoHosts(nil) // ignored: an empty list would match nothing
-	if len(repoHosts) != 2 {
-		t.Errorf("SetRepoHosts(nil) changed the hosts to %v", repoHosts)
+	SetRepoHosts("gitlab", nil) // ignored: an empty list would match nothing
+	if got := hostsFor("gitlab"); len(got) != 1 {
+		t.Errorf("SetRepoHosts(gitlab, nil) changed the hosts to %v", got)
+	}
+}
+
+// resetRepoHosts snapshots repoHosts and returns a func that restores it.
+func resetRepoHosts() func() {
+	orig := map[string][]string{}
+	for k, v := range repoHosts {
+		orig[k] = v
+	}
+	return func() { repoHosts = orig }
+}
+
+// With GitHub and GitLab both enabled, a change matches exactly only on its
+// own provider's host: a GitHub PR on acme/app must not match a mirror at
+// gitlab.com/acme/app, and vice versa (review on #360).
+func TestGitRepoMatch_ScopedToEventProvider(t *testing.T) {
+	t.Cleanup(resetRepoHosts())
+	SetRepoHosts("github", []string{"github.com"})
+	SetRepoHosts("gitlab", []string{"gitlab.com"})
+	t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", "true")
+
+	onGitHub := ApplicationSource{RepoURL: "https://github.com/acme/app.git"}
+	onGitLab := ApplicationSource{RepoURL: "https://gitlab.com/acme/app.git"}
+	tests := []struct {
+		provider string
+		src      ApplicationSource
+		want     bool
+	}{
+		{"github", onGitHub, true},
+		{"github", onGitLab, false},
+		{"", onGitLab, false},
+		{"gitlab", onGitLab, true},
+		{"gitlab", onGitHub, false},
+	}
+	for _, tc := range tests {
+		if got := gitRepoMatch(tc.src, tc.provider, "acme", "app"); got != tc.want {
+			t.Errorf("gitRepoMatch(%s, provider %q) = %v, want %v", tc.src.RepoURL, tc.provider, got, tc.want)
+		}
+	}
+}
+
+// GitLab projects sit in nested groups, so the owner may contain "/". Both the
+// exact host match and the host-agnostic fallback handle it.
+func TestGitRepoMatch_NestedGroups(t *testing.T) {
+	t.Cleanup(resetRepoHosts())
+	SetRepoHosts("gitlab", []string{"gitlab.com"})
+
+	t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", "true")
+	for _, url := range []string{
+		"https://gitlab.com/group/sub/project.git",
+		"https://gitlab.com/group/sub/project",
+		"git@gitlab.com:group/sub/project.git",
+	} {
+		if !gitRepoMatch(ApplicationSource{RepoURL: url}, "gitlab", "group/sub", "project") {
+			t.Errorf("gitRepoMatch(%q, group/sub, project) = false", url)
+		}
+	}
+	if gitRepoMatch(ApplicationSource{RepoURL: "https://gitlab.com/other/sub/project.git"}, "gitlab", "group/sub", "project") {
+		t.Error("gitRepoMatch() matched a project in another top-level group")
+	}
+
+	t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", "")
+	if !gitRepoMatch(ApplicationSource{RepoURL: "https://gitlab.example.com/group/sub/project.git"}, "gitlab", "group/sub", "project") {
+		t.Error("the host-agnostic fallback missed a nested-group project")
 	}
 }

@@ -202,3 +202,31 @@ func TestEnabled(t *testing.T) {
 		t.Error("Enabled() with GITLAB_TOKEN = false")
 	}
 }
+
+// ValidateConfig builds the client; until then there is none, so an unlisted
+// GitLab never builds one.
+func TestValidateConfigBuildsClient(t *testing.T) {
+	origClient, origWeb := client, webBaseURL
+	t.Cleanup(func() { client, webBaseURL = origClient, origWeb })
+	t.Setenv("GITLAB_TOKEN", "glpat-test")
+	t.Setenv("GITLAB_CA_FILE", "")
+	t.Setenv("CI_SERVER_TLS_CA_FILE", "")
+
+	client, webBaseURL = nil, "https://gitlab.example.com"
+	if err := (Provider{}).ValidateConfig(); err != nil || client == nil {
+		t.Fatalf("ValidateConfig() = %v, client %v; want a client", err, client)
+	}
+	if got := client.BaseURL().String(); got != "https://gitlab.example.com/api/v4/" {
+		t.Errorf("client base URL = %q", got)
+	}
+
+	client, webBaseURL = nil, "ftp://gitlab.example.com"
+	if err := (Provider{}).ValidateConfig(); err == nil || client != nil {
+		t.Errorf("ValidateConfig() with a bad base URL = %v, client %v; want an error and no client", err, client)
+	}
+	t.Setenv("GITLAB_CA_FILE", filepath.Join(t.TempDir(), "missing.pem"))
+	webBaseURL = "https://gitlab.example.com"
+	if err := (Provider{}).ValidateConfig(); err == nil || client != nil {
+		t.Errorf("ValidateConfig() with a missing CA file = %v, client %v; want an error and no client", err, client)
+	}
+}

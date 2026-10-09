@@ -26,7 +26,16 @@ go-github types stay inside this package. `GetPullRequest()` returns an `scm.Cha
 credential: `GITHUB_PERSONAL_ACCESS_TOKEN`, then `GITHUB_TOKEN`, then a GitHub App
 (`GITHUB_APP_ID` + `GITHUB_APP_INSTALLATION_ID` + `GITHUB_APP_PRIVATE_KEY` via `ghinstallation`).
 The App path also builds `appsClient` (JWT auth) to resolve the bot's own login. Client
-construction failures only log — the nil client surfaces later as an error.
+construction failures only log — the nil client surfaces later as an error. With no token and no
+`GITHUB_APP_ID`, `init()` builds nothing and logs nothing: GitHub is simply disabled (eg: a
+GitLab-only setup). A partial App setup is reported by `Provider.ValidateConfig()` at startup.
+
+**These `init()` functions ignore `ARGO_DIFF_SCM_PROVIDERS`.** With `github` not listed (eg:
+`ARGO_DIFF_SCM_PROVIDERS=gitlab`), they still build clients from any GitHub credentials, still call
+`comment.SetIdentifierRef(GITHUB_REF)` when `GITHUB_ACTIONS=true`, and still log `Unable to parse`
+for a partial `GITHUB_APP_*` set. Nothing uses those clients, so the effect is spurious log lines.
+GitLab avoids this by building its client in `ValidateConfig()`; doing the same here is a planned
+follow-up (review on #360, issue #160).
 
 `getCommentUser()` caches the login (`commentLogin`) behind an `RWMutex`; the App path derives it
 from `App.GetSlug()` (falling back to `App.GetName()` if the slug is empty) and appends `[bot]` —
