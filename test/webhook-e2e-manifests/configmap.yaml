@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argo-diff-webhook-e2e
+data:
+  purpose: "argo-diff end-to-end webhook test; the commit SHA is in metadata.annotations"
