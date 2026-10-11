@@ -8,6 +8,9 @@
 #
 # Usage: scripts/prep-release.sh <version>   (e.g. 2.11.0)
 #
+# After committing, prints the commits since the last stable release as a
+# bulleted list, ready to paste into the PR description.
+#
 # Push the resulting commit directly to main or open a PR - whichever fits the
 # change. Once merged, tag the commit and push the tag:
 #   git tag <version> && git push origin <version>
@@ -49,8 +52,26 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
+# Capture before committing, so the prep commit is not in the list. Only stable
+# X.Y.Z tags count as releases; prerelease tags (X.Y.Z-rc1) are skipped.
+LAST_RELEASE="$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' HEAD 2>/dev/null || true)"
+if [ -n "$LAST_RELEASE" ]; then
+  COMMITS="$(git log --no-decorate --format='- %h %s' "${LAST_RELEASE}..HEAD")"
+fi
+
 git commit -m "chore: prep for release ${VERSION}"
 
 echo
 echo "Committed prep for ${VERSION}. Push directly to main or open a PR, then:"
 echo "  git tag -a -s -m 'argo-diff v${VERSION}' ${VERSION} && git push origin ${VERSION}"
+
+if [ -n "$LAST_RELEASE" ]; then
+  echo
+  echo "Commits since ${LAST_RELEASE} (paste into the PR description):"
+  echo
+  echo "Commits:"
+  echo "$COMMITS"
+else
+  echo
+  echo "No previous release tag found; skipping the commit list." >&2
+fi
