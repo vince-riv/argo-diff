@@ -21,6 +21,9 @@ Requirements and behavior:
 - Takes exactly one argument, a bare version like `2.13.0` (no `v` prefix — release tags in this
   repo are unprefixed).
 - Uses `sed -i.bak` and removes the backups; `set -euo pipefail` throughout.
+- After committing, prints the commits since the last stable `X.Y.Z` tag (prerelease tags are
+  skipped) as `- <hash> <subject>` bullets, ready to paste into the PR description. The list is
+  captured before the prep commit, so that commit is not in it.
 - Exits 0 without committing when nothing changed (already at that version).
 
 ## Release flow
