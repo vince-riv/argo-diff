@@ -1,0 +1,9 @@
+---
+# Rendered by the argo-diff end-to-end webhook test Applications in
+# vince-riv/argo-config. The Applications set a commonAnnotation with the
+# commit SHA (via commonAnnotationsEnvsubst), so every PR produces a
+# one-line argo-diff comment per webhook receiver.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
