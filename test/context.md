@@ -2,7 +2,8 @@
 
 Fixtures and the runner for the **end-to-end test** in `.github/workflows/k3s.yml`: a k3s cluster
 with a real ArgoCD, real applications, and argo-diff running as a pod against them. Nothing here is
-used by `go test`.
+used by `go test`. The one exception is `webhook-e2e-manifests/`, which the k3s workflows do not
+use (see [Webhook end-to-end manifests](#webhook-end-to-end-manifests)).
 
 ## Layout
 
@@ -18,6 +19,7 @@ used by `go test`.
 | `argocd-applications-any-ns/` | The `any-ns-deployment` child Application, assembled by `kustomization.yaml` |
 | `any-ns-deployment/` | Plain Kustomize manifests synced by the `any-ns-deployment` Application |
 | `run-argo-diff-pod.sh` | Runs argo-diff as a pod and asserts its exit code and logs |
+| `webhook-e2e-manifests/` | **Not used by the k3s workflows.** One ConfigMap for the webhook end-to-end test Applications in `vince-riv/argo-config` |
 
 `helm-deployment` is deliberately **multi-source**: the chart comes from
 `charts/test-basic-deployment` in this repo and the values from `test/helm-deployment.values.yaml`,
@@ -179,3 +181,20 @@ secrets) it closes the PR's MR and deletes `gh-pr/<number>`. A daily job (`05:17
 `workflow_dispatch`) closes every open `gh-pr/*` MR whose PR is closed, or is a same-repo PR that has lost
 the `gitlab-k3s-test` label (an open fork PR keeps its MR, since the dispatch path needs no label), so a missed event, a fork PR or a removed label needs no `unlabeled`
 trigger. An MR whose PR cannot be found is left alone.
+
+## Webhook end-to-end manifests
+
+`webhook-e2e-manifests/` is for the maintainer's home-lab ArgoCD (configured in
+`vince-riv/argo-config`), not for CI. Long-running argo-diff deployments there take GitHub
+webhooks (repo, org and GitHub App), and GitLab webhooks later. Each deployment has its own
+`ARGO_DIFF_CONTEXT_STR`, so each one keeps its own comment on a PR. An Application that tracks
+`main` renders this directory and adds the commit SHA as a Kustomize `commonAnnotation`
+(`commonAnnotationsEnvsubst: true` with `$ARGOCD_APP_REVISION`). As a result, every PR gets a
+one-line diff from each receiver, even a PR that changes no manifests. Those comments prove that
+webhook delivery works end to end.
+
+- **Keep the files static.** An edit here adds lines to the diff of every open PR.
+- **Do not add `manifest-generate-paths` to those Applications.** argo-diff would then skip every PR
+  that does not touch this directory.
+- **The directory sits under `test/**`**, so a change to it also starts `k3s.yml`. That run is
+  harmless.
