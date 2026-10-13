@@ -1,7 +1,7 @@
 # cmd/
 
-Application entry point. A single file, `main.go` — there is no other command in this module, and
-`.goreleaser.yaml` builds `./cmd` into the `argo-diff` binary.
+Application entry point, `main.go`; `.goreleaser.yaml` builds `./cmd` into the `argo-diff` binary.
+`webhook-parse/` is a separate CI-only command (see the end of this file); it is not released.
 
 ## What `main.go` does
 
@@ -71,4 +71,24 @@ Adding a provider means adding it to `knownProviders`.
   own configuration in *their* `init()` functions, which run first. Setting env vars from inside
   `main()` would be too late to affect them.
 - `startServer()` maps an empty host + zero port to `:8080`.
-- There is no test file here. Logic worth testing belongs in `internal/`.
+- `main_test.go` covers only `selectProviders()`. Logic worth testing belongs in `internal/`.
+
+## webhook-parse/
+
+`go run ./cmd/webhook-parse [--provider github] [--verify] < request` reads **one raw HTTP
+request** from stdin (request line, headers, blank line, body: what `httputil.DumpRequest(r, true)`
+writes), runs the provider's `scm.WebhookHandler` on it, and prints JSON to stdout:
+`provider`, `name` (the provider's event type), `kind` (`change` / `ping` / `ignored`), `verified`,
+`info` (the `EventInfo`, for `change` only) and `error`. It exits non-zero on a verify or parse
+error, and still prints the JSON. Logs go to stderr (`LOG_LEVEL`, default `warn`).
+
+It exists for a planned webhook integration test: a receiver subscribed to every webhook source
+(GitHub repo, org and App hooks; GitLab) fetches the branch, pipes the triggering request into this
+command, checks the output, and sets a commit status. The whole request is the input, not only
+the body, because parsing needs the event-type header and `--verify` needs the signature header.
+
+- The providers are not registered with `scm`, so it needs no credentials. `--verify` needs the
+  webhook secret (GitHub: `GITHUB_WEBHOOK_SECRET`, read at package load).
+- GitLab's handler is still a stub (issue #160), so `--provider gitlab` always fails for now.
+- `main_test.go` feeds it the `internal/github/github_testdata/webhook/` fixtures. The `--verify`
+  tests re-run the test binary with `GITHUB_WEBHOOK_SECRET` set, since `t.Setenv()` is too late.
