@@ -85,8 +85,17 @@ func TestRunGitHub(t *testing.T) {
 			if err != nil {
 				t.Fatalf("run() error: %v", err)
 			}
-			if res.Provider != "github" || res.Name != tt.event || res.Kind != tt.wantKind || res.Verified {
-				t.Errorf("got provider=%q name=%q kind=%q verified=%v", res.Provider, res.Name, res.Kind, res.Verified)
+			if res.Provider != "github" {
+				t.Errorf("got provider %q, want github", res.Provider)
+			}
+			if res.Name != tt.event {
+				t.Errorf("got name %q, want %q", res.Name, tt.event)
+			}
+			if res.Kind != tt.wantKind {
+				t.Errorf("got kind %q, want %q", res.Kind, tt.wantKind)
+			}
+			if res.Verified {
+				t.Error("got verified without --verify")
 			}
 			if tt.wantKind != "change" {
 				if res.Info != nil {
@@ -124,6 +133,9 @@ func TestRunErrors(t *testing.T) {
 		if err == nil || !strings.HasPrefix(res.Error, "parse:") {
 			t.Errorf("got err=%v result=%+v, want a parse error in both", err, res)
 		}
+		if res.Info != nil {
+			t.Errorf("got info %+v for a failed parse, want none", *res.Info)
+		}
 	})
 	t.Run("gitlab webhooks unsupported", func(t *testing.T) {
 		req := rawRequest(t, map[string]string{"X-Gitlab-Event": "Merge Request Hook"}, []byte("{}"))
@@ -135,14 +147,24 @@ func TestRunErrors(t *testing.T) {
 }
 
 // TestVerify re-runs this test binary as TestVerifyHelper with
-// GITHUB_WEBHOOK_SECRET set, since the github package reads it at load time.
+// GITHUB_WEBHOOK_SECRET set (empty for "nosecret"), since the github package
+// reads it at load time.
 func TestVerify(t *testing.T) {
-	for _, mode := range []string{"good", "bad"} {
+	for _, mode := range []string{"good", "bad", "nosecret"} {
 		t.Run(mode, func(t *testing.T) {
-			cmd := exec.Command(os.Args[0], "-test.run=^TestVerifyHelper$")
-			cmd.Env = append(os.Environ(), "GITHUB_WEBHOOK_SECRET="+testSecret, "WEBHOOK_PARSE_VERIFY_MODE="+mode)
-			if out, err := cmd.CombinedOutput(); err != nil {
+			secret := testSecret
+			if mode == "nosecret" {
+				secret = ""
+			}
+			cmd := exec.Command(os.Args[0], "-test.run=^TestVerifyHelper$", "-test.v")
+			cmd.Env = append(os.Environ(), "GITHUB_WEBHOOK_SECRET="+secret, "WEBHOOK_PARSE_VERIFY_MODE="+mode)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
 				t.Errorf("helper failed: %v\n%s", err, out)
+			}
+			// A renamed helper would match nothing and still exit 0.
+			if !bytes.Contains(out, []byte("--- PASS: TestVerifyHelper")) {
+				t.Errorf("helper did not run and pass:\n%s", out)
 			}
 		})
 	}
@@ -166,8 +188,14 @@ func TestVerifyHelper(t *testing.T) {
 			t.Errorf("got err=%v result=%+v", err, res)
 		}
 	case "bad":
-		if err == nil || res.Verified || res.Info != nil || !strings.HasPrefix(res.Error, "verify:") {
+		if err == nil || res.Verified || res.Info != nil || res.Kind != "" || res.Error != "verify: invalid signature" {
 			t.Errorf("got err=%v result=%+v", err, res)
 		}
+	case "nosecret":
+		if err == nil || res.Verified || res.Info != nil || !strings.Contains(res.Error, "GITHUB_WEBHOOK_SECRET") {
+			t.Errorf("got err=%v result=%+v, want an error naming the missing secret", err, res)
+		}
+	default:
+		t.Fatalf("unknown mode %q", mode)
 	}
 }

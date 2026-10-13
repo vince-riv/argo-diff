@@ -78,17 +78,19 @@ Adding a provider means adding it to `knownProviders`.
 `go run ./cmd/webhook-parse [--provider github] [--verify] < request` reads **one raw HTTP
 request** from stdin (request line, headers, blank line, body: what `httputil.DumpRequest(r, true)`
 writes), runs the provider's `scm.WebhookHandler` on it, and prints JSON to stdout:
-`provider`, `name` (the provider's event type), `kind` (`change` / `ping` / `ignored`), `verified`,
-`info` (the `EventInfo`, for `change` only) and `error`. It exits non-zero on a verify or parse
+`provider`, `name` (the provider's event type), `kind` (`change` / `ping` / `ignored`; left out
+when `--verify` fails, since nothing was parsed), `verified`, `info` (the `EventInfo`, for a
+`change` that parsed without error) and `error`. It exits non-zero on a verify or parse
 error, and still prints the JSON. Logs go to stderr (`LOG_LEVEL`, default `warn`).
 
 It exists for a planned webhook integration test: a receiver subscribed to every webhook source
-(GitHub repo, org and App hooks; GitLab) fetches the branch, pipes the triggering request into this
+(GitHub repo, org and App hooks; GitLab later) fetches the branch, pipes the triggering request into this
 command, checks the output, and sets a commit status. The whole request is the input, not only
 the body, because parsing needs the event-type header and `--verify` needs the signature header.
 
 - The providers are not registered with `scm`, so it needs no credentials. `--verify` needs the
-  webhook secret (GitHub: `GITHUB_WEBHOOK_SECRET`, read at package load).
+  webhook secret (GitHub: `GITHUB_WEBHOOK_SECRET`, read at package load); it runs the handler's
+  `CheckConfig()` first, so a missing secret is reported as such, not as a bad signature.
 - GitLab's handler is still a stub (issue #160), so `--provider gitlab` always fails for now.
 - `main_test.go` feeds it the `internal/github/github_testdata/webhook/` fixtures. The `--verify`
   tests re-run the test binary with `GITHUB_WEBHOOK_SECRET` set, since `t.Setenv()` is too late.

@@ -37,11 +37,13 @@ type result struct {
 	Provider string `json:"provider"`
 	// Name is the provider's own event type (eg: X-GitHub-Event).
 	Name string `json:"name"`
-	// Kind is "change", "ping" or "ignored".
-	Kind     string             `json:"kind"`
-	Verified bool               `json:"verified"`
-	Info     *webhook.EventInfo `json:"info,omitempty"`
-	Error    string             `json:"error,omitempty"`
+	// Kind is "change", "ping" or "ignored"; omitted when verification failed,
+	// since the request was never parsed.
+	Kind     string `json:"kind,omitempty"`
+	Verified bool   `json:"verified"`
+	// Info is the parsed event, for a "change" that parsed without error.
+	Info  *webhook.EventInfo `json:"info,omitempty"`
+	Error string             `json:"error,omitempty"`
 }
 
 func kindString(k scm.WebhookKind) string {
@@ -104,6 +106,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	res := result{Provider: p.Name(), Name: handler.EventName(req.Header)}
 	runErr := func() error {
 		if *verify {
+			// Without the secret, Verify() only reports a bad signature.
+			if err := handler.CheckConfig(); err != nil {
+				return fmt.Errorf("verify: %w", err)
+			}
 			if err := handler.Verify(req.Header, body); err != nil {
 				return fmt.Errorf("verify: %w", err)
 			}
@@ -112,11 +118,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		evt, err := handler.Parse(req.Header, body)
 		res.Name = evt.Name
 		res.Kind = kindString(evt.Kind)
-		if evt.Kind == scm.WebhookChange {
-			res.Info = &evt.Info
-		}
 		if err != nil {
 			return fmt.Errorf("parse: %w", err)
+		}
+		if evt.Kind == scm.WebhookChange {
+			res.Info = &evt.Info
 		}
 		return nil
 	}()
