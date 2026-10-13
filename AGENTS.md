@@ -14,7 +14,7 @@ changes.
 
 | Path | What it is |
 | ---- | ---------- |
-| `cmd/` | Entry point: flags, env validation, mode dispatch |
+| `cmd/` | Entry point: flags, env validation, mode dispatch; `webhook-parse/`, a CI-only webhook parsing CLI |
 | `internal/argocd/` | Wrapper around the `argocd` CLI; application matching and diffing |
 | `internal/config/` | Cross-package operator config, eg: the connectivity-check bypass |
 | `internal/comment/` | Renders diffs into comment bodies; per-provider `Dialect`; preamble and marker wrapper |
