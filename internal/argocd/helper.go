@@ -100,23 +100,34 @@ func getApplicationChanges(ctx context.Context, app *Application, revision strin
 // purpose. They are limitations, not failures, so they don't fail the run.
 var errUnsupportedSourceChange = errors.New("unsupported source change")
 
+// unsupportedSourceChangeError carries the reason for a refusal. Its message is
+// the reason alone - the sentinel's own text would only repeat itself in the
+// notice - while errors.Is still matches errUnsupportedSourceChange.
+type unsupportedSourceChangeError struct{ reason string }
+
+func (e *unsupportedSourceChangeError) Error() string { return e.reason }
+func (e *unsupportedSourceChangeError) Unwrap() error { return errUnsupportedSourceChange }
+
+func unsupportedSourceChange(format string, a ...any) error {
+	return &unsupportedSourceChangeError{reason: fmt.Sprintf(format, a...)}
+}
+
 func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *Application, provider, repoOwner, repoName, revision string) (ApplicationResourcesWithChanges, error) {
 	var appResChanges ApplicationResourcesWithChanges
-	appName := appCur.Name
 	curSources := appCur.Spec.GetSources()
 	newSources := appNew.Spec.GetSources()
 	if len(curSources) != len(newSources) {
-		return appResChanges, fmt.Errorf("%w: number of sources for %s changing: %d -> %d", errUnsupportedSourceChange, appName, len(curSources), len(newSources))
+		return appResChanges, unsupportedSourceChange("number of sources changing: %d -> %d", len(curSources), len(newSources))
 	}
 	if len(curSources) < 1 {
-		return appResChanges, fmt.Errorf("%w: %s has no sources configured", errUnsupportedSourceChange, appName)
+		return appResChanges, unsupportedSourceChange("no sources configured")
 	}
 	revisions := []string{}
 	positions := []int{}
 	for i, curSrc := range curSources {
 		newRevision := newSources[i].TargetRevision
 		if curSrc.RepoURL != newSources[i].RepoURL {
-			return appResChanges, fmt.Errorf("%w: source URL is changing in %s", errUnsupportedSourceChange, appName)
+			return appResChanges, unsupportedSourceChange("source %d URL changing: %s -> %s", i+1, curSrc.RepoURL, newSources[i].RepoURL)
 		}
 		if gitRepoMatch(curSrc, provider, repoOwner, repoName) {
 			newRevision = revision
@@ -253,14 +264,16 @@ func processNestedJob(ctx context.Context, job nestedJob, eventInfo webhook.Even
 			res.notDiffed = append(res.notDiffed, job.appNew.Name)
 			return res
 		}
-		log.Warn().Err(err).Msgf("Failed to diff nested ArgoCD App '%s'", job.appNew.Name)
 		if errors.Is(err, errUnsupportedSourceChange) {
+			log.Info().Msgf("Not diffing nested ArgoCD App '%s': %s", job.appNew.Name, err.Error())
 			res.parentNotice = fmt.Sprintf("argo-diff can't diff %s: %s", job.appNew.Name, err.Error())
 			return res
 		}
+		log.Warn().Err(err).Msgf("Failed to diff nested ArgoCD App '%s'", job.appNew.Name)
 		if subAppResChanges.ArgoApp == nil {
-			// getMultiSrcAppChanges() bails out before populating ArgoApp on its
-			// validation errors; the comment is rendered by app name
+			// defensive: every error path left sets ArgoApp first (in
+			// getApplicationChanges()), but process_event dereferences it to
+			// render the app by name
 			subAppResChanges.ArgoApp = job.appCur
 		}
 		subAppResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", job.appNew.Name, err.Error())

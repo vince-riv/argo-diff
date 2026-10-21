@@ -1424,8 +1424,8 @@ func TestProcessNestedJobUnsupportedSourceChangeNotifiesParent(t *testing.T) {
 	if res.diffResult != nil {
 		t.Errorf("diffResult = %+v, want nil", res.diffResult)
 	}
-	if !strings.HasPrefix(res.parentNotice, "argo-diff can't diff child: ") || !strings.Contains(res.parentNotice, "number of sources") {
-		t.Errorf("parentNotice = %q, want \"argo-diff can't diff child: ...number of sources...\"", res.parentNotice)
+	if want := "argo-diff can't diff child: number of sources changing: 1 -> 2"; res.parentNotice != want {
+		t.Errorf("parentNotice = %q, want %q", res.parentNotice, want)
 	}
 }
 
@@ -1491,6 +1491,90 @@ spec:
 	}
 	if !strings.Contains(parent.NoticeStr, "argo-diff can't diff pool-app-0-child: ") {
 		t.Errorf("parent NoticeStr = %q, want the child's refusal notice", parent.NoticeStr)
+	}
+}
+
+// A parent can carry both notices at once: its own (a namespace-less child it
+// couldn't resolve) and a refused child's parentNotice. The wave-2 merge joins
+// them, blank-line separated, own notice first.
+func TestGetApplicationChangesJoinsParentNotices(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	const repoURL = "https://github.com/acme/widgets.git"
+	const otherRepoURL = "https://github.com/acme/other.git"
+	parents := buildTestApps(1, repoURL) // no destination namespace
+	refused := Application{
+		ObjectMeta: metav1.ObjectMeta{Name: "refused", Namespace: "argocd"},
+		Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
+	}
+	appListJSON, err := json.Marshal(append(parents, refused))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "web" changed in two namespaces and renders without one: ambiguous
+	diff := []byte(`===== argoproj.io/Application argocd/refused ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+
+===== argoproj.io/Application team-b/web ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+
+===== argoproj.io/Application team-c/web ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+`)
+	manifests := []byte(fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: refused
+  namespace: argocd
+spec:
+  sources:
+  - repoURL: %s
+    targetRevision: main
+  - repoURL: https://github.com/acme/values.git
+    targetRevision: main
+---
+%s`, otherRepoURL, noNamespaceWebManifest))
+
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		switch {
+		case slices.Equal(args, []string{"version", "--client"}):
+			return []byte("argocd: v3.5.2\n"), nil
+		case args[1] == "list":
+			return appListJSON, nil
+		case args[1] == "diff" && args[2] == "pool-app-0":
+			return diff, makeExitError(t, nil)
+		case args[1] == "manifests":
+			return manifests, nil
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "acme", RepoName: "widgets", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main", Sha: "abcdef"}
+	appResList, _, err := GetApplicationChanges(context.Background(), evtInfo)
+	if err != nil {
+		t.Fatalf("GetApplicationChanges() err'd: %v", err)
+	}
+	if len(appResList) != 1 {
+		t.Fatalf("appResList has %d entries, want only the parent", len(appResList))
+	}
+	notices := strings.Split(appResList[0].NoticeStr, "\n\n")
+	if len(notices) != 2 ||
+		!strings.Contains(notices[0], "Application(s) named web") ||
+		notices[1] != "argo-diff can't diff refused: number of sources changing: 1 -> 2" {
+		t.Errorf("parent NoticeStr = %q, want the unresolved-namespace notice, a blank line, then the refusal", appResList[0].NoticeStr)
 	}
 }
 

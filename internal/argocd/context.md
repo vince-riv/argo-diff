@@ -110,10 +110,11 @@ sets `WarnStr` and is appended to `appResList`, like wave 1 and wave 3, so it fa
 (`process_event` counts it as an error). Earlier versions silently dropped it (fixed alongside the
 missing-namespace fix below).
 
-The exception is `errUnsupportedSourceChange`, which `getMultiSrcAppChanges()` wraps (`%w`) around
-its deliberate refusals (source count or URL changing, no sources). That is a limitation, not a
-failure: `processNestedJob()` sets no `WarnStr` and returns `diffJobResult.parentNotice` instead
-("argo-diff can't diff <child>: ..."). A child's own `NoticeStr` would be dropped by
+The exception is `errUnsupportedSourceChange`, which `getMultiSrcAppChanges()` returns (via
+`unsupportedSourceChangeError`, whose message is only the reason) for its deliberate refusals
+(source count or URL changing, no sources). That is a limitation, not a failure:
+`processNestedJob()` logs it at Info, sets no `WarnStr`, and returns `diffJobResult.parentNotice`
+instead (eg: "argo-diff can't diff <child>: number of sources changing: 1 -> 2"). A child's own `NoticeStr` would be dropped by
 `process_event` (no changed resources), so the wave-2 merge in `GetApplicationChanges()` appends
 each `parentNotice` to its parent's `NoticeStr` (blank-line separated, after any existing notice)
 before copying the parent into `appResList`. That merge runs after the pools drain, so it is
