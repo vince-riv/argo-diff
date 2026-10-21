@@ -62,8 +62,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
-gitlab.com/gitlab-org/api/client-go/v3 v3.17.0 h1:xSU3AC8MaqNd9QYjctUe2FgM0pAwrxs8tOPM4a6fTqU=
-gitlab.com/gitlab-org/api/client-go/v3 v3.17.0/go.mod h1:UQl7jIdE6nbYNDtc4XWXeiam0V4MJx459e637POlpnQ=
+gitlab.com/gitlab-org/api/client-go/v3 v3.22.0 h1:C/+VaOCQbhtkGgdJwD6R/nId/Y3xJvm8e3mBl4qhKaA=
+gitlab.com/gitlab-org/api/client-go/v3 v3.22.0/go.mod h1:UQl7jIdE6nbYNDtc4XWXeiam0V4MJx459e637POlpnQ=
 go.yaml.in/yaml/v2 v2.4.3 h1:6gvOSjQoTB3vt1l+CU+tSyi/HOjfOjRLJ4YwYZGwRO0=
 go.yaml.in/yaml/v2 v2.4.3/go.mod h1:zSxWcmIDjOzPXpjlTTbAsKokqkDNAVtZO0WOMiT90s8=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
