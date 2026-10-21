@@ -1373,32 +1373,161 @@ func TestProcessTopLevelAppQueuesNestedAppsWithoutNamespace(t *testing.T) {
 	}
 }
 
-// A non-timeout diff failure of a nested app must surface as WarnStr (like
-// waves 1 and 3), not vanish. Differing source counts make
-// getMultiSrcAppChanges() fail without touching the CLI.
+func nestedJobFixture(newSources ...ApplicationSource) nestedJob {
+	return nestedJob{
+		appCur: &Application{
+			ObjectMeta: metav1.ObjectMeta{Name: "child", Namespace: "argocd"},
+			Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: "https://github.com/acme/other.git", TargetRevision: "main"}},
+		},
+		appNew: &Application{
+			ObjectMeta: metav1.ObjectMeta{Name: "child", Namespace: "argocd"},
+			Spec:       ApplicationSpec{Sources: newSources},
+		},
+	}
+}
+
+// A real `argocd app diff` failure of a nested app must surface as WarnStr
+// (like waves 1 and 3), not vanish.
 func TestProcessNestedJobSurfacesWarnStrOnError(t *testing.T) {
-	appCur := &Application{
-		ObjectMeta: metav1.ObjectMeta{Name: "child", Namespace: "argocd"},
-		Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: "https://github.com/acme/other.git", TargetRevision: "main"}},
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		return nil, fmt.Errorf("rpc error: boom")
 	}
-	appNew := &Application{
-		ObjectMeta: metav1.ObjectMeta{Name: "child", Namespace: "argocd"},
-		Spec: ApplicationSpec{Sources: []ApplicationSource{
-			{RepoURL: "https://github.com/acme/other.git", TargetRevision: "main"},
-			{RepoURL: "https://github.com/acme/values.git", TargetRevision: "main"},
-		}},
-	}
-	res := processNestedJob(context.Background(), nestedJob{appCur: appCur, appNew: appNew}, wh.EventInfo{Sha: "abcdef"})
+	job := nestedJobFixture(ApplicationSource{RepoURL: "https://github.com/acme/other.git", TargetRevision: "main"})
+	res := processNestedJob(context.Background(), job, wh.EventInfo{Sha: "abcdef"})
 	if res.diffResult == nil {
 		t.Fatal("processNestedJob() returned no diffResult for a failed diff")
 	}
 	if !strings.HasPrefix(res.diffResult.WarnStr, "Failed to diff application child: ") {
 		t.Errorf("WarnStr = %q, want a 'Failed to diff application child: ...' message", res.diffResult.WarnStr)
 	}
-	if res.diffResult.ArgoApp.Name != "child" {
-		t.Errorf("diffResult.ArgoApp.Name = %q, want child", res.diffResult.ArgoApp.Name)
+	if res.parentNotice != "" || len(res.notDiffed) != 0 {
+		t.Errorf("parentNotice = %q, notDiffed = %v, want neither", res.parentNotice, res.notDiffed)
 	}
-	if len(res.notDiffed) != 0 {
-		t.Errorf("notDiffed = %v, want none (not a timeout)", res.notDiffed)
+}
+
+// A refused diff (errUnsupportedSourceChange) is a limitation, not a failure:
+// no WarnStr, a notice for the parent instead. The CLI must not be reached.
+func TestProcessNestedJobUnsupportedSourceChangeNotifiesParent(t *testing.T) {
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		t.Fatalf("unexpected argocd call: %v", args)
+		return nil, nil
+	}
+	job := nestedJobFixture(
+		ApplicationSource{RepoURL: "https://github.com/acme/other.git", TargetRevision: "main"},
+		ApplicationSource{RepoURL: "https://github.com/acme/values.git", TargetRevision: "main"},
+	)
+	res := processNestedJob(context.Background(), job, wh.EventInfo{Sha: "abcdef"})
+	if res.diffResult != nil {
+		t.Errorf("diffResult = %+v, want nil", res.diffResult)
+	}
+	if !strings.HasPrefix(res.parentNotice, "argo-diff can't diff child: ") || !strings.Contains(res.parentNotice, "number of sources") {
+		t.Errorf("parentNotice = %q, want \"argo-diff can't diff child: ...number of sources...\"", res.parentNotice)
+	}
+}
+
+// End to end: the refused child's notice lands on the parent's NoticeStr in
+// GetApplicationChanges(), the parent keeps its diff, and the run has no
+// WarnStr anywhere.
+func TestGetApplicationChangesUnsupportedChildNoticeOnParent(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	const repoURL = "https://github.com/acme/widgets.git"
+	const otherRepoURL = "https://github.com/acme/other.git"
+	parents := buildTestApps(1, repoURL)
+	child := Application{
+		ObjectMeta: metav1.ObjectMeta{Name: "pool-app-0-child", Namespace: "argocd"},
+		Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: otherRepoURL, TargetRevision: "main"}},
+	}
+	appListJSON, err := json.Marshal(append(parents, child))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := []byte(fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pool-app-0-child
+  namespace: argocd
+spec:
+  sources:
+  - repoURL: %s
+    targetRevision: main
+  - repoURL: https://github.com/acme/values.git
+    targetRevision: main
+`, otherRepoURL))
+
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		switch {
+		case slices.Equal(args, []string{"version", "--client"}):
+			return []byte("argocd: v3.5.2\n"), nil
+		case args[1] == "list":
+			return appListJSON, nil
+		case args[1] == "diff" && args[2] == "pool-app-0":
+			return nestedAppDiffFixture("pool-app-0-child"), makeExitError(t, nil)
+		case args[1] == "manifests":
+			return manifest, nil
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	evtInfo := wh.EventInfo{RepoOwner: "acme", RepoName: "widgets", RepoDefaultRef: "main", ChangeRef: "my-branch", BaseRef: "main", Sha: "abcdef"}
+	appResList, notDiffed, err := GetApplicationChanges(context.Background(), evtInfo)
+	if err != nil {
+		t.Fatalf("GetApplicationChanges() err'd: %v", err)
+	}
+	if len(notDiffed) != 0 {
+		t.Errorf("notDiffed = %v, want none", notDiffed)
+	}
+	if len(appResList) != 1 {
+		t.Fatalf("appResList has %d entries, want only the parent", len(appResList))
+	}
+	parent := appResList[0]
+	if parent.ArgoApp.Name != "pool-app-0" || len(parent.ChangedResources) == 0 || parent.WarnStr != "" {
+		t.Errorf("unexpected parent entry: name=%s changed=%d warn=%q", parent.ArgoApp.Name, len(parent.ChangedResources), parent.WarnStr)
+	}
+	if !strings.Contains(parent.NoticeStr, "argo-diff can't diff pool-app-0-child: ") {
+		t.Errorf("parent NoticeStr = %q, want the child's refusal notice", parent.NoticeStr)
+	}
+}
+
+// When the parent's destination namespace matches no changed Application of
+// the child's name, the diff header's namespace is the fallback if exactly one
+// exists; with several, the child is skipped and reported.
+func TestArgoAppsWithChangesDestinationDisagreesWithDiffHeader(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+	execArgoCdCli = mockManifests([]byte(noNamespaceWebManifest))
+
+	single := []AppResource{{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-b", Name: "web"}}
+	result, skipped, err := argoAppsWithChanges(context.Background(), "parent-app", "argocd", "team-a", single, "abc123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0].Namespace != "team-b" || len(skipped) != 0 {
+		t.Errorf("single header namespace: result=%v skipped=%v, want web resolved to team-b", result, skipped)
+	}
+
+	multi := []AppResource{
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-b", Name: "web"},
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-c", Name: "web"},
+	}
+	result, skipped, err = argoAppsWithChanges(context.Background(), "parent-app", "argocd", "team-a", multi, "abc123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 0 || !slices.Equal(skipped, []string{"web"}) {
+		t.Errorf("multiple header namespaces: result=%v skipped=%v, want web skipped", result, skipped)
+	}
+
+	// no changed Application named web at all: unchanged, silently
+	other := []AppResource{{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-a", Name: "api"}}
+	result, skipped, err = argoAppsWithChanges(context.Background(), "parent-app", "argocd", "team-a", other, "abc123")
+	if err != nil || len(result) != 0 || len(skipped) != 0 {
+		t.Errorf("unchanged child: result=%v skipped=%v err=%v, want all empty", result, skipped, err)
 	}
 }
