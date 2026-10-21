@@ -127,7 +127,9 @@ func getMultiSrcAppChanges(ctx context.Context, appCur *Application, appNew *App
 	for i, curSrc := range curSources {
 		newRevision := newSources[i].TargetRevision
 		if curSrc.RepoURL != newSources[i].RepoURL {
-			return appResChanges, unsupportedSourceChange("source %d URL changing: %s -> %s", i+1, curSrc.RepoURL, newSources[i].RepoURL)
+			// position only: the message lands in a PR comment, and a repoURL
+			// can carry credentials (https://user:token@host/...)
+			return appResChanges, unsupportedSourceChange("source %d URL changing", i+1)
 		}
 		if gitRepoMatch(curSrc, provider, repoOwner, repoName) {
 			newRevision = revision

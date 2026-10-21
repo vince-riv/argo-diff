@@ -1429,6 +1429,22 @@ func TestProcessNestedJobUnsupportedSourceChangeNotifiesParent(t *testing.T) {
 	}
 }
 
+// The URL refusal names only the source position: the notice is posted to a
+// PR comment, and a repoURL can carry credentials.
+func TestProcessNestedJobURLChangeNoticeOmitsURLs(t *testing.T) {
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		t.Fatalf("unexpected argocd call: %v", args)
+		return nil, nil
+	}
+	job := nestedJobFixture(ApplicationSource{RepoURL: "https://user:s3cret@github.com/acme/moved.git", TargetRevision: "main"})
+	res := processNestedJob(context.Background(), job, wh.EventInfo{Sha: "abcdef"})
+	if want := "argo-diff can't diff child: source 1 URL changing"; res.parentNotice != want {
+		t.Errorf("parentNotice = %q, want %q", res.parentNotice, want)
+	}
+}
+
 // End to end: the refused child's notice lands on the parent's NoticeStr in
 // GetApplicationChanges(), the parent keeps its diff, and the run has no
 // WarnStr anywhere.
