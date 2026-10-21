@@ -874,7 +874,7 @@ func TestArgoAppsWithChanges(t *testing.T) {
 		AppResource{ApiVersion: "v1", Group: "apps", Kind: "Deployment", Namespace: "test", Name: "testdeploy"},
 		AppResource{ApiVersion: "v1", Group: "", Kind: "ConfigMap", Namespace: "test", Name: "testcm"},
 	}
-	result, err := argoAppsWithChanges(ctx, "testapp", "argocd", appResources, "abcdef")
+	result, _, err := argoAppsWithChanges(ctx, "testapp", "argocd", "", appResources, "abcdef")
 	if err != nil {
 		t.Errorf("argoAppsWithChanges() erroed: %v", err)
 	}
@@ -897,7 +897,7 @@ func TestArgoAppsWithChangesNamespacePropagation(t *testing.T) {
 	var captured []string
 	execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.5.2", &captured) // empty manifests — no nested apps discovered
 
-	_, _ = argoAppsWithChanges(context.Background(), "parent-app", "non-default-namespace", appResources, "abc123")
+	_, _, _ = argoAppsWithChanges(context.Background(), "parent-app", "non-default-namespace", "", appResources, "abc123")
 
 	nsIdx := slices.Index(captured, "--app-namespace")
 	if nsIdx == -1 {
@@ -964,7 +964,7 @@ func TestArgoAppsWithChangesDisambiguatesByNamespace(t *testing.T) {
 	appResources := []AppResource{
 		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-a", Name: "web"},
 	}
-	result, err := argoAppsWithChanges(context.Background(), "parent-app", "team-a", appResources, "abc123")
+	result, _, err := argoAppsWithChanges(context.Background(), "parent-app", "team-a", "", appResources, "abc123")
 	if err != nil {
 		t.Fatalf("argoAppsWithChanges() erred: %v", err)
 	}
@@ -1154,5 +1154,251 @@ func TestGitRepoMatch_NestedGroups(t *testing.T) {
 	t.Setenv("ARGO_DIFF_DISABLE_NON_GITHUB_REPO_MATCH", "")
 	if !gitRepoMatch(ApplicationSource{RepoURL: "https://gitlab.example.com/group/sub/project.git"}, "gitlab", "group/sub", "project") {
 		t.Error("the host-agnostic fallback missed a nested-group project")
+	}
+}
+
+// Charts usually render child Applications without metadata.namespace; the
+// diff header carries the namespace ArgoCD resolved. The children must still
+// be matched, and come back with that namespace filled in.
+func TestArgoAppsWithChangesFillsMissingNamespaceFromDiff(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+
+	manifests, filePath, err := readFileToByteArray("output-argocd-app-manifests-argoapps-no-namespace.txt")
+	if err != nil {
+		t.Fatalf("Failed to read %s: %v", filePath, err)
+	}
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		if slices.Equal(args, []string{"version", "--client"}) {
+			return []byte("argocd: v3.5.2\n"), nil
+		}
+		if len(args) > 1 && args[1] == "manifests" {
+			return manifests, nil
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	appResources := []AppResource{
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "argocd", Name: "argo-diff"},
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "argocd", Name: "argo-diff-testing"},
+	}
+	result, _, err := argoAppsWithChanges(context.Background(), "argo-apps", "argocd", "", appResources, "abc123")
+	if err != nil {
+		t.Fatalf("argoAppsWithChanges() erred: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("argoAppsWithChanges() returned %d apps, want 2", len(result))
+	}
+	for _, app := range result {
+		if app.Namespace != "argocd" {
+			t.Errorf("app %s has namespace %q, want argocd (from the diff resource)", app.Name, app.Namespace)
+		}
+	}
+}
+
+const noNamespaceWebManifest = `apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: web
+spec:
+  source:
+    repoURL: https://github.com/acme/widgets.git
+    targetRevision: main
+`
+
+func mockManifests(manifest []byte) func(context.Context, []string) ([]byte, error) {
+	return func(ctx context.Context, args []string) ([]byte, error) {
+		if slices.Equal(args, []string{"version", "--client"}) {
+			return []byte("argocd: v3.5.2\n"), nil
+		}
+		if len(args) > 1 && args[1] == "manifests" {
+			return manifest, nil
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+}
+
+// A namespace-less child takes the parent's destination namespace, even when
+// a same-named, explicitly-namespaced sibling also changed: the sibling is
+// matched exactly and the namespace-less one is not confused with it.
+func TestArgoAppsWithChangesUsesParentDestinationNamespace(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+
+	explicit := argoAppManifestFixture("web", "team-b", "https://github.com/acme/widgets.git")
+	execArgoCdCli = mockManifests(slices.Concat([]byte(noNamespaceWebManifest), []byte("\n---\n"), explicit))
+
+	appResources := []AppResource{
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-a", Name: "web"},
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-b", Name: "web"},
+	}
+	result, skipped, err := argoAppsWithChanges(context.Background(), "parent-app", "argocd", "team-a", appResources, "abc123")
+	if err != nil {
+		t.Fatalf("argoAppsWithChanges() erred: %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Errorf("skipped = %v, want none", skipped)
+	}
+	var got []string
+	for _, app := range result {
+		got = append(got, app.Namespace+"/"+app.Name)
+	}
+	slices.Sort(got)
+	if want := []string{"team-a/web", "team-b/web"}; !slices.Equal(got, want) {
+		t.Errorf("argoAppsWithChanges() = %v, want %v", got, want)
+	}
+}
+
+// With two changed Applications of the same name in different namespaces and
+// no parent destination namespace, a namespace-less child can't be attributed
+// to either one: it is skipped and reported, not guessed at.
+func TestArgoAppsWithChangesAmbiguousMissingNamespaceSkipped(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+	execArgoCdCli = mockManifests([]byte(noNamespaceWebManifest))
+
+	appResources := []AppResource{
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-a", Name: "web"},
+		{Group: argoApplicationApiGroup, Kind: argoApplicationApiKind, Namespace: "team-b", Name: "web"},
+	}
+	result, skipped, err := argoAppsWithChanges(context.Background(), "parent-app", "argocd", "", appResources, "abc123")
+	if err != nil {
+		t.Fatalf("argoAppsWithChanges() erred: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("argoAppsWithChanges() returned %d apps, want 0 for an ambiguous namespace", len(result))
+	}
+	if !slices.Equal(skipped, []string{"web"}) {
+		t.Errorf("skipped = %v, want [web]", skipped)
+	}
+}
+
+// processTopLevelApp() surfaces unresolved children as an advisory NoticeStr
+// on the parent, leaving the parent's own diff and WarnStr alone.
+func TestProcessTopLevelAppNoticeForUnresolvedNamespace(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		if len(args) > 1 && args[1] == "diff" {
+			return []byte(`===== argoproj.io/Application team-a/web ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+
+===== argoproj.io/Application team-b/web ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+`), makeExitError(t, nil)
+		}
+		return mockManifests([]byte(noNamespaceWebManifest))(ctx, args)
+	}
+	parent := Application{
+		ObjectMeta: metav1.ObjectMeta{Name: "parent-app", Namespace: "argocd"},
+		Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: "https://github.com/acme/apps.git", TargetRevision: "main"}},
+	}
+	res := processTopLevelApp(context.Background(), parent, appListToMap([]Application{parent}), wh.EventInfo{Sha: "abcdef"})
+	if res.diffResult == nil {
+		t.Fatal("processTopLevelApp() returned no diffResult")
+	}
+	if res.diffResult.WarnStr != "" {
+		t.Errorf("WarnStr = %q, want empty", res.diffResult.WarnStr)
+	}
+	if !strings.Contains(res.diffResult.NoticeStr, "web") || !strings.Contains(res.diffResult.NoticeStr, "parent-app") {
+		t.Errorf("NoticeStr = %q, want it to name web and parent-app", res.diffResult.NoticeStr)
+	}
+	if len(res.nestedJobs) != 0 {
+		t.Errorf("queued %d nested jobs, want 0", len(res.nestedJobs))
+	}
+}
+
+// End to end through processTopLevelApp(): children rendered without a
+// namespace must be found in appLookup (keyed by the resolved namespace) and
+// queued as nested jobs.
+func TestProcessTopLevelAppQueuesNestedAppsWithoutNamespace(t *testing.T) {
+	resetSupportsManifestsAppNamespaceCache(t)
+	orig := execArgoCdCli
+	defer func() { execArgoCdCli = orig }()
+
+	manifests, filePath, err := readFileToByteArray("output-argocd-app-manifests-argoapps-no-namespace.txt")
+	if err != nil {
+		t.Fatalf("Failed to read %s: %v", filePath, err)
+	}
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		switch {
+		case slices.Equal(args, []string{"version", "--client"}):
+			return []byte("argocd: v3.5.2\n"), nil
+		case len(args) > 1 && args[1] == "diff":
+			return []byte(`===== argoproj.io/Application argocd/argo-diff ======
+--- a
++++ b
+@@ -1 +1 @@
+-old
++new
+`), makeExitError(t, nil)
+		case len(args) > 1 && args[1] == "manifests":
+			return manifests, nil
+		}
+		return nil, fmt.Errorf("unexpected argocd args: %v", args)
+	}
+
+	const repoURL = "ssh://git@github.com/vince-riv/argo-diff.git"
+	parent := Application{
+		ObjectMeta: metav1.ObjectMeta{Name: "argo-apps", Namespace: "argocd"},
+		Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: "https://github.com/acme/apps.git", TargetRevision: "main"}},
+	}
+	child := Application{
+		ObjectMeta: metav1.ObjectMeta{Name: "argo-diff", Namespace: "argocd"},
+		Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: repoURL, TargetRevision: "HEAD"}},
+	}
+	lookup := appListToMap([]Application{parent, child})
+
+	res := processTopLevelApp(context.Background(), parent, lookup, wh.EventInfo{Sha: "abcdef"})
+	if len(res.nestedJobs) != 1 {
+		t.Fatalf("processTopLevelApp() queued %d nested jobs, want 1", len(res.nestedJobs))
+	}
+	if got := res.nestedJobs[0].appCur.Name; got != "argo-diff" {
+		t.Errorf("nested job appCur = %q, want argo-diff", got)
+	}
+	if want := []string{"argocd/argo-diff"}; !slices.Equal(res.multiSrcAppKeys, want) {
+		t.Errorf("multiSrcAppKeys = %v, want %v", res.multiSrcAppKeys, want)
+	}
+}
+
+// A non-timeout diff failure of a nested app must surface as WarnStr (like
+// waves 1 and 3), not vanish. Differing source counts make
+// getMultiSrcAppChanges() fail without touching the CLI.
+func TestProcessNestedJobSurfacesWarnStrOnError(t *testing.T) {
+	appCur := &Application{
+		ObjectMeta: metav1.ObjectMeta{Name: "child", Namespace: "argocd"},
+		Spec:       ApplicationSpec{Source: &ApplicationSource{RepoURL: "https://github.com/acme/other.git", TargetRevision: "main"}},
+	}
+	appNew := &Application{
+		ObjectMeta: metav1.ObjectMeta{Name: "child", Namespace: "argocd"},
+		Spec: ApplicationSpec{Sources: []ApplicationSource{
+			{RepoURL: "https://github.com/acme/other.git", TargetRevision: "main"},
+			{RepoURL: "https://github.com/acme/values.git", TargetRevision: "main"},
+		}},
+	}
+	res := processNestedJob(context.Background(), nestedJob{appCur: appCur, appNew: appNew}, wh.EventInfo{Sha: "abcdef"})
+	if res.diffResult == nil {
+		t.Fatal("processNestedJob() returned no diffResult for a failed diff")
+	}
+	if !strings.HasPrefix(res.diffResult.WarnStr, "Failed to diff application child: ") {
+		t.Errorf("WarnStr = %q, want a 'Failed to diff application child: ...' message", res.diffResult.WarnStr)
+	}
+	if res.diffResult.ArgoApp.Name != "child" {
+		t.Errorf("diffResult.ArgoApp.Name = %q, want child", res.diffResult.ArgoApp.Name)
+	}
+	if len(res.notDiffed) != 0 {
+		t.Errorf("notDiffed = %v, want none (not a timeout)", res.notDiffed)
 	}
 }

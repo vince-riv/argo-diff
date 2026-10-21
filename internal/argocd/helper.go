@@ -178,7 +178,7 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 		return res
 	}
 	res.diffResult = &appResChanges
-	appsWithChanges, err := argoAppsWithChanges(ctx, app.Name, app.Namespace, appResChanges.ChangedResources, eventInfo.Sha)
+	appsWithChanges, skippedApps, err := argoAppsWithChanges(ctx, app.Name, app.Namespace, app.Spec.Destination.Namespace, appResChanges.ChangedResources, eventInfo.Sha)
 	if err != nil {
 		if ctx.Err() != nil {
 			// This app's diff turned up nested Applications but we ran out of
@@ -204,12 +204,19 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 		log.Warn().Err(err).Msgf("Unable to determine if argo app %s has other argo apps with changes", app.Name)
 		return res
 	}
+	if len(skippedApps) > 0 {
+		// advisory, and exclusive with the enumeration-error notice above,
+		// which returns early
+		appResChanges.NoticeStr = fmt.Sprintf(
+			"Could not resolve the namespace of rendered Application(s) %s in %s, so their diffs are missing from this comment",
+			strings.Join(skippedApps, ", "), app.Name)
+	}
 	// diff matching multi-source application
 	log.Info().Msgf("Found %d nested ArgoCD Application(s) with changes within '%s'", len(appsWithChanges), app.Name)
 	for _, subApp := range appsWithChanges {
 		subAppCur, ok := appLookup[appKey(subApp.Namespace, subApp.Name)]
 		if !ok {
-			log.Info().Msgf("Application %s not found in current ArgoCD app list", subApp.Name)
+			log.Warn().Msgf("Application %s/%s not found in current ArgoCD app list; skipping its nested diff", subApp.Namespace, subApp.Name)
 			continue
 		}
 		res.multiSrcAppKeys = append(res.multiSrcAppKeys, appKey(subApp.Namespace, subApp.Name))
@@ -223,13 +230,7 @@ func processTopLevelApp(ctx context.Context, app Application, appLookup map[stri
 }
 
 // processNestedJob diffs one nested app-of-apps Application queued by wave 1.
-//
-// NOTE: on a non-timeout error, this intentionally does not surface WarnStr
-// in the returned diffResult (only the len(ChangedResources) > 0 success
-// branch below sets it) — matching the pre-existing behavior of the loop this
-// was extracted from. That looks like an inconsistency with the top-level
-// loop, which does append its WarnStr case; flagged to the user as a possible
-// follow-up rather than silently changed here (see issue #273 design notes).
+// A non-timeout error is reported via WarnStr, like waves 1 and 3.
 func processNestedJob(ctx context.Context, job nestedJob, eventInfo webhook.EventInfo) diffJobResult {
 	var res diffJobResult
 	if ctx.Err() != nil {
@@ -240,7 +241,16 @@ func processNestedJob(ctx context.Context, job nestedJob, eventInfo webhook.Even
 	if err != nil {
 		if ctx.Err() != nil {
 			res.notDiffed = append(res.notDiffed, job.appNew.Name)
+			return res
 		}
+		log.Warn().Err(err).Msgf("Failed to diff nested ArgoCD App '%s'", job.appNew.Name)
+		if subAppResChanges.ArgoApp == nil {
+			// getMultiSrcAppChanges() bails out before populating ArgoApp on its
+			// validation errors; the comment is rendered by app name
+			subAppResChanges.ArgoApp = job.appCur
+		}
+		subAppResChanges.WarnStr = fmt.Sprintf("Failed to diff application %s: %s", job.appNew.Name, err.Error())
+		res.diffResult = &subAppResChanges
 		return res
 	}
 	if len(subAppResChanges.ChangedResources) > 0 {
@@ -652,29 +662,38 @@ func genericManifestToArgoApplication(manifest K8sManifest) (Application, error)
 	return app, nil
 }
 
-func argoAppsWithChanges(ctx context.Context, appName string, appNamespace string, appResources []AppResource, revision string) ([]Application, error) {
+// argoAppsWithChanges returns the multi-source Applications rendered by the
+// named app that have changed. parentDestNamespace is the parent's
+// spec.destination.namespace, used to resolve rendered children that omit
+// metadata.namespace. skipped names rendered children whose namespace could
+// not be resolved, so their diffs are missing.
+func argoAppsWithChanges(ctx context.Context, appName string, appNamespace string, parentDestNamespace string, appResources []AppResource, revision string) (apps []Application, skipped []string, err error) {
 	log.Trace().Msgf("argoAppsWithChanges() scanning %s at %s for argo apps", appName, revision)
 	argoAppKeysFound := []string{}
-	argoApps := []Application{}
+	// namespaces of the changed Applications, by name: lets a rendered child
+	// that omits metadata.namespace be matched to the one the diff resolved
+	argoAppNamespacesByName := map[string][]string{}
+	argoApps := apps
 	// look through app resource changes for argoproj.io Applications
 	for _, appRes := range appResources {
 		log.Trace().Msgf("argoAppsWithChanges(%s) - checking changed resource +++ %s/%s %s +++", appName, appRes.Group, appRes.Kind, appRes.Name)
 		if appRes.Group == argoApplicationApiGroup && appRes.Kind == argoApplicationApiKind {
 			log.Debug().Msgf("argoAppsWithChanges(%s) %s is an argo app (%s/%s)", appName, appRes.Name, argoApplicationApiGroup, argoApplicationApiKind)
 			argoAppKeysFound = append(argoAppKeysFound, appKey(appRes.Namespace, appRes.Name))
+			argoAppNamespacesByName[appRes.Name] = append(argoAppNamespacesByName[appRes.Name], appRes.Namespace)
 		}
 	}
 	if len(argoAppKeysFound) == 0 {
 		// bail out if no applications have been found
 		log.Debug().Msgf("argoAppsWithChanges() not argo apps found in %s", appName)
-		return argoApps, nil
+		return argoApps, skipped, nil
 	}
 	// generate full manifests for our application at the specified revision
 	log.Debug().Msgf("argoAppsWithChanges(%s) - getting manifests at revision %s", appName, revision)
 	manifests, err := getApplicationManifests(ctx, appName, appNamespace, revision)
 	if err != nil {
 		log.Debug().Err(err).Msgf("argoAppsWithChanges() - getApplicationManifests(%s, %s) failed", appName, revision)
-		return argoApps, err
+		return argoApps, skipped, err
 	}
 	// look through resulting manifests for the argo apps found above
 	for i, manifest := range manifests {
@@ -689,11 +708,33 @@ func argoAppsWithChanges(ctx context.Context, appName string, appNamespace strin
 		} else {
 			numSrcs := len(app.Spec.GetSources())
 			log.Trace().Msgf("argoAppsWithChanges(%s): argoApp %s w/ %d sources", appName, app.Name, numSrcs)
+			if app.Namespace == "" {
+				// Charts commonly render child Applications without
+				// metadata.namespace; ArgoCD places them in the parent's
+				// destination namespace at sync time. If the parent has none,
+				// fall back to the namespace in the diff header, which is only
+				// usable when exactly one changed Application has this name.
+				if parentDestNamespace != "" {
+					app.Namespace = parentDestNamespace
+				} else {
+					switch namespaces := argoAppNamespacesByName[app.Name]; len(namespaces) {
+					case 0:
+					case 1:
+						app.Namespace = namespaces[0]
+					default:
+						log.Warn().Msgf("argoAppsWithChanges(%s) - rendered Application %s has no namespace and %d changed Applications share that name (%v); skipping it", appName, app.Name, len(namespaces), namespaces)
+						if numSrcs > 0 {
+							skipped = append(skipped, app.Name)
+						}
+						continue
+					}
+				}
+			}
 			if slices.Contains(argoAppKeysFound, appKey(app.Namespace, app.Name)) && numSrcs > 0 {
 				// only return multi-source apps that have changes
 				argoApps = append(argoApps, app)
 			}
 		}
 	}
-	return argoApps, nil
+	return argoApps, skipped, nil
 }

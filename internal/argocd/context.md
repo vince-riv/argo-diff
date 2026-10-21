@@ -105,10 +105,23 @@ another parent's skip happens to coincide either way.
 `TestGetApplicationChangesNestedAppsGroupedWithParent` covers the `appResList` side: multiple
 parents with nested apps, diffed concurrently with artificial jitter, must still come back grouped.
 `TestGetApplicationChangesNotDiffedGroupedWithParent` covers the `notDiffed` side with the
-deadline-ordering scenario above. A pre-existing inconsistency was preserved rather than fixed during the
-original parallelization refactor: a wave-2 (nested app) diff error while `ctx` still has time left
-sets `WarnStr` but is not appended to `appResList`, unlike the equivalent wave-1/wave-3 cases which
-do append their `WarnStr` result.
+deadline-ordering scenario above. A wave-2 (nested app) diff error while `ctx` still has time left
+sets `WarnStr` and is appended to `appResList`, like wave 1 and wave 3, so it fails the run
+(`process_event` counts it as an error). Earlier versions silently dropped it (fixed alongside the
+missing-namespace fix below).
+
+**Nested Applications rendered without `metadata.namespace`.** Charts usually omit it, and ArgoCD
+places the child in the parent's `spec.destination.namespace` at sync time. `argoAppsWithChanges()`
+therefore fills an empty namespace in from the parent's destination namespace (passed in by
+`processTopLevelApp()`; `ApplicationSpec.Destination` exists for this). Only if that is empty does
+it fall back to the namespace in the `argocd app diff` header of the changed
+`argoproj.io/Application` with the same name, which is usable only when exactly one such resource
+changed. A child that still can't be resolved is skipped with a Warn log and its name is returned
+as the extra `skipped` value; `processTopLevelApp()` turns that into an advisory `NoticeStr` on the
+parent ("Could not resolve the namespace of ..."), which `process_event` renders above the parent's
+diffs without failing the run. It is exclusive with the enumeration-error notice, since that path
+returns early. The resolved namespace is set on the returned `Application`, which `appLookup` needs
+for its key. Manifests that carry a namespace are matched exactly as before.
 
 Matching rules worth knowing:
 
