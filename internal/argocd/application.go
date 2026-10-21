@@ -16,6 +16,13 @@ type ApplicationSpec struct {
 	Source     *ApplicationSource  `json:"source,omitempty"`
 	Sources    []ApplicationSource `json:"sources,omitempty"`
 	SyncPolicy *SyncPolicy         `json:"syncPolicy,omitempty"`
+	// Destination.Namespace is where ArgoCD places namespace-less namespaced
+	// resources the application renders
+	Destination ApplicationDestination `json:"destination,omitempty"`
+}
+
+type ApplicationDestination struct {
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type ApplicationSource struct {

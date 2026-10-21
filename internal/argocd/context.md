@@ -105,10 +105,33 @@ another parent's skip happens to coincide either way.
 `TestGetApplicationChangesNestedAppsGroupedWithParent` covers the `appResList` side: multiple
 parents with nested apps, diffed concurrently with artificial jitter, must still come back grouped.
 `TestGetApplicationChangesNotDiffedGroupedWithParent` covers the `notDiffed` side with the
-deadline-ordering scenario above. A pre-existing inconsistency was preserved rather than fixed during the
-original parallelization refactor: a wave-2 (nested app) diff error while `ctx` still has time left
-sets `WarnStr` but is not appended to `appResList`, unlike the equivalent wave-1/wave-3 cases which
-do append their `WarnStr` result.
+deadline-ordering scenario above. A wave-2 (nested app) diff error while `ctx` still has time left
+sets `WarnStr` and is appended to `appResList`, like wave 1 and wave 3, so it fails the run
+(`process_event` counts it as an error). Earlier versions silently dropped it (fixed alongside the
+missing-namespace fix below).
+
+The exception is `errUnsupportedSourceChange`, which `getMultiSrcAppChanges()` returns (via
+`unsupportedSourceChangeError`, whose message is only the reason) for its deliberate refusals
+(source count or URL changing, no sources). That is a limitation, not a failure:
+`processNestedJob()` logs it at Info, sets no `WarnStr`, and returns `diffJobResult.parentNotice`
+instead (eg: "argo-diff can't diff <child>: number of sources changing: 1 -> 2"). A child's own `NoticeStr` would be dropped by
+`process_event` (no changed resources), so the wave-2 merge in `GetApplicationChanges()` appends
+each `parentNotice` to its parent's `NoticeStr` (blank-line separated, after any existing notice)
+before copying the parent into `appResList`. That merge runs after the pools drain, so it is
+sequential.
+
+**Nested Applications rendered without `metadata.namespace`.** Charts usually omit it, and ArgoCD
+places the child in the parent's `spec.destination.namespace` at sync time. `argoAppsWithChanges()`
+therefore fills an empty namespace in from the parent's destination namespace (passed in by
+`processTopLevelApp()`; `ApplicationSpec.Destination` exists for this). If that is empty, or no
+changed Application of that name lives there, it falls back to the namespace in the `argocd app
+diff` header of the changed `argoproj.io/Application` with the same name, usable only when exactly
+one such resource changed. A name with no changed Application at all is simply unchanged. A child that still can't be resolved is skipped with a Warn log and its name is returned
+as the extra `skipped` value; `processTopLevelApp()` turns that into an advisory `NoticeStr` on the
+parent ("Could not resolve the namespace of rendered Application(s) named ..."), which `process_event` renders above the parent's
+diffs without failing the run. It is exclusive with the enumeration-error notice, since that path
+returns early. The resolved namespace is set on the returned `Application`, which `appLookup` needs
+for its key. Manifests that carry a namespace are matched exactly as before.
 
 Matching rules worth knowing:
 
