@@ -111,23 +111,42 @@ runs:
     - name: Wait for ArgoCD pods to be ready
       shell: bash
       run: |
-        echo "Waiting for ArgoCD pods to launch..."
-        deadline=$((SECONDS + 180))
-        while (( SECONDS < deadline )); do
-          [[ -n "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]] && break
-          sleep 1
+        set -euo pipefail
+        # The pods start in parallel, so waiting on each in turn costs about as
+        # long as the slowest one. One deadline covers both, so the step stays
+        # bounded however the time splits between them.
+        # argocd-redis is waited on too: without it every ArgoCD component fails
+        # its cache calls, and the apps sit in Unknown sync status until the
+        # sync step's 300 s timeout instead of failing here.
+        deadline=$((SECONDS + 240))
+        for name in argocd-server argocd-redis; do
+          echo "Waiting for $name pods to launch..."
+          until [[ -n "$(kubectl -n argocd get pods -l app.kubernetes.io/name=$name --no-headers=true)" ]]; do
+            if (( SECONDS >= deadline )); then
+              echo "::error::No $name pod appeared within the time limit"
+              exit 1
+            fi
+            sleep 1
+          done
+          remaining=$((deadline - SECONDS))
+          (( remaining > 0 )) || remaining=1
+          echo "Waiting for $name pods to be ready ..."
+          if ! kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=$name --timeout=${remaining}s; then
+            echo "::error::$name pods were not ready within the time limit"
+            exit 1
+          fi
         done
-        if [[ -z "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]]; then
-          echo "::error::No argocd-server pod appeared within the time limit"
-          exit 1
-        fi
-        echo "Waiting for argocd-server pods to be ready ..."
-        kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=180s
 
     - name: Debug pods if installation fails
       if: failure()
       shell: bash
-      run: kubectl -n argocd get pods -o yaml
+      run: |
+        echo "--- argocd pods ---"
+        kubectl -n argocd get pods -o wide || true
+        echo "--- argocd pod descriptions ---"
+        kubectl -n argocd describe pods || true
+        echo "--- argocd events ---"
+        kubectl -n argocd get events --sort-by=.lastTimestamp || true
 
     - name: Create ArgoCD test applications
       shell: bash
@@ -192,6 +211,10 @@ runs:
       if: failure() && steps.argocd_app_sync.outcome == 'failure'
       shell: bash
       run: |
+        echo "--- argocd pods ---"
+        kubectl -n argocd get pods -o wide || true
+        echo "--- argocd events ---"
+        kubectl -n argocd get events --sort-by=.lastTimestamp || true
         echo "--- all applications ---"
         kubectl get applications.argoproj.io -A
         echo "--- any-ns-meta (argocd-apps ns) ---"
