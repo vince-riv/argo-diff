@@ -69,6 +69,40 @@ runs:
         echo "Importing $IMAGE into k3d cluster: $cluster"
         k3d image import "$IMAGE" --cluster "$cluster"
 
+    - name: Pre-pull ArgoCD chart images into k3d
+      id: argocd_images
+      shell: bash
+      run: |
+        set -euo pipefail
+        repo=https://argoproj.github.io/argo-helm
+        # Resolve the chart version once and pin the HelmChart to it in the
+        # install step, so the images pulled here are the ones it deploys.
+        version=$(helm show chart argo-cd --repo "$repo" | yq '.version')
+        echo "argo-cd chart version: $version"
+        echo "chart_version=$version" >> "$GITHUB_OUTPUT"
+        # Every image the chart renders with the test values, hook Jobs included.
+        # They all use imagePullPolicy IfNotPresent, so the imported copies are used.
+        mapfile -t images < <(yq '.spec.valuesContent' test/argocd-helmchart.yaml \
+          | helm template argocd argo-cd --repo "$repo" --version "$version" --namespace argocd -f - \
+          | yq -N '.spec.template.spec | (.initContainers[]?, .containers[]?) | .image' | sort -u)
+        (( ${#images[@]} > 0 )) || { echo "::error::No images found in the argo-cd chart"; exit 1; }
+        # Pulled on the runner with retries, because anonymous registry pulls
+        # from shared runner IPs hit rate limits (eg: 429 Too Many Requests).
+        for image in "${images[@]}"; do
+          for attempt in 1 2 3 4 5; do
+            docker pull "$image" && break
+            if (( attempt == 5 )); then
+              echo "::error::Could not pull $image"
+              exit 1
+            fi
+            echo "Pull of $image failed (attempt $attempt), retrying in $((attempt * 10)) s"
+            sleep $((attempt * 10))
+          done
+        done
+        cluster=$(k3d cluster list -o json | jq -r '.[0].name')
+        echo "Importing ${images[*]} into k3d cluster: $cluster"
+        k3d image import "${images[@]}" --cluster "$cluster"
+
     - name: Point test applications at another git host
       if: ${{ inputs.repo_url != '' }}
       shell: bash
@@ -83,11 +117,14 @@ runs:
 
     - name: Install ArgoCD via HelmChart CRD
       shell: bash
+      env:
+        CHART_VERSION: ${{ steps.argocd_images.outputs.chart_version }}
       run: |
+        set -euo pipefail
         kubectl create namespace argocd
         kubectl create namespace argocd-apps
         kubectl create namespace apps
-        kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=true
+        yq '.spec.version = strenv(CHART_VERSION)' test/argocd-helmchart.yaml | kubectl apply -n kube-system -f - --server-side=true
 
     - name: Wait for HelmChart to deploy
       shell: bash
@@ -111,23 +148,44 @@ runs:
     - name: Wait for ArgoCD pods to be ready
       shell: bash
       run: |
-        echo "Waiting for ArgoCD pods to launch..."
-        deadline=$((SECONDS + 180))
-        while (( SECONDS < deadline )); do
-          [[ -n "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]] && break
-          sleep 1
+        set -euo pipefail
+        # Every component the sync path needs, dependencies first: redis backs
+        # the cache of all the others; without it they fail their cache calls,
+        # and the apps sit in Unknown sync status until the sync step's 300 s
+        # timeout instead of failing here. The repo-server generates manifests,
+        # the application controller reconciles, and argocd-server serves the CLI.
+        # The pods start in parallel, so waiting on each in turn costs about as
+        # long as the slowest one. One deadline covers them all, so the step
+        # stays bounded however the time splits between them.
+        deadline=$((SECONDS + 240))
+        for name in argocd-redis argocd-repo-server argocd-application-controller argocd-server; do
+          echo "Waiting for $name pods to launch..."
+          until [[ -n "$(kubectl -n argocd get pods -l app.kubernetes.io/name=$name --no-headers=true)" ]]; do
+            if (( SECONDS >= deadline )); then
+              echo "::error::No $name pod appeared within the time limit"
+              exit 1
+            fi
+            sleep 1
+          done
+          remaining=$((deadline - SECONDS))
+          (( remaining > 0 )) || remaining=1
+          echo "Waiting for $name pods to be ready ..."
+          if ! kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=$name --timeout=${remaining}s; then
+            echo "::error::$name pods were not ready within the time limit"
+            exit 1
+          fi
         done
-        if [[ -z "$(kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-server --no-headers=true)" ]]; then
-          echo "::error::No argocd-server pod appeared within the time limit"
-          exit 1
-        fi
-        echo "Waiting for argocd-server pods to be ready ..."
-        kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=180s
 
     - name: Debug pods if installation fails
       if: failure()
       shell: bash
-      run: kubectl -n argocd get pods -o yaml
+      run: |
+        echo "--- argocd pods ---"
+        kubectl -n argocd get pods -o wide || true
+        echo "--- argocd pod descriptions ---"
+        kubectl -n argocd describe pods || true
+        echo "--- argocd events ---"
+        kubectl -n argocd get events --sort-by=.lastTimestamp || true
 
     - name: Create ArgoCD test applications
       shell: bash
@@ -192,6 +250,10 @@ runs:
       if: failure() && steps.argocd_app_sync.outcome == 'failure'
       shell: bash
       run: |
+        echo "--- argocd pods ---"
+        kubectl -n argocd get pods -o wide || true
+        echo "--- argocd events ---"
+        kubectl -n argocd get events --sort-by=.lastTimestamp || true
         echo "--- all applications ---"
         kubectl get applications.argoproj.io -A
         echo "--- any-ns-meta (argocd-apps ns) ---"

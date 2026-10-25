@@ -9,7 +9,7 @@ use (see [Webhook end-to-end manifests](#webhook-end-to-end-manifests)).
 
 | Path | Purpose |
 | ---- | ------- |
-| `argocd-helmchart.yaml` | k3s `HelmChart` CR that installs ArgoCD (auth disabled, single replicas, no dex/redis-ha) |
+| `argocd-helmchart.yaml` | k3s `HelmChart` CR that installs ArgoCD (auth disabled, single replicas, no dex/redis-ha, Redis from `mirror.gcr.io`) |
 | `argocd-applications/` | The `test` AppProject plus the `basic-deployment` and `helm-deployment` Applications, assembled by `kustomization.yaml` |
 | `argocd-meta.yaml` | The `meta` AppProject and app-of-apps Application that owns `argocd-applications/` |
 | `argocd-broken-app.yaml` | An Application pointing at `test/does-not-exist`, used to prove argo-diff exits non-zero on manifest-generation failures |
@@ -134,8 +134,19 @@ the API anyway.
 
 The cluster setup lives in the composite action `.github/actions/k3s-argocd/` (so the GitLab flavor can
 share it): it runs `go build` for a linux/amd64 binary into `temp/`, `docker build`s the `Dockerfile`,
-starts k3d, imports the image, installs ArgoCD, applies the test applications and waits for them to
-sync. It needs `actions/checkout` first. Its optional `repo_url` input rewrites every `repoURL` under
+starts k3d, imports the image, pre-pulls the ArgoCD chart images, installs ArgoCD, applies the test applications and waits for them to
+sync. Before it applies the applications it waits for the `argocd-redis`, `argocd-repo-server`,
+`argocd-application-controller` and `argocd-server` pods to be ready, Redis first since the others depend
+on it. When Redis is down every ArgoCD component fails its cache calls and the apps stay in `Unknown` sync
+status, which used to surface only as a 300 s `argocd app wait` timeout. Both debug steps print the `argocd`
+pods and events.
+
+The pre-pull step resolves the latest `argo-cd` chart version, renders the chart with the test values, and
+`docker pull`s every image it uses (with retries) on the runner, then `k3d image import`s them; the
+install step pins the `HelmChart` to that same version, so the cluster deploys exactly the images that were
+imported (all `imagePullPolicy: IfNotPresent`). This and the `mirror.gcr.io/library/redis` override exist
+because anonymous pulls from shared runner IPs get rate-limited: the chart's default Redis registry, ECR
+Public, returned `429 Too Many Requests` and left Redis in `ImagePullBackOff`. It needs `actions/checkout` first. Its optional `repo_url` input rewrites every `repoURL` under
 `test/` (in the runner's checkout only) to another git host. With `repo_url` set it does not create `meta` and `any-ns-meta` (it applies only the `any-ns` AppProject) and applies
 the child Applications straight from the rewritten files: the app-of-apps layer reads its children from
 the `k3s-test` branch, which still names GitHub, and `selfHeal` would put those URLs back. Composite steps cannot set
