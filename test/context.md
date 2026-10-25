@@ -64,6 +64,12 @@ PR under test supplies the *changed* revision. Editing `test/basic-deployment/` 
 on a PR is what produces a diff — but the live state comes from `k3s-test`, so a fixture change that
 should show up in the e2e diff has to be reflected there too.
 
+`k3s-test` is `main` plus one "don't merge to main" commit that resets the fixture values. The
+`main-branch-sync.yml` workflow rebases it onto `main` and force-pushes it daily (and on
+`workflow_dispatch`), so it does not fall behind. If the rebase conflicts, the job fails and leaves the
+branch as it was; resolve the conflict by hand. A fixture change made on `k3s-test` itself must live in
+that commit (or another commit on top of `main`) to survive the rebase.
+
 ## run-argo-diff-pod.sh
 
 Required env: `POD_NAME_PREFIX`, `IMAGE`, `ARGO_DIFF_CONTEXT_STR`, `EXPECT_EXIT` (`0` or
