@@ -23,6 +23,12 @@ spec:
         # auth is already fully disabled for this test cluster, default to
         # role:admin so any-namespace apps aren't denied by RBAC either.
         policy.default: role:admin
+    redis:
+      image:
+        # Google's mirror of Docker Hub's official images. The chart default,
+        # ECR Public, rate-limits anonymous pulls from shared GitHub runner IPs
+        # (429 Too Many Requests), which left the redis pod in ImagePullBackOff.
+        repository: mirror.gcr.io/library/redis
     redis-ha:
       enabled: false
     controller:

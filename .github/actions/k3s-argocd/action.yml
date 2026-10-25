@@ -69,6 +69,40 @@ runs:
         echo "Importing $IMAGE into k3d cluster: $cluster"
         k3d image import "$IMAGE" --cluster "$cluster"
 
+    - name: Pre-pull ArgoCD chart images into k3d
+      id: argocd_images
+      shell: bash
+      run: |
+        set -euo pipefail
+        repo=https://argoproj.github.io/argo-helm
+        # Resolve the chart version once and pin the HelmChart to it in the
+        # install step, so the images pulled here are the ones it deploys.
+        version=$(helm show chart argo-cd --repo "$repo" | yq '.version')
+        echo "argo-cd chart version: $version"
+        echo "chart_version=$version" >> "$GITHUB_OUTPUT"
+        # Every image the chart renders with the test values, hook Jobs included.
+        # They all use imagePullPolicy IfNotPresent, so the imported copies are used.
+        mapfile -t images < <(yq '.spec.valuesContent' test/argocd-helmchart.yaml \
+          | helm template argocd argo-cd --repo "$repo" --version "$version" --namespace argocd -f - \
+          | yq -N '.spec.template.spec | (.initContainers[]?, .containers[]?) | .image' | sort -u)
+        (( ${#images[@]} > 0 )) || { echo "::error::No images found in the argo-cd chart"; exit 1; }
+        # Pulled on the runner with retries, because anonymous registry pulls
+        # from shared runner IPs hit rate limits (eg: 429 Too Many Requests).
+        for image in "${images[@]}"; do
+          for attempt in 1 2 3 4 5; do
+            docker pull "$image" && break
+            if (( attempt == 5 )); then
+              echo "::error::Could not pull $image"
+              exit 1
+            fi
+            echo "Pull of $image failed (attempt $attempt), retrying in $((attempt * 10)) s"
+            sleep $((attempt * 10))
+          done
+        done
+        cluster=$(k3d cluster list -o json | jq -r '.[0].name')
+        echo "Importing ${images[*]} into k3d cluster: $cluster"
+        k3d image import "${images[@]}" --cluster "$cluster"
+
     - name: Point test applications at another git host
       if: ${{ inputs.repo_url != '' }}
       shell: bash
@@ -83,11 +117,14 @@ runs:
 
     - name: Install ArgoCD via HelmChart CRD
       shell: bash
+      env:
+        CHART_VERSION: ${{ steps.argocd_images.outputs.chart_version }}
       run: |
+        set -euo pipefail
         kubectl create namespace argocd
         kubectl create namespace argocd-apps
         kubectl create namespace apps
-        kubectl apply -n kube-system -f test/argocd-helmchart.yaml --server-side=true
+        yq '.spec.version = strenv(CHART_VERSION)' test/argocd-helmchart.yaml | kubectl apply -n kube-system -f - --server-side=true
 
     - name: Wait for HelmChart to deploy
       shell: bash
