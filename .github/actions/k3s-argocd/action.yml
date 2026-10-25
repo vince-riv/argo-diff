@@ -112,14 +112,16 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        # Every component the sync path needs, dependencies first: redis backs
+        # the cache of all the others; without it they fail their cache calls,
+        # and the apps sit in Unknown sync status until the sync step's 300 s
+        # timeout instead of failing here. The repo-server generates manifests,
+        # the application controller reconciles, and argocd-server serves the CLI.
         # The pods start in parallel, so waiting on each in turn costs about as
-        # long as the slowest one. One deadline covers both, so the step stays
-        # bounded however the time splits between them.
-        # argocd-redis is waited on too: without it every ArgoCD component fails
-        # its cache calls, and the apps sit in Unknown sync status until the
-        # sync step's 300 s timeout instead of failing here.
+        # long as the slowest one. One deadline covers them all, so the step
+        # stays bounded however the time splits between them.
         deadline=$((SECONDS + 240))
-        for name in argocd-server argocd-redis; do
+        for name in argocd-redis argocd-repo-server argocd-application-controller argocd-server; do
           echo "Waiting for $name pods to launch..."
           until [[ -n "$(kubectl -n argocd get pods -l app.kubernetes.io/name=$name --no-headers=true)" ]]; do
             if (( SECONDS >= deadline )); then
