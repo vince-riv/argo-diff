@@ -1,0 +1,102 @@
+---
+name: Main Branch Sync
+
+# Keeps the branches that follow main up to date with it.
+#
+# - rebase-k3s-test: rebases k3s-test (the branch the k3s e2e test apps sync
+#   from, see test/context.md) onto main and force-pushes it. A conflict fails
+#   the job and leaves k3s-test as it was.
+#
+# Each sync is its own job, so more can be added next to it. The GitLab fork's
+# sync-from-github job (root .gitlab-ci.yml) is the intended candidate: it would
+# become a job here that pushes main and k3s-test to the fork. That job must run
+# after rebase-k3s-test (`needs: rebase-k3s-test`), so the fork gets the rebased
+# k3s-test, and reads the pushed commits from that job's outputs. A sketch:
+#
+#   sync-to-gitlab:
+#     needs: rebase-k3s-test
+#     runs-on: ubuntu-latest
+#     strategy:
+#       matrix:
+#         include:
+#           - { branch: main,     sha: "${{ needs.rebase-k3s-test.outputs.main_sha }}" }
+#           - { branch: k3s-test, sha: "${{ needs.rebase-k3s-test.outputs.k3s_test_sha }}" }
+#     steps:
+#       - checkout with fetch-depth 0, then:
+#         git push --force "https://oauth2:${GITLAB_FORK_TOKEN}@gitlab.com/vrivellino/argo-diff.git" \
+#           "${sha}:refs/heads/${branch}"
+#
+# GITLAB_FORK_TOKEN (already used by gitlab-k3s.yml) has write_repository, which
+# is all the push needs.
+
+on:
+  schedule:
+    - cron: '43 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One sync at a time: a scheduled and a dispatched run must not race on a
+# force-push.
+concurrency:
+  group: main-branch-sync
+  cancel-in-progress: false
+
+env:
+  BASE_BRANCH: main
+
+jobs:
+  rebase-k3s-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      BRANCH: k3s-test
+    outputs:
+      main_sha: ${{ steps.rebase.outputs.main_sha }}
+      k3s_test_sha: ${{ steps.rebase.outputs.branch_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Rebase onto main and force-push
+        id: rebase
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin "$BASE_BRANCH" "$BRANCH"
+          base_sha=$(git rev-parse "origin/$BASE_BRANCH")
+          old_sha=$(git rev-parse "origin/$BRANCH")
+          echo "main_sha=$base_sha" >> "$GITHUB_OUTPUT"
+
+          if git merge-base --is-ancestor "$base_sha" "$old_sha"; then
+            echo "$BRANCH already contains $BASE_BRANCH ($base_sha); nothing to do"
+            echo "branch_sha=$old_sha" >> "$GITHUB_OUTPUT"
+            echo "\`$BRANCH\` already contains \`$BASE_BRANCH\` (\`${base_sha:0:7}\`)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git checkout -q -B "$BRANCH" "$old_sha"
+          if ! git rebase "$base_sha"; then
+            git rebase --abort || true
+            echo "::error::$BRANCH does not rebase cleanly onto $BASE_BRANCH; resolve the conflict by hand"
+            exit 1
+          fi
+          new_sha=$(git rev-parse HEAD)
+          echo "Commits on $BRANCH after the rebase:"
+          git log --oneline --no-decorate "$base_sha..$new_sha"
+
+          # The lease fails the push if someone pushed to the branch since the fetch.
+          git push --force-with-lease="refs/heads/$BRANCH:$old_sha" origin "$new_sha:refs/heads/$BRANCH"
+          echo "branch_sha=$new_sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "Rebased \`$BRANCH\` onto \`$BASE_BRANCH\` (\`${base_sha:0:7}\`): \`${old_sha:0:7}\` → \`${new_sha:0:7}\`"
+            echo
+            echo '```'
+            git log --oneline --no-decorate "$base_sha..$new_sha"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
