@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v92 v92.0.0
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/pflag v1.0.10
-	gitlab.com/gitlab-org/api/client-go/v3 v3.22.0
+	gitlab.com/gitlab-org/api/client-go/v3 v3.27.0
 	k8s.io/apimachinery v0.36.4
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -35,7 +35,7 @@ require (
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/time v0.16.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
