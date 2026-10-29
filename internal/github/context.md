@@ -3,7 +3,7 @@
 The GitHub provider: `Provider` implements `scm.Provider`, so everything GitHub-specific lives here
 — the API client, PR comments, commit statuses, webhook parsing and signature checks, and GitHub
 Actions detection. Comment rendering lives in `internal/comment`. Built on
-`github.com/google/go-github/v92` (the major version is in the import path — a Renovate bump
+`github.com/google/go-github/v93` (the major version is in the import path — a Renovate bump
 requires a code change).
 
 ## Files
@@ -29,6 +29,11 @@ The App path also builds `appsClient` (JWT auth) to resolve the bot's own login.
 construction failures only log — the nil client surfaces later as an error. With no token and no
 `GITHUB_APP_ID`, `init()` builds nothing and logs nothing: GitHub is simply disabled (eg: a
 GitLab-only setup). A partial App setup is reported by `Provider.ValidateConfig()` at startup.
+
+go-github v93+ sends credentials only to the client's configured API and upload origins; any other
+host, including a redirect hop, gets the request unauthenticated. These clients use the default
+`api.github.com` origin, so this has no effect today. Any GitHub Enterprise support must set those
+origins explicitly (and `AllowedOrigins` on `BasicAuthTransport`), or requests go out unauthenticated.
 
 **These `init()` functions ignore `ARGO_DIFF_SCM_PROVIDERS`.** With `github` not listed (eg:
 `ARGO_DIFF_SCM_PROVIDERS=gitlab`), they still build clients from any GitHub credentials, still call
