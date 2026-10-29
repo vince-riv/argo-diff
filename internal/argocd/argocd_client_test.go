@@ -584,3 +584,148 @@ func TestAppManifestHelper(t *testing.T) {
 		t.Errorf("appManifestHelper() - expected 4 manifests, got %d", len(manifests))
 	}
 }
+
+// setAppDiffTestConfig sets appDiffOpts and appDiffServerSideDiff for one
+// test, restoring both afterward.
+func setAppDiffTestConfig(t *testing.T, opts []string, serverSideDiff string) {
+	t.Helper()
+	origOpts, origSSD := appDiffOpts, appDiffServerSideDiff
+	appDiffOpts, appDiffServerSideDiff = opts, serverSideDiff
+	t.Cleanup(func() { appDiffOpts, appDiffServerSideDiff = origOpts, origSSD })
+}
+
+// captureDiffArgs runs diffApplication() against a mocked CLI and returns the argv it passed.
+func captureDiffArgs(t *testing.T, revision string, revisions []string, srcPos []int) []string {
+	t.Helper()
+	orig := execArgoCdCli
+	t.Cleanup(func() { execArgoCdCli = orig })
+	var captured []string
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		captured = args
+		return nil, nil
+	}
+	_, _ = diffApplication(context.Background(), "my-app", "argocd", revision, revisions, srcPos)
+	return captured
+}
+
+func TestParseAppDiffOpts(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		for _, env := range []string{"", "   "} {
+			opts, err := parseAppDiffOpts(env)
+			if err != nil || len(opts) != 0 {
+				t.Errorf("parseAppDiffOpts(%q) = %v, %v; want no opts, no error", env, opts, err)
+			}
+		}
+	})
+
+	t.Run("allowed flags pass through", func(t *testing.T) {
+		opts, err := parseAppDiffOpts("--server-side-diff-concurrency=1 --server-side-diff-max-batch-kb 100 --refresh")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--server-side-diff-concurrency=1", "--server-side-diff-max-batch-kb", "100", "--refresh"}
+		if !slices.Equal(opts, want) {
+			t.Errorf("got %q, want %q", opts, want)
+		}
+	})
+
+	t.Run("quoted value with a space stays one argument", func(t *testing.T) {
+		opts, err := parseAppDiffOpts(`--some-flag "a b" --other='c d'`)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--some-flag", "a b", "--other=c d"}
+		if !slices.Equal(opts, want) {
+			t.Errorf("got %q, want %q", opts, want)
+		}
+	})
+
+	t.Run("unbalanced quote is an error", func(t *testing.T) {
+		if _, err := parseAppDiffOpts(`--some-flag "a b`); err == nil {
+			t.Error("expected an error for an unbalanced quote")
+		}
+	})
+
+	t.Run("rejected flags", func(t *testing.T) {
+		var cases []string
+		for name := range rejectedAppDiffFlags {
+			cases = append(cases, "--"+name, "--"+name+"=v", "--refresh --"+name+" v")
+		}
+		cases = append(cases, "-N", "-Nfoo", "-N=foo", "-N foo")
+		for _, env := range cases {
+			opts, err := parseAppDiffOpts(env)
+			if err == nil {
+				t.Errorf("parseAppDiffOpts(%q) = %q; want an error", env, opts)
+				continue
+			}
+			if !strings.Contains(err.Error(), "not allowed") {
+				t.Errorf("parseAppDiffOpts(%q) error %q does not say the flag is not allowed", env, err)
+			}
+		}
+	})
+
+	t.Run("error names the flag", func(t *testing.T) {
+		_, err := parseAppDiffOpts("--server-side-diff-concurrency=1 --revision=abc")
+		if err == nil || !strings.Contains(err.Error(), "--revision") {
+			t.Errorf("expected an error naming --revision, got %v", err)
+		}
+		_, err = parseAppDiffOpts("-Nfoo")
+		if err == nil || !strings.Contains(err.Error(), "-N") {
+			t.Errorf("expected an error naming -N, got %v", err)
+		}
+	})
+}
+
+func TestDiffApplicationAppDiffOpts(t *testing.T) {
+	t.Run("opts unset leaves argv unchanged", func(t *testing.T) {
+		setAppDiffTestConfig(t, nil, "")
+		got := captureDiffArgs(t, "abc123", nil, nil)
+		want := []string{"app", "diff", "my-app", "--app-namespace", "argocd", "--revision", "abc123"}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("opts appended last", func(t *testing.T) {
+		setAppDiffTestConfig(t, []string{"--server-side-diff-concurrency=1"}, "")
+		got := captureDiffArgs(t, "abc123", nil, nil)
+		want := []string{"app", "diff", "my-app", "--app-namespace", "argocd", "--revision", "abc123", "--server-side-diff-concurrency=1"}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("opts appended after --server-side-diff", func(t *testing.T) {
+		setAppDiffTestConfig(t, []string{"--server-side-diff-concurrency=1"}, "true")
+		got := captureDiffArgs(t, "abc123", nil, nil)
+		want := []string{"app", "diff", "my-app", "--app-namespace", "argocd", "--revision", "abc123", "--server-side-diff=true", "--server-side-diff-concurrency=1"}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("opts appended last in multi-revision path", func(t *testing.T) {
+		setAppDiffTestConfig(t, []string{"--server-side-diff-concurrency=1"}, "true")
+		got := captureDiffArgs(t, "", []string{"abc123", "1.2.3"}, []int{1, 2})
+		want := []string{"app", "diff", "my-app", "--app-namespace", "argocd",
+			"--revisions", "abc123", "--revisions", "1.2.3",
+			"--source-positions", "1", "--source-positions", "2",
+			"--server-side-diff=true", "--server-side-diff-concurrency=1"}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("app manifests does not get opts", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		setAppDiffTestConfig(t, []string{"--server-side-diff-concurrency=1"}, "true")
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.5.2", &captured)
+		_, _ = getApplicationManifests(context.Background(), "my-app", "argocd", "abc123")
+		if slices.Contains(captured, "--server-side-diff-concurrency=1") {
+			t.Errorf("app manifests argv %q must not contain ARGOCD_APP_DIFF_OPTS", captured)
+		}
+	})
+}
