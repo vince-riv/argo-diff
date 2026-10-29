@@ -29,8 +29,8 @@ the full OpenAPI schema, so a large app (big CRDs) can OOMKill argocd-server. `A
 carry it — the CLI reads `ARGOCD_OPTS` only for root persistent flags, and subcommand flags ignore
 it.
 
-`init()` calls `parseAppDiffOpts()` once. It splits the string with `go-shellquote` (what the CLI
-uses for `ARGOCD_OPTS`), so a quoted value with spaces stays one arg. The result goes in
+`init()` calls `parseAppDiffOpts()` once. It splits the string with `internal/shellquote` (a copy of
+`go-shellquote`, which the CLI uses for `ARGOCD_OPTS`), so a quoted value with spaces stays one arg. The result goes in
 `appDiffOpts`; an error goes in `appDiffOptsErr`, which `ValidateConfig()` returns and `cmd/main.go`
 fatals on. `init()` must not fatal itself, since tests load the package. `diffApplication()`
 appends `appDiffOpts` last, after `--server-side-diff=…`, on both the single- and multi-revision

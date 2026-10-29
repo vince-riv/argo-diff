@@ -8,7 +8,6 @@ require (
 	github.com/akedrou/textdiff v0.1.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/google/go-github/v93 v93.0.0
-	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/pflag v1.0.10
 	gitlab.com/gitlab-org/api/client-go/v3 v3.27.0

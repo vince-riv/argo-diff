@@ -16,11 +16,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kballard/go-shellquote"
 	"github.com/rs/zerolog/log"
 	"sigs.k8s.io/yaml"
 
 	"github.com/vince-riv/argo-diff/internal/config"
+	"github.com/vince-riv/argo-diff/internal/shellquote"
 )
 
 // appNamespaceManifestsMinVersion is the minimum argocd CLI client version
