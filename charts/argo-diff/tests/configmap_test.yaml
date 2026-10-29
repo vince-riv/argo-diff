@@ -185,6 +185,13 @@ tests:
       - equal:
           path: data.ARGO_DIFF_MAX_WORKERS
           value: "8"
+  - it: config argocd.appDiffOpts
+    set:
+      config.argocd.appDiffOpts: --server-side-diff-concurrency=1
+    asserts:
+      - equal:
+          path: data.ARGOCD_APP_DIFF_OPTS
+          value: --server-side-diff-concurrency=1
   - it: config argocd.grpcWeb
     set:
       config.argocd.grpcWeb: true

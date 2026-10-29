@@ -38,13 +38,16 @@ metadata:
 {{- else if kindIs "string" .commentCollapseIgnorableExcludeKinds }}
 {{- $ignorableKinds = .commentCollapseIgnorableExcludeKinds }}
 {{- end }}
-{{- if or .argocd.grpcWeb .argocd.grpcWebRoot .argocd.serverAddr .argocd.serverInsecure
+{{- if or .argocd.appDiffOpts .argocd.grpcWeb .argocd.grpcWebRoot .argocd.serverAddr .argocd.serverInsecure
           .argocd.serverPlainText .argocd.uiBaseURL .commentPreamble .contextStr .commentLineMaxChars
           .commentNotice .commentCollapse .commentCollapseAppCount .commentCollapseResourceCount
           $ignorable $ignorableRegexes $ignorableKinds
           $indexCount .commentMaxChars
           .maxWorkers .github.application.id .github.application.installationId }}
 data:
+  {{- with .argocd.appDiffOpts }}
+  ARGOCD_APP_DIFF_OPTS: {{ . | quote }}
+  {{- end }}
   {{- with .argocd.grpcWeb }}
   ARGOCD_GRPC_WEB: {{ . | quote }}
   {{- end }}

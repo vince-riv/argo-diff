@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kballard/go-shellquote"
 	"github.com/rs/zerolog/log"
 	"sigs.k8s.io/yaml"
 
@@ -33,7 +34,66 @@ var (
 	commonCliArgv         []string
 	envArgoCdOpts         string
 	appDiffServerSideDiff string
+	// appDiffOpts are extra args from ARGOCD_APP_DIFF_OPTS, appended to every
+	// `argocd app diff` call; appDiffOptsErr is its parse/validation error,
+	// surfaced at startup by ValidateConfig().
+	appDiffOpts    []string
+	appDiffOptsErr error
 )
+
+// rejectedAppDiffFlags are `argocd app diff` flags that ARGOCD_APP_DIFF_OPTS
+// may not set, keyed by long name, with the reason they break argo-diff.
+var rejectedAppDiffFlags = map[string]string{
+	"revision":             "argo-diff sets it itself",
+	"revisions":            "argo-diff sets it itself",
+	"source-positions":     "argo-diff sets it itself",
+	"source-names":         "argo-diff sets it itself",
+	"app-namespace":        "argo-diff sets it itself",
+	"server-side-diff":     "argo-diff sets it itself; use ARGOCD_APP_DIFF_SERVER_SIDE_DIFF",
+	"exit-code":            "it changes the exit-code contract argo-diff relies on",
+	"diff-exit-code":       "it changes the exit-code contract argo-diff relies on",
+	"local":                "it diffs against something other than the PR revision",
+	"local-repo-root":      "it diffs against something other than the PR revision",
+	"server-side-generate": "it diffs against something other than the PR revision",
+	"local-include":        "it diffs against something other than the PR revision",
+}
+
+// rejectedAppDiffShorthands maps the shorthand of a rejected flag to its long name.
+var rejectedAppDiffShorthands = map[byte]string{
+	'N': "app-namespace",
+}
+
+// parseAppDiffOpts splits ARGOCD_APP_DIFF_OPTS the way a shell would and
+// rejects flags that would break argo-diff. Anything else passes through
+// unchecked: the argocd CLI validates its own flags.
+func parseAppDiffOpts(env string) ([]string, error) {
+	opts, err := shellquote.Split(env)
+	if err != nil {
+		return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: cannot parse %q: %w", env, err)
+	}
+	for _, opt := range opts {
+		var name, form string
+		switch {
+		case strings.HasPrefix(opt, "--"):
+			name, _, _ = strings.Cut(opt[2:], "=")
+			form = "--" + name
+		case len(opt) > 1 && opt[0] == '-':
+			// shorthand: -N, -Nvalue or -N=value
+			name = rejectedAppDiffShorthands[opt[1]]
+			form = opt[:2]
+		}
+		if reason, ok := rejectedAppDiffFlags[name]; ok {
+			return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: flag %s is not allowed: %s", form, reason)
+		}
+	}
+	return opts, nil
+}
+
+// ValidateConfig returns the first invalid setting this package read from
+// the environment at startup, or nil.
+func ValidateConfig() error {
+	return appDiffOptsErr
+}
 
 func init() {
 	serverAddr := os.Getenv("ARGOCD_SERVER_ADDR")
@@ -67,6 +127,7 @@ func init() {
 	} else if envAppDiffServerSide != "" {
 		log.Warn().Msgf("Invalid value for ARGOCD_APP_DIFF_SERVER_SIDE_DIFF: %s; must be 'true' or 'false'", envAppDiffServerSide)
 	}
+	appDiffOpts, appDiffOptsErr = parseAppDiffOpts(os.Getenv("ARGOCD_APP_DIFF_OPTS"))
 }
 
 func argocdCmdFromEnv() string {
@@ -310,6 +371,8 @@ func diffApplication(ctx context.Context, appName string, appNamespace string, r
 	if appDiffServerSideDiff != "" {
 		args = append(args, fmt.Sprintf("--server-side-diff=%s", appDiffServerSideDiff))
 	}
+	// user-supplied opts go last, after every arg argo-diff sets itself
+	args = append(args, appDiffOpts...)
 	output, err := execArgoCdCli(ctx, args)
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

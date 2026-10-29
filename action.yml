@@ -45,6 +45,10 @@ inputs:
     description: 'Set --server-side-diff flag for argocd app diff (true/false)'
     required: false
     default: ''
+  argocd_app_diff_opts:
+    description: 'Extra flags appended to every argocd app diff command, and only that command (eg: --server-side-diff-concurrency=1). Use argocd_opts for global flags. Populates ARGOCD_APP_DIFF_OPTS'
+    required: false
+    default: ''
   comment_collapse:
     description: 'Whether the collapsible sections in a PR comment start open: expanded (default), collapsed, or auto. auto folds ignorable resource diffs (see comment_collapse_ignorable), or applies the count thresholds when that is false'
     required: false
@@ -134,6 +138,7 @@ runs:
     ARGO_DIFF_TIMEOUT: ${{ inputs.timeout }}
     ARGOCD_AUTH_TOKEN: ${{ inputs.argocd_auth_token }}
     ARGOCD_APP_DIFF_SERVER_SIDE_DIFF: ${{ inputs.argocd_app_server_side_diff }}
+    ARGOCD_APP_DIFF_OPTS: ${{ inputs.argocd_app_diff_opts }}
     ARGOCD_GRPC_WEB: ${{ inputs.argocd_grpc_web }}
     ARGOCD_GRPC_WEB_ROOT_PATH: ${{ inputs.argocd_grpc_web_root_path }}
     ARGOCD_SERVER_ADDR: ${{ inputs.argocd_server }}

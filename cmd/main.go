@@ -142,6 +142,9 @@ func main() {
 	if os.Getenv("ARGOCD_SERVER_ADDR") == "" {
 		log.Fatal().Msg("ARGOCD_SERVER_ADDR environment variable not set")
 	}
+	if err = argocd.ValidateConfig(); err != nil {
+		log.Fatal().Err(err).Msg("Invalid ArgoCD configuration")
+	}
 	providers := registerProviders()
 
 	if os.Getenv("APP_ENV") == "dev" {

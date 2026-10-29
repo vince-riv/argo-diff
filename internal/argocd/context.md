@@ -20,6 +20,35 @@ Wrapper around the **`argocd` CLI** — not an HTTP API client. Everything here 
 optionally `--insecure`, `--plaintext`, `--grpc-web`, `--grpc-web-root-path`. It also captures
 `ARGOCD_OPTS` and validates `ARGOCD_APP_DIFF_SERVER_SIDE_DIFF` (must be `true`/`false`).
 
+### `ARGOCD_APP_DIFF_OPTS`
+
+Extra args for `argocd app diff`, and only that subcommand (not `app manifests`, `list`,
+`version`). The motivating case is `--server-side-diff-concurrency=1`: the CLI sends one
+`ServerSideDiff` call per ~250 KB batch, all at once by default, and each makes argocd-server parse
+the full OpenAPI schema, so a large app (big CRDs) can OOMKill argocd-server. `ARGOCD_OPTS` cannot
+carry it — the CLI reads `ARGOCD_OPTS` only for root persistent flags, and subcommand flags ignore
+it.
+
+`init()` calls `parseAppDiffOpts()` once. It splits the string with `go-shellquote` (what the CLI
+uses for `ARGOCD_OPTS`), so a quoted value with spaces stays one arg. The result goes in
+`appDiffOpts`; an error goes in `appDiffOptsErr`, which `ValidateConfig()` returns and `cmd/main.go`
+fatals on. `init()` must not fatal itself, since tests load the package. `diffApplication()`
+appends `appDiffOpts` last, after `--server-side-diff=…`, on both the single- and multi-revision
+paths.
+
+`rejectedAppDiffFlags` lists flags that are an error in `--flag`, `--flag=value`, or shorthand
+(`-N`, `-Nvalue`, `-N=value`) form:
+
+- Flags argo-diff sets itself, where a later value would silently win: `--revision`, `--revisions`,
+  `--source-positions`, `--source-names`, `--app-namespace`/`-N`, `--server-side-diff` (which has
+  its own env var).
+- `--exit-code`, `--diff-exit-code`: they change the exit code argo-diff reads as "has changes".
+- `--local`, `--local-repo-root`, `--server-side-generate`, `--local-include`: they diff against
+  something other than the PR revision.
+
+Anything else passes through unchecked; the CLI validates its own flag names. A shorthand cluster
+such as `-xN` is not inspected.
+
 `execArgoCdCli` is a **package-level `var`, so tests can replace it** — that is the main mocking
 seam for this package (see `addNotice` below for the other one). It prepends `commonCliArgv`, sets
 `KUBECTL_EXTERNAL_DIFF=diff -u` (hence `diffutils` in the Dockerfile), and re-injects `ARGOCD_OPTS`.
