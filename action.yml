@@ -38,7 +38,7 @@ inputs:
   #  required: false
   #  default: 'v2.13.2'
   argocd_opts:
-    description: 'Additional flags to pass to argocd cli (eg: --timeout 30s). Populates ARGOCD_OPTS'
+    description: 'Additional global flags for the argocd cli (eg: --header "X-Foo: bar"). Populates ARGOCD_OPTS. The argocd cli reads it only for global flags; use argocd_app_diff_opts for argocd app diff flags'
     required: false
     default: ''
   argocd_app_server_side_diff:
@@ -46,7 +46,7 @@ inputs:
     required: false
     default: ''
   argocd_app_diff_opts:
-    description: 'Extra flags appended to every argocd app diff command, and only that command (eg: --server-side-diff-concurrency=1). Use argocd_opts for global flags. Populates ARGOCD_APP_DIFF_OPTS'
+    description: 'Extra flags appended to every argocd app diff command, and only that command (eg: --server-side-diff-concurrency=1). Use argocd_opts for global flags. Flags argo-diff sets itself, --header, and words that are not flags fail at startup; see README. Populates ARGOCD_APP_DIFF_OPTS'
     required: false
     default: ''
   comment_collapse:

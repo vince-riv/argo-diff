@@ -652,6 +652,7 @@ func TestParseAppDiffOpts(t *testing.T) {
 			cases = append(cases, "--"+name, "--"+name+"=v", "--refresh --"+name+" v")
 		}
 		cases = append(cases, "-N", "-Nfoo", "-N=foo", "-N foo")
+		cases = append(cases, "-H", "-Hfoo", "-H=foo", "-H 'Authorization: Bearer x'")
 		for _, env := range cases {
 			opts, err := parseAppDiffOpts(env)
 			if err == nil {
@@ -660,6 +661,65 @@ func TestParseAppDiffOpts(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "not allowed") {
 				t.Errorf("parseAppDiffOpts(%q) error %q does not say the flag is not allowed", env, err)
+			}
+		}
+	})
+
+	t.Run("global flags argo-diff sets are rejected", func(t *testing.T) {
+		// listed explicitly, so dropping one from rejectedAppDiffFlags fails here
+		for _, name := range []string{"server", "auth-token", "insecure", "plaintext", "grpc-web", "grpc-web-root-path", "header"} {
+			if _, ok := rejectedAppDiffFlags[name]; !ok {
+				t.Errorf("--%s is missing from rejectedAppDiffFlags", name)
+			}
+		}
+	})
+
+	t.Run("positional arguments are rejected", func(t *testing.T) {
+		for _, env := range []string{
+			"server-side-diff-concurrency=1",
+			"--",
+			"--server-side-diff-concurrency=1 --",
+			"-- --refresh",
+			"-",
+			"--server-side-diff-concurrency=1 stray",
+			"-xvalue stray",
+			"--some-flag a b",
+		} {
+			opts, err := parseAppDiffOpts(env)
+			if err == nil {
+				t.Errorf("parseAppDiffOpts(%q) = %q; want an error", env, opts)
+			}
+		}
+	})
+
+	t.Run("values after flags that take them pass", func(t *testing.T) {
+		for _, env := range []string{
+			"--server-side-diff-max-batch-kb 100",
+			"--a=1 --b 2 --c",
+			"-x val",
+			"--some-flag -",
+		} {
+			if _, err := parseAppDiffOpts(env); err != nil {
+				t.Errorf("parseAppDiffOpts(%q) unexpected error: %v", env, err)
+			}
+		}
+	})
+
+	t.Run("errors do not echo the value", func(t *testing.T) {
+		const secret = "s3cr3t-token"
+		for _, env := range []string{
+			`--some-flag "` + secret,
+			"--some-flag=1 " + secret,
+			"--auth-token=" + secret,
+			"-H" + secret,
+		} {
+			_, err := parseAppDiffOpts(env)
+			if err == nil {
+				t.Errorf("parseAppDiffOpts(%q): want an error", env)
+				continue
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("parseAppDiffOpts(%q) error %q leaks the value", env, err)
 			}
 		}
 	})

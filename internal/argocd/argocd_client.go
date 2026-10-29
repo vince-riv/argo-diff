@@ -56,35 +56,68 @@ var rejectedAppDiffFlags = map[string]string{
 	"local-repo-root":      "it diffs against something other than the PR revision",
 	"server-side-generate": "it diffs against something other than the PR revision",
 	"local-include":        "it diffs against something other than the PR revision",
+	// global flags: execArgoCdCli puts commonCliArgv first, so a later value
+	// would send `app diff` somewhere other than `app list`/`app manifests`.
+	// User opts are also logged (execArgoCdCli) and put into error text
+	// (diffApplication), which must never carry credentials.
+	"server":             "it is a global flag argo-diff sets itself; use ARGOCD_SERVER_ADDR",
+	"auth-token":         "it is a global flag argo-diff sets itself, and argo-diff logs these opts; use ARGOCD_AUTH_TOKEN",
+	"insecure":           "it is a global flag argo-diff sets itself; use ARGOCD_SERVER_INSECURE",
+	"plaintext":          "it is a global flag argo-diff sets itself; use ARGOCD_SERVER_PLAINTEXT",
+	"grpc-web":           "it is a global flag argo-diff sets itself; use ARGOCD_GRPC_WEB",
+	"grpc-web-root-path": "it is a global flag argo-diff sets itself; use ARGOCD_GRPC_WEB_ROOT_PATH",
+	"header":             "it can carry credentials, and argo-diff logs these opts; use ARGOCD_OPTS",
 }
 
 // rejectedAppDiffShorthands maps the shorthand of a rejected flag to its long name.
 var rejectedAppDiffShorthands = map[byte]string{
 	'N': "app-namespace",
+	'H': "header",
 }
 
 // parseAppDiffOpts splits ARGOCD_APP_DIFF_OPTS the way a shell would and
-// rejects flags that would break argo-diff. Anything else passes through
+// rejects flags that would break argo-diff. Other flags pass through
 // unchecked: the argocd CLI validates its own flags.
+//
+// It also rejects anything the CLI would take as a positional argument:
+// `argocd app diff` takes exactly one (the app name, which argo-diff sets),
+// so a stray word would fail every diff. A non-flag token is allowed only
+// right after a flag that could take it as its value (`--flag`, not
+// `--flag=value`; `-X`, not `-Xvalue`). A stray word after a boolean flag
+// still gets through, since that needs the CLI's flag types.
+//
+// Errors never quote the env value or its tokens: a value may hold a secret.
 func parseAppDiffOpts(env string) ([]string, error) {
 	opts, err := shellquote.Split(env)
 	if err != nil {
-		return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: cannot parse %q: %w", env, err)
+		return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: cannot parse: %w", err)
 	}
-	for _, opt := range opts {
+	prevTakesValue := false
+	for i, opt := range opts {
 		var name, form string
+		takesValue := false
 		switch {
+		case opt == "--":
+			return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: a bare -- is not allowed: the CLI would take what follows as positional arguments")
 		case strings.HasPrefix(opt, "--"):
-			name, _, _ = strings.Cut(opt[2:], "=")
+			var hasValue bool
+			name, _, hasValue = strings.Cut(opt[2:], "=")
 			form = "--" + name
+			takesValue = !hasValue
 		case len(opt) > 1 && opt[0] == '-':
 			// shorthand: -N, -Nvalue or -N=value
 			name = rejectedAppDiffShorthands[opt[1]]
 			form = opt[:2]
+			takesValue = len(opt) == 2
+		default:
+			if !prevTakesValue {
+				return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: argument %d is not a flag and does not follow a flag that takes a value; argocd app diff would take it as a positional argument (write flags as --flag=value)", i+1)
+			}
 		}
 		if reason, ok := rejectedAppDiffFlags[name]; ok {
 			return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: flag %s is not allowed: %s", form, reason)
 		}
+		prevTakesValue = takesValue
 	}
 	return opts, nil
 }

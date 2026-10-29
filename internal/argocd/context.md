@@ -45,9 +45,24 @@ paths.
 - `--exit-code`, `--diff-exit-code`: they change the exit code argo-diff reads as "has changes".
 - `--local`, `--local-repo-root`, `--server-side-generate`, `--local-include`: they diff against
   something other than the PR revision.
+- Global flags in `commonCliArgv` (`--server`, `--auth-token`, `--insecure`, `--plaintext`,
+  `--grpc-web`, `--grpc-web-root-path`). The opts come after `commonCliArgv` and pflag keeps the
+  last value, so `--server` would send `app diff` to a different server than `app list` and
+  `app manifests`.
+- `--header`/`-H`: it can carry credentials, and the opts are logged at info level by
+  `execArgoCdCli` and put into `diffApplication()`'s error text. Headers belong in `ARGOCD_OPTS`,
+  which is never logged. For the same reason, no `parseAppDiffOpts()` error quotes the env value or
+  any of its tokens.
 
-Anything else passes through unchecked; the CLI validates its own flag names. A shorthand cluster
-such as `-xN` is not inspected.
+It also rejects positional arguments. `argocd app diff` takes exactly one (the app name), so a
+stray word (eg: `server-side-diff-concurrency=1` without its dashes) or anything after a bare `--`
+makes the CLI print help and exit 2 on every diff. A non-flag token is allowed only right after a
+flag that could take it as its value (`--flag` with no `=`, or a bare `-X`). A stray word after a
+boolean flag (`--refresh stray`) still gets through, because telling boolean flags apart needs the
+CLI's flag types; the docs ask for `--flag=value` form.
+
+Anything else passes through unchecked; the CLI validates its own flag names (but not positional
+arguments, hence the check above). A shorthand cluster such as `-xN` is not inspected.
 
 `execArgoCdCli` is a **package-level `var`, so tests can replace it** — that is the main mocking
 seam for this package (see `addNotice` below for the other one). It prepends `commonCliArgv`, sets
