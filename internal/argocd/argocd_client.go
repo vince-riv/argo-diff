@@ -171,11 +171,16 @@ func argocdCmdFromEnv() string {
 	return "argocd"
 }
 
-// function that uses log.Trace to log all environment variables for debugging. redact ARGOCD_AUTH_TOKEN and GITHUB_TOKEN, if set
+// redactedEnvVars are env vars logTraceCommandEnv never prints the value of.
+// ARGOCD_OPTS and ARGOCD_APP_DIFF_OPTS can carry credentials (eg: --header).
+var redactedEnvVars = []string{"ARGOCD_AUTH_TOKEN", "GITHUB_TOKEN", "ARGOCD_OPTS", "ARGOCD_APP_DIFF_OPTS"}
+
+// function that uses log.Trace to log all environment variables for debugging, with redactedEnvVars' values redacted
 func logTraceCommandEnv(cmd *exec.Cmd) {
 	for _, envVar := range cmd.Env {
-		if strings.HasPrefix(envVar, "ARGOCD_AUTH_TOKEN=") || strings.HasPrefix(envVar, "GITHUB_TOKEN=") {
-			log.Trace().Msgf("%s=REDACTED", strings.SplitN(envVar, "=", 2)[0])
+		name, _, _ := strings.Cut(envVar, "=")
+		if slices.Contains(redactedEnvVars, name) {
+			log.Trace().Msgf("%s=REDACTED", name)
 		} else {
 			log.Trace().Msg(envVar)
 		}

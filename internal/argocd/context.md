@@ -51,7 +51,8 @@ paths.
   `app manifests`.
 - `--header`/`-H`: it can carry credentials, and the opts are logged at info level by
   `execArgoCdCli` and put into `diffApplication()`'s error text. Headers belong in `ARGOCD_OPTS`,
-  which is never logged. For the same reason, no `parseAppDiffOpts()` error quotes the env value or
+  which is never logged: `logTraceCommandEnv()` redacts it, `ARGOCD_APP_DIFF_OPTS`, and the token
+  env vars (`redactedEnvVars`) when it logs the child's environment at trace level. For the same reason, no `parseAppDiffOpts()` error quotes the env value or
   any of its tokens.
 
 It also rejects positional arguments. `argocd app diff` takes exactly one (the app name), so a
@@ -63,6 +64,13 @@ CLI's flag types; the docs ask for `--flag=value` form.
 
 Anything else passes through unchecked; the CLI validates its own flag names (but not positional
 arguments, hence the check above). A shorthand cluster such as `-xN` is not inspected.
+
+**Do not grow the rejected list into "every global flag".** Only flags argo-diff itself sets (a later
+value would silently override it), plus `--header` for logging, are rejected. Other connection
+flags such as `--core`, `--port-forward`, `--config` or `--argocd-context` are deliberately allowed,
+even though they make `app diff` connect differently from `app list`/`app manifests`: the operator
+who sets `ARGOCD_APP_DIFF_OPTS` also sets `ARGOCD_OPTS`, so this is a guard against mistakes, not
+against the operator (maintainer decision on #402).
 
 `execArgoCdCli` is a **package-level `var`, so tests can replace it** — that is the main mocking
 seam for this package (see `addNotice` below for the other one). It prepends `commonCliArgv`, sets

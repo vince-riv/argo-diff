@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // makeExitError runs a trivial failing command to obtain a real *exec.ExitError
@@ -788,4 +791,34 @@ func TestDiffApplicationAppDiffOpts(t *testing.T) {
 			t.Errorf("app manifests argv %q must not contain ARGOCD_APP_DIFF_OPTS", captured)
 		}
 	})
+}
+
+func TestLogTraceCommandEnvRedacts(t *testing.T) {
+	origLogger, origLevel := log.Logger, zerolog.GlobalLevel()
+	t.Cleanup(func() { log.Logger = origLogger; zerolog.SetGlobalLevel(origLevel) })
+	var buf strings.Builder
+	log.Logger = zerolog.New(&buf).Level(zerolog.TraceLevel)
+	zerolog.SetGlobalLevel(zerolog.TraceLevel)
+
+	const secret = "s3cr3t-token"
+	cmd := exec.Command("true")
+	cmd.Env = []string{
+		"ARGOCD_AUTH_TOKEN=" + secret,
+		"GITHUB_TOKEN=" + secret,
+		"ARGOCD_OPTS=--header 'Authorization: Bearer " + secret + "'",
+		"ARGOCD_APP_DIFF_OPTS=--x=" + secret,
+		"ARGOCD_OPTS_EXTRA=visible",
+		"KUBECTL_EXTERNAL_DIFF=diff -u",
+	}
+	logTraceCommandEnv(cmd)
+
+	out := buf.String()
+	if strings.Contains(out, secret) {
+		t.Errorf("trace log leaks a redacted value:\n%s", out)
+	}
+	for _, want := range []string{"ARGOCD_AUTH_TOKEN=REDACTED", "GITHUB_TOKEN=REDACTED", "ARGOCD_OPTS=REDACTED", "ARGOCD_APP_DIFF_OPTS=REDACTED", "ARGOCD_OPTS_EXTRA=visible", "KUBECTL_EXTERNAL_DIFF=diff -u"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("trace log missing %q:\n%s", want, out)
+		}
+	}
 }
