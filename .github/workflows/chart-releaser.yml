@@ -12,6 +12,8 @@ on:
         description: 'Branch, commit, or tag to checkout'
         required: true
 env:
+  # helm v4 registry login/logout accept only the registry hostname, not a repository path
+  REGISTRY: ghcr.io
   GCR: ghcr.io/${{ github.repository_owner }}
 
 permissions:
@@ -71,13 +73,13 @@ jobs:
       - name: Helm login
         run: |
           helm version
-          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.GCR }} --username ${{ github.repository_owner }} --password-stdin
+          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} --username ${{ github.repository_owner }} --password-stdin
       - name: Package chart
         run: helm package charts/argo-diff --destination dist
       - name: Helm push
         run: helm push dist/argo-diff-${{ steps.extract_version.outputs.chart_version }}.tgz oci://${{ env.GCR }}/chart
       - name: Helm logout
-        run: helm registry logout ${{ env.GCR }}
+        run: helm registry logout ${{ env.REGISTRY }}
       - name: Generate chart changelog
         id: changelog
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4
