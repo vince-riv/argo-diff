@@ -23,6 +23,7 @@ changes.
 | `internal/ignorable/` | Classifies resource diffs as ignorable (folded in `auto` collapse mode); config and annotations |
 | `internal/process_event/` | Orchestrates one event: diff → commit status → PR comment |
 | `internal/scm/` | Source-control-provider abstraction: the `Provider` and `WebhookHandler` interfaces, the registry, neutral types, and the shared comment-reuse algorithm |
+| `internal/shellquote/` | Copy of the unmaintained `github.com/kballard/go-shellquote` (MIT); shell-style word splitting |
 | `internal/server/` | HTTP webhook server plus the run-once entry points |
 | `internal/webhook/` | `EventInfo`, the provider-neutral event; payload parsing lives in each provider package |
 | `internal/gendiff/` | Unified-diff helper; currently unused by the rest of the code |

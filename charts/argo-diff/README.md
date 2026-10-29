@@ -27,6 +27,7 @@ $ helm install my-release oci://ghcr.io/vince-riv/chart/argo-diff
 | argocdCli.image.tag | string | `""` | Tag of the ArgoCD image to copy the argocd CLI binary from; this is how you pin the version of the argocd CLI argo-diff runs (eg: "v3.4.6", or "v3.4.6@sha256:..." to also pin the digest). When set, an initContainer copies the argocd binary out of that image into a shared emptyDir volume and argo-diff is pointed at it via ARGOCD_CLI_CMD_NAME. When empty, argo-diff uses the argocd binary baked into its own image. |
 | argocdCli.volumeSizeLimit | string | `"2Gi"` | Max size of the emptyDir volume the argocd CLI binary is copied into |
 | command[0] | string | `"/app/argo-diff"` |  |
+| config.argocd.appDiffOpts | string | `""` |  |
 | config.argocd.authToken | string | `""` |  |
 | config.argocd.grpcWeb | string | `""` |  |
 | config.argocd.grpcWebRoot | string | `""` |  |

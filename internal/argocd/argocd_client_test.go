@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // makeExitError runs a trivial failing command to obtain a real *exec.ExitError
@@ -582,5 +585,240 @@ func TestAppManifestHelper(t *testing.T) {
 	}
 	if len(manifests) != 4 {
 		t.Errorf("appManifestHelper() - expected 4 manifests, got %d", len(manifests))
+	}
+}
+
+// setAppDiffTestConfig sets appDiffOpts and appDiffServerSideDiff for one
+// test, restoring both afterward.
+func setAppDiffTestConfig(t *testing.T, opts []string, serverSideDiff string) {
+	t.Helper()
+	origOpts, origSSD := appDiffOpts, appDiffServerSideDiff
+	appDiffOpts, appDiffServerSideDiff = opts, serverSideDiff
+	t.Cleanup(func() { appDiffOpts, appDiffServerSideDiff = origOpts, origSSD })
+}
+
+// captureDiffArgs runs diffApplication() against a mocked CLI and returns the argv it passed.
+func captureDiffArgs(t *testing.T, revision string, revisions []string, srcPos []int) []string {
+	t.Helper()
+	orig := execArgoCdCli
+	t.Cleanup(func() { execArgoCdCli = orig })
+	var captured []string
+	execArgoCdCli = func(ctx context.Context, args []string) ([]byte, error) {
+		captured = args
+		return nil, nil
+	}
+	_, _ = diffApplication(context.Background(), "my-app", "argocd", revision, revisions, srcPos)
+	return captured
+}
+
+func TestParseAppDiffOpts(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		for _, env := range []string{"", "   "} {
+			opts, err := parseAppDiffOpts(env)
+			if err != nil || len(opts) != 0 {
+				t.Errorf("parseAppDiffOpts(%q) = %v, %v; want no opts, no error", env, opts, err)
+			}
+		}
+	})
+
+	t.Run("allowed flags pass through", func(t *testing.T) {
+		opts, err := parseAppDiffOpts("--server-side-diff-concurrency=1 --server-side-diff-max-batch-kb 100 --refresh")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--server-side-diff-concurrency=1", "--server-side-diff-max-batch-kb", "100", "--refresh"}
+		if !slices.Equal(opts, want) {
+			t.Errorf("got %q, want %q", opts, want)
+		}
+	})
+
+	t.Run("quoted value with a space stays one argument", func(t *testing.T) {
+		opts, err := parseAppDiffOpts(`--some-flag "a b" --other='c d'`)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"--some-flag", "a b", "--other=c d"}
+		if !slices.Equal(opts, want) {
+			t.Errorf("got %q, want %q", opts, want)
+		}
+	})
+
+	t.Run("unbalanced quote is an error", func(t *testing.T) {
+		if _, err := parseAppDiffOpts(`--some-flag "a b`); err == nil {
+			t.Error("expected an error for an unbalanced quote")
+		}
+	})
+
+	t.Run("rejected flags", func(t *testing.T) {
+		var cases []string
+		for name := range rejectedAppDiffFlags {
+			cases = append(cases, "--"+name, "--"+name+"=v", "--refresh --"+name+" v")
+		}
+		cases = append(cases, "-N", "-Nfoo", "-N=foo", "-N foo")
+		cases = append(cases, "-H", "-Hfoo", "-H=foo", "-H 'Authorization: Bearer x'")
+		for _, env := range cases {
+			opts, err := parseAppDiffOpts(env)
+			if err == nil {
+				t.Errorf("parseAppDiffOpts(%q) = %q; want an error", env, opts)
+				continue
+			}
+			if !strings.Contains(err.Error(), "not allowed") {
+				t.Errorf("parseAppDiffOpts(%q) error %q does not say the flag is not allowed", env, err)
+			}
+		}
+	})
+
+	t.Run("global flags argo-diff sets are rejected", func(t *testing.T) {
+		// listed explicitly, so dropping one from rejectedAppDiffFlags fails here
+		for _, name := range []string{"server", "auth-token", "insecure", "plaintext", "grpc-web", "grpc-web-root-path", "header"} {
+			if _, ok := rejectedAppDiffFlags[name]; !ok {
+				t.Errorf("--%s is missing from rejectedAppDiffFlags", name)
+			}
+		}
+	})
+
+	t.Run("positional arguments are rejected", func(t *testing.T) {
+		for _, env := range []string{
+			"server-side-diff-concurrency=1",
+			"--",
+			"--server-side-diff-concurrency=1 --",
+			"-- --refresh",
+			"-",
+			"--server-side-diff-concurrency=1 stray",
+			"-xvalue stray",
+			"--some-flag a b",
+		} {
+			opts, err := parseAppDiffOpts(env)
+			if err == nil {
+				t.Errorf("parseAppDiffOpts(%q) = %q; want an error", env, opts)
+			}
+		}
+	})
+
+	t.Run("values after flags that take them pass", func(t *testing.T) {
+		for _, env := range []string{
+			"--server-side-diff-max-batch-kb 100",
+			"--a=1 --b 2 --c",
+			"-x val",
+			"--some-flag -",
+		} {
+			if _, err := parseAppDiffOpts(env); err != nil {
+				t.Errorf("parseAppDiffOpts(%q) unexpected error: %v", env, err)
+			}
+		}
+	})
+
+	t.Run("errors do not echo the value", func(t *testing.T) {
+		const secret = "s3cr3t-token"
+		for _, env := range []string{
+			`--some-flag "` + secret,
+			"--some-flag=1 " + secret,
+			"--auth-token=" + secret,
+			"-H" + secret,
+		} {
+			_, err := parseAppDiffOpts(env)
+			if err == nil {
+				t.Errorf("parseAppDiffOpts(%q): want an error", env)
+				continue
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("parseAppDiffOpts(%q) error %q leaks the value", env, err)
+			}
+		}
+	})
+
+	t.Run("error names the flag", func(t *testing.T) {
+		_, err := parseAppDiffOpts("--server-side-diff-concurrency=1 --revision=abc")
+		if err == nil || !strings.Contains(err.Error(), "--revision") {
+			t.Errorf("expected an error naming --revision, got %v", err)
+		}
+		_, err = parseAppDiffOpts("-Nfoo")
+		if err == nil || !strings.Contains(err.Error(), "-N") {
+			t.Errorf("expected an error naming -N, got %v", err)
+		}
+	})
+}
+
+func TestDiffApplicationAppDiffOpts(t *testing.T) {
+	t.Run("opts unset leaves argv unchanged", func(t *testing.T) {
+		setAppDiffTestConfig(t, nil, "")
+		got := captureDiffArgs(t, "abc123", nil, nil)
+		want := []string{"app", "diff", "my-app", "--app-namespace", "argocd", "--revision", "abc123"}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("opts appended last", func(t *testing.T) {
+		setAppDiffTestConfig(t, []string{"--server-side-diff-concurrency=1"}, "")
+		got := captureDiffArgs(t, "abc123", nil, nil)
+		want := []string{"app", "diff", "my-app", "--app-namespace", "argocd", "--revision", "abc123", "--server-side-diff-concurrency=1"}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("opts appended after --server-side-diff", func(t *testing.T) {
+		setAppDiffTestConfig(t, []string{"--server-side-diff-concurrency=1"}, "true")
+		got := captureDiffArgs(t, "abc123", nil, nil)
+		want := []string{"app", "diff", "my-app", "--app-namespace", "argocd", "--revision", "abc123", "--server-side-diff=true", "--server-side-diff-concurrency=1"}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("opts appended last in multi-revision path", func(t *testing.T) {
+		setAppDiffTestConfig(t, []string{"--server-side-diff-concurrency=1"}, "true")
+		got := captureDiffArgs(t, "", []string{"abc123", "1.2.3"}, []int{1, 2})
+		want := []string{"app", "diff", "my-app", "--app-namespace", "argocd",
+			"--revisions", "abc123", "--revisions", "1.2.3",
+			"--source-positions", "1", "--source-positions", "2",
+			"--server-side-diff=true", "--server-side-diff-concurrency=1"}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("app manifests does not get opts", func(t *testing.T) {
+		resetSupportsManifestsAppNamespaceCache(t)
+		setAppDiffTestConfig(t, []string{"--server-side-diff-concurrency=1"}, "true")
+		orig := execArgoCdCli
+		defer func() { execArgoCdCli = orig }()
+		var captured []string
+		execArgoCdCli = mockExecArgoCdCliWithClientVersion("v3.5.2", &captured)
+		_, _ = getApplicationManifests(context.Background(), "my-app", "argocd", "abc123")
+		if slices.Contains(captured, "--server-side-diff-concurrency=1") {
+			t.Errorf("app manifests argv %q must not contain ARGOCD_APP_DIFF_OPTS", captured)
+		}
+	})
+}
+
+func TestLogTraceCommandEnvRedacts(t *testing.T) {
+	origLogger, origLevel := log.Logger, zerolog.GlobalLevel()
+	t.Cleanup(func() { log.Logger = origLogger; zerolog.SetGlobalLevel(origLevel) })
+	var buf strings.Builder
+	log.Logger = zerolog.New(&buf).Level(zerolog.TraceLevel)
+	zerolog.SetGlobalLevel(zerolog.TraceLevel)
+
+	const secret = "s3cr3t-token"
+	cmd := exec.Command("true")
+	cmd.Env = []string{
+		"ARGOCD_AUTH_TOKEN=" + secret,
+		"GITHUB_TOKEN=" + secret,
+		"ARGOCD_OPTS=--header 'Authorization: Bearer " + secret + "'",
+		"ARGOCD_APP_DIFF_OPTS=--x=" + secret,
+		"ARGOCD_OPTS_EXTRA=visible",
+		"KUBECTL_EXTERNAL_DIFF=diff -u",
+	}
+	logTraceCommandEnv(cmd)
+
+	out := buf.String()
+	if strings.Contains(out, secret) {
+		t.Errorf("trace log leaks a redacted value:\n%s", out)
+	}
+	for _, want := range []string{"ARGOCD_AUTH_TOKEN=REDACTED", "GITHUB_TOKEN=REDACTED", "ARGOCD_OPTS=REDACTED", "ARGOCD_APP_DIFF_OPTS=REDACTED", "ARGOCD_OPTS_EXTRA=visible", "KUBECTL_EXTERNAL_DIFF=diff -u"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("trace log missing %q:\n%s", want, out)
+		}
 	}
 }

@@ -78,6 +78,9 @@ config:
   maxWorkers: ""
 
   argocd:
+    # config.argocd.appDiffOpts -- Extra flags appended to every `argocd app diff` command (eg: --server-side-diff-concurrency=1).
+    # Populates ARGOCD_APP_DIFF_OPTS. Flags argo-diff sets itself (including global ones such as --server), --header, flags that change the exit code or diff source, and words that are not flags are rejected at startup
+    appDiffOpts: ""
     # config.argocd.authAoken -- REQUIRED (if secret.create): Bearer token for ArgoCD (value passed to --auth-token);
     # Populates ARGOCD_AUTH_TOKEN
     authToken: ""

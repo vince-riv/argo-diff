@@ -17,7 +17,9 @@ Application entry point, `main.go`; `.goreleaser.yaml` builds `./cmd` into the `
 
 `main()` validates the environment and then dispatches, in this order:
 
-1. Fatals unless `ARGOCD_AUTH_TOKEN` and `ARGOCD_SERVER_ADDR` are set.
+1. Fatals unless `ARGOCD_AUTH_TOKEN` and `ARGOCD_SERVER_ADDR` are set, or if
+   `argocd.ValidateConfig()` returns an error (eg: an unparsable or rejected `ARGOCD_APP_DIFF_OPTS`;
+   the `argocd` package records it in `init()` so it can be reported here).
 2. `registerProviders()` registers what `selectProviders(knownProviders)` returns
    (`github.Provider{}`, `gitlab.Provider{}`), and fatals on its error. **`ARGO_DIFF_SCM_PROVIDERS`
    decides which providers run** (`config.ScmProviders()`; unset or empty means `github`):

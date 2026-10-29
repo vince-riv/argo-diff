@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/vince-riv/argo-diff/internal/config"
+	"github.com/vince-riv/argo-diff/internal/shellquote"
 )
 
 // appNamespaceManifestsMinVersion is the minimum argocd CLI client version
@@ -33,7 +34,99 @@ var (
 	commonCliArgv         []string
 	envArgoCdOpts         string
 	appDiffServerSideDiff string
+	// appDiffOpts are extra args from ARGOCD_APP_DIFF_OPTS, appended to every
+	// `argocd app diff` call; appDiffOptsErr is its parse/validation error,
+	// surfaced at startup by ValidateConfig().
+	appDiffOpts    []string
+	appDiffOptsErr error
 )
+
+// rejectedAppDiffFlags are `argocd app diff` flags that ARGOCD_APP_DIFF_OPTS
+// may not set, keyed by long name, with the reason they break argo-diff.
+var rejectedAppDiffFlags = map[string]string{
+	"revision":             "argo-diff sets it itself",
+	"revisions":            "argo-diff sets it itself",
+	"source-positions":     "argo-diff sets it itself",
+	"source-names":         "argo-diff sets it itself",
+	"app-namespace":        "argo-diff sets it itself",
+	"server-side-diff":     "argo-diff sets it itself; use ARGOCD_APP_DIFF_SERVER_SIDE_DIFF",
+	"exit-code":            "it changes the exit-code contract argo-diff relies on",
+	"diff-exit-code":       "it changes the exit-code contract argo-diff relies on",
+	"local":                "it diffs against something other than the PR revision",
+	"local-repo-root":      "it diffs against something other than the PR revision",
+	"server-side-generate": "it diffs against something other than the PR revision",
+	"local-include":        "it diffs against something other than the PR revision",
+	// global flags: execArgoCdCli puts commonCliArgv first, so a later value
+	// would send `app diff` somewhere other than `app list`/`app manifests`.
+	// User opts are also logged (execArgoCdCli) and put into error text
+	// (diffApplication), which must never carry credentials.
+	"server":             "it is a global flag argo-diff sets itself; use ARGOCD_SERVER_ADDR",
+	"auth-token":         "it is a global flag argo-diff sets itself, and argo-diff logs these opts; use ARGOCD_AUTH_TOKEN",
+	"insecure":           "it is a global flag argo-diff sets itself; use ARGOCD_SERVER_INSECURE",
+	"plaintext":          "it is a global flag argo-diff sets itself; use ARGOCD_SERVER_PLAINTEXT",
+	"grpc-web":           "it is a global flag argo-diff sets itself; use ARGOCD_GRPC_WEB",
+	"grpc-web-root-path": "it is a global flag argo-diff sets itself; use ARGOCD_GRPC_WEB_ROOT_PATH",
+	"header":             "it can carry credentials, and argo-diff logs these opts; use ARGOCD_OPTS",
+}
+
+// rejectedAppDiffShorthands maps the shorthand of a rejected flag to its long name.
+var rejectedAppDiffShorthands = map[byte]string{
+	'N': "app-namespace",
+	'H': "header",
+}
+
+// parseAppDiffOpts splits ARGOCD_APP_DIFF_OPTS the way a shell would and
+// rejects flags that would break argo-diff. Other flags pass through
+// unchecked: the argocd CLI validates its own flags.
+//
+// It also rejects anything the CLI would take as a positional argument:
+// `argocd app diff` takes exactly one (the app name, which argo-diff sets),
+// so a stray word would fail every diff. A non-flag token is allowed only
+// right after a flag that could take it as its value (`--flag`, not
+// `--flag=value`; `-X`, not `-Xvalue`). A stray word after a boolean flag
+// still gets through, since that needs the CLI's flag types.
+//
+// Errors never quote the env value or its tokens: a value may hold a secret.
+func parseAppDiffOpts(env string) ([]string, error) {
+	opts, err := shellquote.Split(env)
+	if err != nil {
+		return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: cannot parse: %w", err)
+	}
+	prevTakesValue := false
+	for i, opt := range opts {
+		var name, form string
+		takesValue := false
+		switch {
+		case opt == "--":
+			return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: a bare -- is not allowed: the CLI would take what follows as positional arguments")
+		case strings.HasPrefix(opt, "--"):
+			var hasValue bool
+			name, _, hasValue = strings.Cut(opt[2:], "=")
+			form = "--" + name
+			takesValue = !hasValue
+		case len(opt) > 1 && opt[0] == '-':
+			// shorthand: -N, -Nvalue or -N=value
+			name = rejectedAppDiffShorthands[opt[1]]
+			form = opt[:2]
+			takesValue = len(opt) == 2
+		default:
+			if !prevTakesValue {
+				return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: argument %d is not a flag and does not follow a flag that takes a value; argocd app diff would take it as a positional argument (write flags as --flag=value)", i+1)
+			}
+		}
+		if reason, ok := rejectedAppDiffFlags[name]; ok {
+			return nil, fmt.Errorf("ARGOCD_APP_DIFF_OPTS: flag %s is not allowed: %s", form, reason)
+		}
+		prevTakesValue = takesValue
+	}
+	return opts, nil
+}
+
+// ValidateConfig returns the first invalid setting this package read from
+// the environment at startup, or nil.
+func ValidateConfig() error {
+	return appDiffOptsErr
+}
 
 func init() {
 	serverAddr := os.Getenv("ARGOCD_SERVER_ADDR")
@@ -67,6 +160,7 @@ func init() {
 	} else if envAppDiffServerSide != "" {
 		log.Warn().Msgf("Invalid value for ARGOCD_APP_DIFF_SERVER_SIDE_DIFF: %s; must be 'true' or 'false'", envAppDiffServerSide)
 	}
+	appDiffOpts, appDiffOptsErr = parseAppDiffOpts(os.Getenv("ARGOCD_APP_DIFF_OPTS"))
 }
 
 func argocdCmdFromEnv() string {
@@ -77,11 +171,16 @@ func argocdCmdFromEnv() string {
 	return "argocd"
 }
 
-// function that uses log.Trace to log all environment variables for debugging. redact ARGOCD_AUTH_TOKEN and GITHUB_TOKEN, if set
+// redactedEnvVars are env vars logTraceCommandEnv never prints the value of.
+// ARGOCD_OPTS and ARGOCD_APP_DIFF_OPTS can carry credentials (eg: --header).
+var redactedEnvVars = []string{"ARGOCD_AUTH_TOKEN", "GITHUB_TOKEN", "ARGOCD_OPTS", "ARGOCD_APP_DIFF_OPTS"}
+
+// function that uses log.Trace to log all environment variables for debugging, with redactedEnvVars' values redacted
 func logTraceCommandEnv(cmd *exec.Cmd) {
 	for _, envVar := range cmd.Env {
-		if strings.HasPrefix(envVar, "ARGOCD_AUTH_TOKEN=") || strings.HasPrefix(envVar, "GITHUB_TOKEN=") {
-			log.Trace().Msgf("%s=REDACTED", strings.SplitN(envVar, "=", 2)[0])
+		name, _, _ := strings.Cut(envVar, "=")
+		if slices.Contains(redactedEnvVars, name) {
+			log.Trace().Msgf("%s=REDACTED", name)
 		} else {
 			log.Trace().Msg(envVar)
 		}
@@ -310,6 +409,8 @@ func diffApplication(ctx context.Context, appName string, appNamespace string, r
 	if appDiffServerSideDiff != "" {
 		args = append(args, fmt.Sprintf("--server-side-diff=%s", appDiffServerSideDiff))
 	}
+	// user-supplied opts go last, after every arg argo-diff sets itself
+	args = append(args, appDiffOpts...)
 	output, err := execArgoCdCli(ctx, args)
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
