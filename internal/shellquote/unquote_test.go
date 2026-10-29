@@ -47,9 +47,9 @@ var errorSplitTest = []struct {
 	input string
 	error error
 }{
-	{"don't worry", UnterminatedSingleQuoteError},
-	{"'test'\\''ing", UnterminatedSingleQuoteError},
-	{"\"foo'bar", UnterminatedDoubleQuoteError},
-	{"foo\\", UnterminatedEscapeError},
-	{"   \\", UnterminatedEscapeError},
+	{"don't worry", ErrUnterminatedSingleQuote},
+	{"'test'\\''ing", ErrUnterminatedSingleQuote},
+	{"\"foo'bar", ErrUnterminatedDoubleQuote},
+	{"foo\\", ErrUnterminatedEscape},
+	{"   \\", ErrUnterminatedEscape},
 }

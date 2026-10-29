@@ -9,10 +9,16 @@ same way the argocd CLI parses `ARGOCD_OPTS` (the CLI imports the same library).
 
 - **Keep `LICENSE`.** The code is MIT-licensed, and MIT requires its copyright and permission notice
   to travel with every copy. It is compatible with argo-diff's Apache 2.0 license.
-- **Keep the code as upstream wrote it**, so it stays diffable against the original. The one change
-  is in `unquote.go`'s `Split` doc comment: `$''` became `$'...'`, because `gofmt` rewrites `''` in
-  a doc comment to a typographic `”`. `README` is upstream's own.
-- `.golangci.yaml` excludes this directory from lint: upstream's capitalized error strings
-  (`ST1005`) and an `if` chain (`QF1003`) would otherwise fail CI, and fixing them would change
-  the error messages and drift from upstream.
+- **The code is argo-diff's now**: it follows the repo's `gofmt` and golangci-lint rules like any
+  other package, with no lint exclusion. Upstream is dead, so staying diffable against it is not a
+  goal. Changes from upstream so far:
+  - `unquote.go`'s `Split` doc comment: `$''` became `$'...'`, because `gofmt` rewrites `''` in a
+    doc comment to a typographic `”`.
+  - The error variables are `ErrUnterminatedSingleQuote`, `ErrUnterminatedDoubleQuote` and
+    `ErrUnterminatedEscape` (upstream: `Unterminated*Error`; staticcheck `ST1012`), and their
+    messages start lowercase (`ST1005`). Callers compare the error values, not the text.
+  - The `if`/`else if` on `c` in `splitWord`'s double-quote state is a `switch` (staticcheck
+    `QF1003`).
+- Upstream's `README` (a `godoc` text dump of the API) was dropped once the API names changed;
+  the doc comments in the `.go` files are the reference.
 - The tests (`*_test.go`) are upstream's and run with `go test ./...`.

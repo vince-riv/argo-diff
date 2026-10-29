@@ -17,8 +17,6 @@ linters:
       - third_party$
       - builtin$
       - examples$
-      # copied from github.com/kballard/go-shellquote; kept as upstream wrote it (see its context.md)
-      - internal/shellquote/
 formatters:
   exclusions:
     generated: lax
