@@ -1,7 +1,7 @@
 ARG ARGOCD_IMAGE=quay.io/argoproj/argocd:v3.6.1@sha256:296e3d74f449b2ce45265613fcb68c18ed7366488360c8ea32f5f2a93d2e5c54
 
 ## "Build" (but it was pre-built)
-FROM alpine:latest@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS build
+FROM alpine:latest@sha256:3f4d6b32e26703c6082839234f43769d5046b3ac7c910033911d1e71d8cd630a AS build
 
 # TARGETARCH is set automatically by BuildKit (e.g., "amd64" or "arm64")
 ARG TARGETARCH
@@ -15,7 +15,7 @@ FROM ${ARGOCD_IMAGE} AS argocd
 RUN argocd version --client
 
 ## Final image
-FROM alpine:latest@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+FROM alpine:latest@sha256:3f4d6b32e26703c6082839234f43769d5046b3ac7c910033911d1e71d8cd630a
 
 # add new user
 RUN adduser -D argo-diff
