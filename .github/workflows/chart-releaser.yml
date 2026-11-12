@@ -30,8 +30,6 @@ jobs:
           ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
           fetch-tags: 'true'
-      - name: Install yq
-        run: sudo snap install yq
       - name: Extract Chart Version
         id: extract_version
         run: |
