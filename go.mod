@@ -9,7 +9,7 @@ require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/google/go-github/v93 v93.0.0
 	github.com/rs/zerolog v1.35.1
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	gitlab.com/gitlab-org/api/client-go/v3 v3.43.0
 	k8s.io/apimachinery v0.36.4
 	sigs.k8s.io/yaml v1.6.0
